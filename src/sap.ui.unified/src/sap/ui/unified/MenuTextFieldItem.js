@@ -3,8 +3,25 @@
  */
 
 // Provides control sap.ui.unified.MenuTextFieldItem.
-sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItemBase', './library', 'sap/ui/core/library', 'sap/ui/Device', 'jquery.sap.events'],
-	function(jQuery, ValueStateSupport, MenuItemBase, library, coreLibrary, Device) {
+sap.ui.define([
+	'sap/ui/core/ValueStateSupport',
+	'./MenuItemBase',
+	'./library',
+	'sap/ui/core/library',
+	'sap/ui/Device',
+	'sap/base/Log',
+	'sap/ui/events/PseudoEvents',
+	'sap/ui/dom/jquery/cursorPos' // jQuery Plugin "cursorPos"
+],
+	function(
+		ValueStateSupport,
+		MenuItemBase,
+		library,
+		coreLibrary,
+		Device,
+		Log,
+		PseudoEvents
+	) {
 	"use strict";
 
 
@@ -84,12 +101,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 
 		rm.write("<li ");
 		rm.writeAttribute("class", sClass);
+
+		if (!bIsEnabled) {
+			rm.writeAttribute("disabled", "disabled");
+		}
+
 		rm.writeElementData(oItem);
 
 		// ARIA
 		if (oInfo.bAccessible) {
 			rm.writeAttribute("role", "menuitem");
-			rm.writeAttribute("aria-disabled", !bIsEnabled);
 			rm.writeAttribute("aria-posinset", oInfo.iItemNo);
 			rm.writeAttribute("aria-setsize", oInfo.iTotalItems);
 		}
@@ -120,13 +141,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 		if (oInfo.bAccessible) {
 			rm.writeAccessibilityState(oItem, {
 				role: "textbox",
-				disabled: !bIsEnabled,
+				disabled: null, // Prevent aria-disabled as a disabled attribute is enough
 				multiline: false,
 				autocomplete: "none",
 				labelledby: {value: /*oMenu.getId() + "-label " + */itemId + "-lbl", append: true}
 			});
 		}
-		rm.write("/></div></div>");
+		rm.write("></div></div>");
 
 		// Right border
 		rm.write("<div class=\"sapUiMnuItmR\"></div>");
@@ -140,16 +161,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 
 		if (bHovered && oMenu.checkEnabled(this)) {
 			oMenu.closeSubmenu(false, true);
-			if (Device.browser.msie) {
-				jQuery.sap.delayedCall(0, this, function () {
-					this.$("tf").focus();
-				}.bind(this));
-			} else {
-				this.$("tf").focus();
-			}
 		}
 	};
 
+	MenuTextFieldItem.prototype.focus = function(oMenu){
+		if (this.getEnabled() && this.getVisible()) {
+			this.$("tf").get(0).focus();
+		} else {
+			oMenu.focus();
+		}
+	};
 
 	MenuTextFieldItem.prototype.onAfterRendering = function(){
 		this._adaptSizes();
@@ -161,20 +182,17 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 
 
 	MenuTextFieldItem.prototype.onsapup = function(oEvent){
-		this.getParent().focus();
 		this.getParent().onsapprevious(oEvent);
 	};
 
 
 	MenuTextFieldItem.prototype.onsapdown = function(oEvent){
-		this.getParent().focus();
 		this.getParent().onsapnext(oEvent);
 	};
 
 
 	MenuTextFieldItem.prototype.onsaphome = function(oEvent){
 		if (this._checkCursorPosForNav(false)) {
-			this.getParent().focus();
 			this.getParent().onsaphome(oEvent);
 		}
 	};
@@ -182,20 +200,17 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 
 	MenuTextFieldItem.prototype.onsapend = function(oEvent){
 		if (this._checkCursorPosForNav(true)) {
-			this.getParent().focus();
 			this.getParent().onsapend(oEvent);
 		}
 	};
 
 
 	MenuTextFieldItem.prototype.onsappageup = function(oEvent){
-		this.getParent().focus();
 		this.getParent().onsappageup(oEvent);
 	};
 
 
 	MenuTextFieldItem.prototype.onsappagedown = function(oEvent){
-		this.getParent().focus();
 		this.getParent().onsappagedown(oEvent);
 	};
 
@@ -221,7 +236,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 
 	MenuTextFieldItem.prototype.onkeyup = function(oEvent){
 		//like sapenter but on keyup -> see Menu.prototype.onkeyup
-		if (!jQuery.sap.PseudoEvents.sapenter.fnCheck(oEvent)) {
+		if (!PseudoEvents.events.sapenter.fnCheck(oEvent) && oEvent.key !== "Enter") {
 			return;
 		}
 		var sValue = this.$("tf").val();
@@ -247,7 +262,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 	/**
 	 * The aggregation <code>submenu</code> (inherited from parent class) is not supported for this type of menu item.
 	 *
-	 * @return {sap.ui.unified.MenuTextFieldItem} <code>this</code> to allow method chaining
+	 * @return {this} <code>this</code> to allow method chaining
 	 * @public
 	 * @name sap.ui.unified.MenuTextFieldItem#destroySubmenu
 	 * @deprecated As of version 1.21, the aggregation <code>submenu</code> (inherited from parent class) is not supported for this type of menu item.
@@ -258,12 +273,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/ValueStateSupport', './MenuItem
 	 * The aggregation <code>submenu</code> (inherited from parent class) is not supported for this type of menu item.
 	 *
 	 * @param {sap.ui.unified.Menu} oMenu The menu to which the sap.ui.unified.Submenu should be set
-	 * @return {sap.ui.unified.MenuTextFieldItem} <code>this</code> to allow method chaining
+	 * @return {this} <code>this</code> to allow method chaining
 	 * @public
 	 * @deprecated As of version 1.21, the aggregation <code>submenu</code> (inherited from parent class) is not supported for this type of menu item.
 	 */
 	MenuTextFieldItem.prototype.setSubmenu = function(oMenu){
-		jQuery.sap.log.warning("The aggregation 'submenu' is not supported for this type of menu item.", "", "sap.ui.unified.MenuTextFieldItem");
+		Log.warning("The aggregation 'submenu' is not supported for this type of menu item.", "", "sap.ui.unified.MenuTextFieldItem");
 		return this;
 	};
 

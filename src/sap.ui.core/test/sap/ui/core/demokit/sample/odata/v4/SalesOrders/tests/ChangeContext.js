@@ -9,12 +9,9 @@ sap.ui.define([
 
 	return {
 		changeContext : function (Given, When, Then, sUIComponent) {
-			if (TestUtils.isRealOData()) {
-				Opa5.assert.ok(true, "Test runs only with mock data");
-				return;
-			}
 
 			Given.iStartMyUIComponent({
+				autoWait : true,
 				componentConfig : {
 					name : sUIComponent || "sap.ui.core.sample.odata.v4.SalesOrders"
 				}
@@ -25,7 +22,7 @@ sap.ui.define([
 			// change a sales order line item, change sales order context
 			When.onTheMainPage.selectFirstSalesOrder();
 			When.onTheMainPage.selectSalesOrderItemWithPosition("0000000010");
-			When.onTheMainPage.changeSalesOrderLineItemNote(0, "Changed by OPA 1");
+			When.onTheMainPage.changeNoteInLineItem(0, 0, "Changed by OPA 1");
 			When.onTheMainPage.selectSalesOrderWithId("0500000001");
 			// check hasPendingChanges via refresh
 			When.onTheMainPage.pressRefreshSalesOrdersButton();
@@ -38,7 +35,7 @@ sap.ui.define([
 
 			// check the same via Reset All button
 			When.onTheMainPage.selectSalesOrderItemWithPosition("0000000010");
-			When.onTheMainPage.changeSalesOrderLineItemNote(0, "Changed by OPA 2");
+			When.onTheMainPage.changeNoteInLineItem(0, 0, "Changed by OPA 2");
 			When.onTheMainPage.selectSalesOrderWithId("0500000001");
 			// check hasPendingChanges via refresh all button
 			When.onTheMainPage.pressRefreshAllButton();
@@ -49,11 +46,20 @@ sap.ui.define([
 
 			// select the first Sales Order and delete Business Partner
 			When.onTheMainPage.selectFirstSalesOrder();
+			When.onTheMainPage.pressValueHelpOnProductID(0);
+			// next line requires modification in VH_ProductID.xml
+			Then.onTheValueHelpPopover.checkTitle("Value Help: Product ID (Additional)");
+			When.onTheValueHelpPopover.close();
 			When.onTheMainPage.pressDeleteBusinessPartnerButton();
 			When.onTheSuccessInfo.confirm();
-			Then.onTheMainPage.checkInputValue("BPPhoneNumber", "");
-			Then.onTheMainPage.checkInputValue("BPCity", "");
-			Then.onTheMainPage.checkInputValue("BPPostalCode", "");
+			Then.onTheMainPage.checkInputValue("PhoneNumber::detail", "");
+			Then.onTheMainPage.checkInputValue("City::detail", "");
+			Then.onTheMainPage.checkInputValue("PostalCode::detail", "");
+
+			When.onTheMainPage.selectSalesOrderWithId("0500000001");
+			When.onTheMainPage.pressValueHelpOnProductID(0);
+			Then.onTheValueHelpPopover.checkTitle("Value Help: H_EPM_PR_SH_Set");
+			When.onTheValueHelpPopover.close();
 
 			Then.onAnyPage.checkLog();
 			Then.iTeardownMyUIComponent();

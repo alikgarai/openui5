@@ -1,9 +1,24 @@
 /*!
  * ${copyright}
  */
-sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
-	function(jQuery, Device, UIArea) {
+sap.ui.define([
+	"sap/ui/Device",
+	"../UIArea",
+	"sap/ui/thirdparty/jquery",
+	// jQuery Plugin "control"
+	"sap/ui/dom/jquery/control"
+],
+function(Device, UIArea, jQuery) {
 	"use strict";
+
+	/**
+	 * Contains classes and helpers related to drag & drop functionality.
+	 *
+	 * @name sap.ui.core.dnd
+	 * @namespace
+	 * @public
+	 * @since 1.52
+	 */
 
 	var DnD = {},
 		oDragControl = null,		// the control being dragged
@@ -15,7 +30,9 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 		$DropIndicator,				// drop position indicator
 		$GhostContainer,			// container to place custom ghosts
 		sCalculatedDropPosition,	// calculated position of the drop action relative to the valid dropped control.
-		iTargetEnteringTime;		// timestamp of drag enter
+		iTargetEnteringTime,		// timestamp of drag enter
+		mLastIndicatorStyle = {},	// holds the last style settings of the indicator
+		oDraggableAncestorNode;		// reference to ancestor node that has draggable=true attribute
 
 
 	function addStyleClass(oElement, sStyleClass) {
@@ -53,8 +70,12 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 		oControl.getUIArea()._handleEvent(oNewEvent);
 	}
 
+	function isSelectableElement(oElement) {
+		return !oElement.disabled && /^(input|textarea)$/.test(oElement.localName);
+	}
+
 	function setDragGhost(oDragControl, oEvent) {
-		if (Device.browser.msie || !oDragControl || !oDragControl.getDragGhost) {
+		if (!oDragControl || !oDragControl.getDragGhost) {
 			return;
 		}
 
@@ -80,10 +101,7 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 			mIndicatorConfig,
 			oDataTransfer = oEvent.originalEvent.dataTransfer,
 			setTransferData = function(sType, sData) {
-				// set to original dataTransfer object if type is supported by the current browser (non-text causes error in IE+Edge)
-				if (oDataTransfer && sType == "text" || (Device.browser != "msie" && Device.browser != "edge")) {
-					oDataTransfer.setData(sType, sData);
-				}
+				oDataTransfer.setData(sType, sData);
 			};
 
 		/**
@@ -91,19 +109,20 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 		 * The drag session can be used to transfer data between applications or between dragged and dropped controls.
 		 * Please see provided APIs for more details.
 		 *
-		 * <b>Note:</b> This object only exists during a drag-and-drop operation.
+		 * <b>Note:</b> An implementation of this interface is provided by the framework during drag-and-drop operations
+		 * and is exposed as <code>dragSession</code> parameter of the different drag and drop events.
 		 *
-		 * @namespace
+		 * <b>Note:</b> This interface is not intended to be implemented by controls, applications or test code.
+		 * Extending it with additional methods in future versions will be regarded as a compatible change.
+		 *
+		 * @interface
 		 * @name sap.ui.core.dnd.DragSession
-		 * @static
-		 * @abstract
 		 * @public
 		 */
 		return /** @lends sap.ui.core.dnd.DragSession */ {
 			/**
 			 * Sets string data with any MIME type.
-			 * <b>Note:</b> This works in all browsers, apart from Internet Explorer and Microsoft Edge. It also works if you navigate between
-			 * different windows.
+			 * <b>Note:</b> This works if you navigate between different windows.
 			 *
 			 * @param {string} sKey The key of the data
 			 * @param {string} sData Data
@@ -128,8 +147,7 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 
 			/**
 			 * Sets string data with plain text MIME type.
-			 * <b>Note:</b> This works in all browsers, including Internet Explorer and Microsoft Edge. It also works if you navigate between
-			 * different windows.
+			 * <b>Note:</b> This works if you navigate between different windows.
 			 *
 			 * @param {string} sData Data
 			 * @public
@@ -154,11 +172,11 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 
 			/**
 			 * Sets any type of data (even functions, pointers, anything non-serializable) with any MIME type.
-			 * This works in all browsers, including Internet Explorer and Microsoft Edge, but only within a UI5 application within the same
-			 * window/frame.
+			 * <b>Note:</b> This works only within a UI5 application within the same window/frame.
 			 *
 			 * @param {string} sKey The key of the data
 			 * @param {any} vData Data
+			 * @public
 			 */
 			setComplexData: function(sKey, vData) {
 				mData[sKey] = vData;
@@ -257,8 +275,6 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 	}
 
 	function closeDragSession(oEvent) {
-		hideDropIndicator();
-		removeStyleClass(oDragControl, "sapUiDnDDragging");
 		oDragControl = oDropControl = oValidDropControl = oDragSession = null;
 		sCalculatedDropPosition = "";
 		aValidDragInfos = [];
@@ -277,7 +293,9 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 
 	function hideDropIndicator() {
 		if ($DropIndicator) {
-			$DropIndicator.removeAttr("style").hide();
+			$DropIndicator.removeAttr("style");
+			$DropIndicator.hide();
+			mLastIndicatorStyle = {};
 		}
 	}
 
@@ -332,6 +350,9 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 					sRelativePosition = "On";
 				}
 			}
+			if (sRelativePosition != "On" && sap.ui.getCore().getConfiguration().getRTL()) {
+				sRelativePosition = (sRelativePosition == "After") ? "Before" : "After";
+			}
 		} else {
 			var iCursorY = oEvent.pageY - mDropRect.top;
 			mStyle.width = mDropRect.width;
@@ -375,9 +396,16 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 			sDropPosition = "Between";
 		}
 
-		$Indicator.attr("data-drop-layout", sDropLayout);
-		$Indicator.attr("data-drop-position", sDropPosition);
-		$Indicator.css(jQuery.extend(mStyle, mIndicatorConfig)).show();
+		if (mLastIndicatorStyle.top != mStyle.top ||
+			mLastIndicatorStyle.left != mStyle.left ||
+			mLastIndicatorStyle.width != mStyle.width ||
+			mLastIndicatorStyle.height != mStyle.height) {
+			$Indicator.attr("data-drop-layout", sDropLayout);
+			$Indicator.attr("data-drop-position", sDropPosition);
+			$Indicator.css(Object.assign(mStyle, mIndicatorConfig));
+			$Indicator.show();
+			mLastIndicatorStyle = mStyle;
+		}
 
 		return sRelativePosition;
 	}
@@ -472,6 +500,22 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 		}
 	};
 
+	DnD.onbeforemousedown = function(oEvent) {
+		// text selection workaround since preventDefault on dragstart does not help
+		// https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/10375756/
+		// https://bugzilla.mozilla.org/show_bug.cgi?id=800050
+		if ((Device.browser.firefox) && isSelectableElement(oEvent.target)) {
+			oDraggableAncestorNode = jQuery(oEvent.target).closest("[data-sap-ui-draggable=true]").prop("draggable", false)[0];
+		}
+	};
+
+	DnD.onbeforemouseup = function(oEvent) {
+		if (oDraggableAncestorNode) {
+			oDraggableAncestorNode.draggable = true;
+			oDraggableAncestorNode = null;
+		}
+	};
+
 	DnD.onbeforedragstart = function(oEvent) {
 		// draggable implicitly
 		if (!oEvent.target.draggable) {
@@ -479,7 +523,8 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 		}
 
 		// the text inside input fields should still be selectable
-		if (/^(input|textarea)$/i.test(document.activeElement.tagName)) {
+		if (isSelectableElement(document.activeElement)) {
+			oEvent.target.getAttribute("data-sap-ui-draggable") && oEvent.preventDefault();
 			return;
 		}
 
@@ -528,6 +573,11 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 
 		// set dragging class of the drag source
 		addStyleClass(oDragControl, "sapUiDnDDragging");
+
+		// prevent HTML element from scrolling during drag-and-drop if the drag control is already in a scroll container
+		if (jQuery(oEvent.target).closest(".sapUiScrollDelegate")[0]) {
+			jQuery("html").addClass("sapUiDnDNoScrolling");
+		}
 	};
 
 	DnD.onbeforedragenter = function(oEvent) {
@@ -649,6 +699,15 @@ sap.ui.define(["jquery.sap.global", "sap/ui/Device", "../UIArea"],
 		aValidDragInfos.forEach(function(oDragInfo) {
 			oDragInfo.fireDragEnd(oEvent);
 		});
+
+		// remove the dragging class of the dragged control
+		removeStyleClass(oDragControl, "sapUiDnDDragging");
+
+		// retain the scrolling behavior of the html element after dragend
+		jQuery("html").removeClass("sapUiDnDNoScrolling");
+
+		// hide the indicator
+		hideDropIndicator();
 
 		// finalize drag session
 		closeDragSession();

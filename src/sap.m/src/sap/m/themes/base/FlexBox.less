@@ -3,6 +3,9 @@
 /* Base theme                     */
 /* ============================== */
 
+/* mixin call for creating container content padding classes (arguments: rootContainer, contentSelector) */
+.sapUiContainerContentPadding(~".sapMFlexItem", ~"");
+
 .sapMFlexBoxBGSolid,
 .sapMFlexBoxBGTranslucent {
 	background-color: @sapUiGroupContentBackground;
@@ -38,10 +41,6 @@
 
 .sapMFlexItem {
 	position: relative;
-}
-
-.sapMFlexBoxAlignItemsCenter.sapMVBox > .sapMFlexItem {
-	max-width: 100%; /* When using align-items:center on a flex container in the column direction, the contents of flex item, if too big, will overflow their container in IE 10-11. */
 }
 
 /*** flex-direction ***/

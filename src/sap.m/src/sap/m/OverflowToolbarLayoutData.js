@@ -3,8 +3,8 @@
  */
 
 // Provides control sap.m.OverflowToolbarLayoutData.
-sap.ui.define(['sap/m/ToolbarLayoutData', 'sap/m/library', 'jquery.sap.global'],
-	function(ToolbarLayoutData, library, jQuery) {
+sap.ui.define(['sap/m/ToolbarLayoutData', 'sap/m/library', "sap/base/Log"],
+	function(ToolbarLayoutData, library, Log) {
 	"use strict";
 
 	// shortcut for sap.m.OverflowToolbarPriority
@@ -47,7 +47,7 @@ sap.ui.define(['sap/m/ToolbarLayoutData', 'sap/m/library', 'jquery.sap.global'],
 			stayInOverflow : {type: "boolean", defaultValue: false, deprecated: true},
 
 			/**
-			 * Defines OverflowToolbar items priority, Available priorities ate NeverOverflow, High, Low, Disappear and AlwaysOverflow
+			 * Defines OverflowToolbar items priority. Available priorities are NeverOverflow, High, Low, Disappear and AlwaysOverflow.
 			 *
 			 * @public
 			 * @since 1.32
@@ -85,12 +85,32 @@ sap.ui.define(['sap/m/ToolbarLayoutData', 'sap/m/library', 'jquery.sap.global'],
 
 		// Validate layoutData priority and group properties
 		if (this.getGroup() && bInvalidPriority) {
-			jQuery.sap.log.error("It is not allowed to set AlwaysOverflow or NeverOverflow to a group items.");
+			Log.error("It is not allowed to set AlwaysOverflow or NeverOverflow to a group items.");
 		}
 
 		return ToolbarLayoutData.prototype.invalidate.call(this);
 	};
 
-	return OverflowToolbarLayoutData;
+	/**
+	 * @override
+	 */
+	OverflowToolbarLayoutData.prototype.setPriority = function (sPriority) {
+		var vResult;
 
+		if (this.getPriority() === sPriority) {
+			return this;
+		}
+
+		if (this.isInvalidateSuppressed()) {
+			// Guarantee that OverflowLayoutData will always be invalidated and will fire event to its parent control
+			vResult = this.setProperty("priority", sPriority, true);
+			this.invalidate();
+		} else {
+			vResult = this.setProperty("priority", sPriority);
+		}
+
+		return vResult;
+	};
+
+	return OverflowToolbarLayoutData;
 });

@@ -1,24 +1,27 @@
 /* global QUnit */
 
-QUnit.config.autostart = false;
-
-sap.ui.require([
+sap.ui.define([
 	"sap/ui/core/UIComponent",
+	"sap/ui/core/ComponentContainer",
 	"sap/m/Page",
-	"sap/ui/fl/FakeLrepConnectorLocalStorage",
+	"sap/m/Button",
 	"sap/ui/rta/RuntimeAuthoring",
 	"sap/ui/rta/service/index",
-	"sap/ui/thirdparty/sinon-4",
-	"sap/ui/dt/Util"
-],
-function (
+	"sap/ui/dt/Util",
+	"sap/ui/base/ManagedObjectMetadata",
+	"sap/base/Log",
+	"sap/ui/thirdparty/sinon-4"
+], function (
 	UIComponent,
+	ComponentContainer,
 	Page,
-	FakeLrepConnectorLocalStorage,
+	Button,
 	RuntimeAuthoring,
 	mServicesDictionary,
-	sinon,
-	DtUtil
+	DtUtil,
+	ManagedObjectMetadata,
+	Log,
+	sinon
 ) {
 	"use strict";
 
@@ -26,12 +29,12 @@ function (
 
 	QUnit.module("startService()", {
 		before: function () {
-			FakeLrepConnectorLocalStorage.enableFakeConnector();
+			QUnit.config.fixture = null;
 			var FixtureComponent = UIComponent.extend("fixture.UIComponent", {
 				metadata: {
 					manifest: {
 						"sap.app": {
-							"id": "fixture.application"
+							id: "fixture.application"
 						}
 					}
 				},
@@ -40,7 +43,77 @@ function (
 				}
 			});
 
-			this.oComponent = new FixtureComponent();
+			this.oComponent = new FixtureComponent('Comp');
+			this.oComponentContainer = new ComponentContainer("CompCont", {
+				component: this.oComponent
+			});
+			this.oComponentContainer.placeAt('qunit-fixture');
+			sap.ui.getCore().applyChanges();
+		},
+		beforeEach: function () {
+			this.oRta = new RuntimeAuthoring({
+				showToolbars: false,
+				rootControl: this.oComponent.getRootControl()
+			});
+		},
+		afterEach: function () {
+			this.oRta.destroy();
+			sandbox.restore();
+		},
+		after: function () {
+			this.oComponentContainer.destroy();
+			QUnit.config.fixture = '';
+		}
+	}, function () {
+		QUnit.test("service initialisation must always wait until RTA is started", function (assert) {
+			var bRtaIsStarted = false;
+			var sServiceName = Object.keys(mServicesDictionary).shift();
+			var sServiceLocation = mServicesDictionary[sServiceName].replace(/\./g, '/');
+			var oServiceSpy = sandbox.spy(function () {
+				assert.strictEqual(bRtaIsStarted, true);
+				return {};
+			});
+
+			this.oRta.attachStart(function () {
+				bRtaIsStarted = true;
+			});
+
+			sandbox.stub(sap.ui, "require")
+				.callThrough()
+				.withArgs([sServiceLocation])
+				.callsArgWithAsync(1, oServiceSpy);
+
+			// setTimeout() is just to postpone start a little bit
+			setTimeout(function () {
+				this.oRta.start();
+			}.bind(this));
+
+			return this.oRta.startService(sServiceName);
+		});
+	});
+
+	QUnit.module("startService() - RTA is pre-started", {
+		before: function () {
+			QUnit.config.fixture = null;
+			var FixtureComponent = UIComponent.extend("fixture.UIComponent", {
+				metadata: {
+					manifest: {
+						"sap.app": {
+							id: "fixture.application"
+						}
+					}
+				},
+				createContent: function() {
+					return new Page("mockPage");
+				}
+			});
+
+			this.oComponent = new FixtureComponent('Comp');
+			this.oComponentContainer = new ComponentContainer('CompCont', {
+				component: this.oComponent
+			});
+			this.oComponentContainer.placeAt('qunit-fixture');
+			sap.ui.getCore().applyChanges();
 		},
 		beforeEach: function () {
 			this.oRta = new RuntimeAuthoring({
@@ -55,8 +128,8 @@ function (
 			sandbox.restore();
 		},
 		after: function () {
-			this.oComponent.destroy();
-			FakeLrepConnectorLocalStorage.disableFakeConnector();
+			this.oComponentContainer.destroy();
+			QUnit.config.fixture = '';
 		}
 	}, function () {
 		QUnit.test("starting a service", function (assert) {
@@ -103,7 +176,7 @@ function (
 				.then(function () {
 					assert.ok(oServiceStub.calledOnce);
 					assert.ok(oServiceSpy.calledOnce);
-					this.oRta.startService(sServiceName).then(function (oService) {
+					this.oRta.startService(sServiceName).then(function () {
 						assert.ok(oServiceStub.calledOnce);
 						assert.ok(oServiceSpy.calledOnce);
 					});
@@ -215,11 +288,59 @@ function (
 				});
 		});
 
+		QUnit.test("service methods should be returned only when designTime status is synced", function (assert) {
+			assert.expect(3);
+			var sServiceName = Object.keys(mServicesDictionary).shift();
+			var sServiceLocation = mServicesDictionary[sServiceName].replace(/\./g, '/');
+			var fnMockService = function () {
+				return {
+					exports: {
+						method1: function () { return 'value1'; }
+					}
+				};
+			};
+			var oMockButton = new Button("mockButton");
+			var fnDtSynced;
+
+			sandbox.stub(sap.ui, "require")
+				.callThrough()
+				.withArgs([sServiceLocation]).callsArgWithAsync(1, fnMockService);
+
+			sandbox.stub(ManagedObjectMetadata.prototype, "loadDesignTime")
+				.callThrough()
+				.withArgs(oMockButton).callsFake(function () {
+					return new Promise(function (fnResolve) {
+						fnDtSynced = fnResolve;
+					});
+				});
+
+			this.oComponent.getRootControl().addContent(oMockButton);
+			var fnServiceMethod1Stub = sandbox.stub().callsFake(function(oResult) {
+				assert.strictEqual(oResult, "value1", "then the service method returns the correct value");
+			});
+			var fnSyncedEventStub = sandbox.stub().callsFake(function() {
+				assert.ok(true, "then dt is synced");
+			});
+
+			// at this moment DT has syncing status since designTime for mockButton is still an unresolved promise
+			return this.oRta
+				.startService(sServiceName)
+				.then(function (oService) {
+					var oReturn = oService.method1().then(fnServiceMethod1Stub);
+					this.oRta._oDesignTime.attachEventOnce("synced", fnSyncedEventStub);
+					fnDtSynced({});
+					return oReturn;
+				}.bind(this))
+				.then(function() {
+					assert.ok(fnSyncedEventStub.calledBefore(fnServiceMethod1Stub), "then first the designTime was synced and then the service method is called");
+				});
+		});
+
 		QUnit.test("starting unknown service", function (assert) {
 			return this.oRta
 				.startService("unknownServiceName")
 				.then(
-					function (oService) {
+					function () {
 						assert.ok(false, "this should never be called");
 					},
 					function () {
@@ -240,7 +361,7 @@ function (
 			return this.oRta
 				.startService(sServiceName)
 				.then(
-					function (oService) {
+					function () {
 						assert.ok(false, "this should never be called");
 					},
 					function (oError) {
@@ -263,8 +384,8 @@ function (
 
 			return this.oRta
 				.startService(sServiceName)
-				.then(function (oService) {
-						assert.ok(oServiceSpy.withArgs(this.oRta).calledOnce);
+				.then(function () {
+					assert.ok(oServiceSpy.withArgs(this.oRta).calledOnce);
 				}.bind(this));
 		});
 
@@ -337,14 +458,14 @@ function (
 				.then(
 					function (oService) {
 						assert.ok(jQuery.isPlainObject(oService));
-						assert.ok(jQuery.isFunction(oService.serviceMethod));
+						assert.ok(typeof oService.serviceMethod === "function");
 						return oService.serviceMethod().then(function (vResult) {
 							assert.strictEqual(vResult, 'value');
 						});
 					},
 					function (vError) {
 						assert.ok(false, "this should never be called");
-						jQuery.sap.log.error(DtUtil.errorToString(vError));
+						Log.error(DtUtil.errorToString(vError));
 					}
 				);
 		});
@@ -369,7 +490,7 @@ function (
 					function () {
 						assert.ok(false, "this should never be called");
 					},
-					function (oError) {
+					function () {
 						assert.ok(true, "rejected successfully");
 					}
 				);
@@ -439,12 +560,12 @@ function (
 
 	QUnit.module("stopService()", {
 		before: function () {
-			FakeLrepConnectorLocalStorage.enableFakeConnector();
+			QUnit.config.fixture = null;
 			var FixtureComponent = UIComponent.extend("fixture.UIComponent", {
 				metadata: {
 					manifest: {
 						"sap.app": {
-							"id": "fixture.application"
+							id: "fixture.application"
 						}
 					}
 				},
@@ -453,7 +574,12 @@ function (
 				}
 			});
 
-			this.oComponent = new FixtureComponent();
+			this.oComponent = new FixtureComponent('Comp');
+			this.oComponentContainer = new ComponentContainer('CompCont', {
+				component: this.oComponent
+			});
+			this.oComponentContainer.placeAt('qunit-fixture');
+			sap.ui.getCore().applyChanges();
 		},
 		beforeEach: function () {
 			this.oRta = new RuntimeAuthoring({
@@ -468,8 +594,8 @@ function (
 			sandbox.restore();
 		},
 		after: function () {
-			this.oComponent.destroy();
-			FakeLrepConnectorLocalStorage.disableFakeConnector();
+			this.oComponentContainer.destroy();
+			QUnit.config.fixture = '';
 		}
 	}, function () {
 		QUnit.test("stopping running service", function (assert) {
@@ -502,12 +628,12 @@ function (
 
 	QUnit.module("getService()", {
 		before: function () {
-			FakeLrepConnectorLocalStorage.enableFakeConnector();
+			QUnit.config.fixture = null;
 			var FixtureComponent = UIComponent.extend("fixture.UIComponent", {
 				metadata: {
 					manifest: {
 						"sap.app": {
-							"id": "fixture.application"
+							id: "fixture.application"
 						}
 					}
 				},
@@ -516,7 +642,12 @@ function (
 				}
 			});
 
-			this.oComponent = new FixtureComponent();
+			this.oComponent = new FixtureComponent('Comp');
+			this.oComponentContainer = new ComponentContainer('CompCont', {
+				component: this.oComponent
+			});
+			this.oComponentContainer.placeAt('qunit-fixture');
+			sap.ui.getCore().applyChanges();
 		},
 		beforeEach: function () {
 			this.oRta = new RuntimeAuthoring({
@@ -531,8 +662,8 @@ function (
 			sandbox.restore();
 		},
 		after: function () {
-			this.oComponent.destroy();
-			FakeLrepConnectorLocalStorage.disableFakeConnector();
+			this.oComponentContainer.destroy();
+			QUnit.config.fixture = '';
 		}
 	}, function () {
 		QUnit.test("check alias to startService()", function (assert) {
@@ -549,10 +680,7 @@ function (
 		});
 	});
 
-
-	QUnit.start();
-
-	QUnit.done(function( details ) {
+	QUnit.done(function() {
 		jQuery("#qunit-fixture").hide();
 	});
 });

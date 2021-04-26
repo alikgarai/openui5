@@ -4,23 +4,15 @@
 
 // Provides control sap.m.Bar.
 sap.ui.define([
-	'jquery.sap.global',
 	'./BarInPageEnabler',
 	'./library',
 	'sap/ui/core/Control',
 	'sap/ui/core/ResizeHandler',
 	'sap/ui/Device',
-	'./BarRenderer'
+	'./BarRenderer',
+	"sap/ui/thirdparty/jquery"
 ],
-	function(
-	jQuery,
-	BarInPageEnabler,
-	library,
-	Control,
-	ResizeHandler,
-	Device,
-	BarRenderer
-	) {
+	function(BarInPageEnabler, library, Control, ResizeHandler, Device, BarRenderer, jQuery) {
 	"use strict";
 
 
@@ -28,7 +20,8 @@ sap.ui.define([
 	// shortcut for sap.m.BarDesign
 	var BarDesign = library.BarDesign;
 
-
+	// shortcut for sap.m.TitleAlignment
+	var TitleAlignment = library.TitleAlignment;
 
 	/**
 	 * Constructor for a new <code>Bar</code>.
@@ -96,7 +89,18 @@ sap.ui.define([
 			 * Determines the design of the bar. If set to auto, it becomes dependent on the place where the bar is placed.
 			 * @since 1.22
 			 */
-			design : {type : "sap.m.BarDesign", group : "Appearance", defaultValue : BarDesign.Auto}
+			design : {type : "sap.m.BarDesign", group : "Appearance", defaultValue : BarDesign.Auto},
+
+			/**
+			 * Specifies the Title alignment (theme specific).
+			 * If set to <code>TitleAlignment.None</code>, the automatic title alignment depending on the theme settings will be disabled.
+			 * If set to <code>TitleAlignment.Auto</code>, the Title will be aligned as it is set in the theme (if not set, the default value is <code>center</code>);
+			 * Other possible values are <code>TitleAlignment.Start</code> (left or right depending on LTR/RTL), and <code>TitleAlignment.Center</code> (centered)
+			 * @since 1.85
+			 * @public
+			 */
+			titleAlignment : {type : "sap.m.TitleAlignment", group : "Misc", defaultValue : TitleAlignment.None}
+
 		},
 		aggregations : {
 
@@ -122,11 +126,24 @@ sap.ui.define([
 			 */
 			ariaLabelledBy : {type : "sap.ui.core.Control", multiple : true, singularName : "ariaLabelledBy"}
 		},
-		designtime: "sap/m/designtime/Bar.designtime"
+		designtime: "sap/m/designtime/Bar.designtime",
+		dnd: { draggable: false, droppable: true }
 	}});
 
 	Bar.prototype.onBeforeRendering = function() {
+		var sCurrentAlignment = this.getTitleAlignment(),
+			sAlignment;
+
 		this._removeAllListeners();
+
+		// title alignment
+		for (sAlignment in TitleAlignment) {
+			if (sAlignment !== sCurrentAlignment) {
+				this.removeStyleClass("sapMBarTitleAlign" + sAlignment);
+			} else {
+				this.addStyleClass("sapMBarTitleAlign" + sAlignment);
+			}
+		}
 	};
 
 	Bar.prototype.onAfterRendering = function() {
@@ -138,6 +155,7 @@ sap.ui.define([
 	 */
 	Bar.prototype.init = function() {
 		this.data("sap-ui-fastnavgroup", "true", true); // Define group for F6 handling
+		this._sPrevTitleAlignmentClass = "";
 	};
 
 	/**
@@ -221,7 +239,6 @@ sap.ui.define([
 		this._updatePosition(bContentLeft, bContentMiddle, bContentRight);
 
 		this._sResizeListenerId = ResizeHandler.register(this.getDomRef(), jQuery.proxy(this._handleResize, this));
-
 		if (this.getEnableFlexBox()) {
 			return;
 		}
@@ -233,7 +250,6 @@ sap.ui.define([
 		if (bContentMiddle) {
 			this._sResizeListenerIdMid = ResizeHandler.register(this._$MidBarPlaceHolder[0], jQuery.proxy(this._handleResize, this));
 		}
-
 		if (bContentRight) {
 			this._sResizeListenerIdRight = ResizeHandler.register(this._$RightBar[0], jQuery.proxy(this._handleResize, this));
 		}
@@ -260,14 +276,15 @@ sap.ui.define([
 		}
 
 		var iBarWidth = this.$().outerWidth(true);
-
 		// reset to default
 		this._$RightBar.css({ width : "" });
 		this._$LeftBar.css({ width : "" });
-		this._$MidBarPlaceHolder.css({ position : "", width : "", visibility : 'hidden' });
-
+		if (Device.browser.msie) {
+			this._$MidBarPlaceHolder.css({ position : "", width : ""});
+		} else {
+			this._$MidBarPlaceHolder.css({ position : "", width : "", visibility: "hidden"});
+		}
 		var iRightBarWidth = this._$RightBar.outerWidth(true);
-
 		//right bar is bigger than the bar - only show the right bar
 		if (iRightBarWidth > iBarWidth) {
 
@@ -283,7 +300,6 @@ sap.ui.define([
 			return;
 
 		}
-
 		var iLeftBarWidth = this._getBarContainerWidth(this._$LeftBar);
 
 		// handle the case when left and right content are wider than the bar itself
@@ -302,10 +318,8 @@ sap.ui.define([
 			return;
 
 		}
-
 		//middle bar will be shown
 		this._$MidBarPlaceHolder.css(this._getMidBarCss(iRightBarWidth, iBarWidth, iLeftBarWidth));
-
 	};
 
 	/**
@@ -326,7 +340,7 @@ sap.ui.define([
 
 		if (this.getEnableFlexBox()) {
 
-			iMidBarPlaceholderWidth = iBarWidth - iLeftBarWidth - iRightBarWidth - parseInt(this._$MidBarPlaceHolder.css('margin-left'), 10) - parseInt(this._$MidBarPlaceHolder.css('margin-right'), 10);
+			iMidBarPlaceholderWidth = iBarWidth - iLeftBarWidth - iRightBarWidth - parseInt(this._$MidBarPlaceHolder.css('margin-left')) - parseInt(this._$MidBarPlaceHolder.css('margin-right'));
 
 			oMidBarCss.position = "absolute";
 			oMidBarCss.width = iMidBarPlaceholderWidth + "px";
@@ -334,20 +348,18 @@ sap.ui.define([
 
 			//calculation for flex is done
 			return oMidBarCss;
-
 		}
 
 		var iSpaceBetweenLeftAndRight = iBarWidth - iLeftBarWidth - iRightBarWidth,
-
 			iMidBarStartingPoint = (iBarWidth / 2) - (iMidBarPlaceholderWidth / 2),
 			bLeftContentIsOverlapping = iLeftBarWidth > iMidBarStartingPoint,
-
 			iMidBarEndPoint = (iBarWidth / 2) + (iMidBarPlaceholderWidth / 2),
-			bRightContentIsOverlapping = (iBarWidth - iRightBarWidth) < iMidBarEndPoint;
+			bRightContentIsOverlapping = (iBarWidth - iRightBarWidth) < iMidBarEndPoint,
+			sTitleAlignment = this.getTitleAlignment();
 
-		if (iSpaceBetweenLeftAndRight > 0 && (bLeftContentIsOverlapping || bRightContentIsOverlapping)) {
-
-			//Left or Right content is overlapping the Middle content
+		if ((sTitleAlignment !== TitleAlignment.None && sTitleAlignment !== TitleAlignment.Center) ||
+			(iSpaceBetweenLeftAndRight > 0 && (bLeftContentIsOverlapping || bRightContentIsOverlapping))) {
+			//Left or Right content is overlapping the Middle content or there is Title alignment "Center" or "None" set
 
 			// place the middle positioned element directly next to the end of left content area
 			oMidBarCss.position = "absolute";
@@ -359,7 +371,6 @@ sap.ui.define([
 		}
 
 		return oMidBarCss;
-
 	};
 
 	/**
@@ -547,6 +558,24 @@ sap.ui.define([
 	 */
 	Bar.prototype._getRootAccessibilityRole = BarInAnyContentEnabler.prototype._getRootAccessibilityRole;
 
+	/**
+	 * Sets accessibility aria-level attribute of the Root HTML element.
+	 *
+	 * This is only needed if <code>sap.m.Bar</code> has role="heading"
+	 * @param {string} sLevel aria-level attribute of the root Element
+	 * @returns {sap.m.IBar} <code>this</code> to allow method chaining
+	 * @private
+	 */
+	Bar.prototype._setRootAriaLevel = BarInAnyContentEnabler.prototype._setRootAriaLevel;
+
+	/**
+	 * Gets accessibility aria-level attribute of the Root HTML element.
+	 *
+	 * This is only needed if <code>sap.m.Bar</code> has role="heading"
+	 * @returns {string} aria-level
+	 * @private
+	 */
+	Bar.prototype._getRootAriaLevel = BarInAnyContentEnabler.prototype._getRootAriaLevel;
 
 	return Bar;
 

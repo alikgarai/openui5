@@ -13,8 +13,8 @@
  * All measurement activities get recorded by jquery.sap.measure, which is located in jquery.sap.global. As the initial
  * interaction is the app startup, we need the measuring capability already before this module is loaded.
  */
-sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/URI', 'sap/ui/Device', 'sap/ui/performance/E2ETrace/Passport', 'sap/ui/performance/Interaction', 'sap/ui/performance/FESR', 'sap/base/Log', 'sap/ui/Global'],
-function(jQuery, URI, Device, Passport, Interaction, FESR, Log) {
+sap.ui.define(['jquery.sap.global', 'sap/ui/performance/trace/Passport', 'sap/ui/performance/trace/Interaction', 'sap/ui/performance/trace/FESR', 'sap/base/Log', 'sap/ui/Global'],
+function(jQuery, Passport, Interaction, FESR, Log) {
 	"use strict";
 
 
@@ -43,6 +43,7 @@ function(jQuery, URI, Device, Passport, Interaction, FESR, Log) {
 	 * @static
 	 * @public
 	 * @since 1.36
+	 * @deprecated since 1.58 use {@link module:sap/ui/performance/trace/Interaction} instead
 	 */
 	jQuery.sap.interaction = {};
 
@@ -142,6 +143,7 @@ function(jQuery, URI, Device, Passport, Interaction, FESR, Log) {
 	 * @name jQuery.sap.fesr
 	 * @static
 	 * @private
+	 * @deprecated since 1.58 use {@link module:sap/ui/performance/trace/FESR} instead
 	 */
 	jQuery.sap.fesr = {};
 
@@ -195,6 +197,7 @@ function(jQuery, URI, Device, Passport, Interaction, FESR, Log) {
 	 * @name jQuery.sap.passport
 	 * @static
 	 * @private
+	 * @deprecated since 1.58 use {@link module:sap/ui/performance/trace/Passport} instead
 	 */
 	jQuery.sap.passport = {};
 

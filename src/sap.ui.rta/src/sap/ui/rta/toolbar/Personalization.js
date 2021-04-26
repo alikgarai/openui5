@@ -3,12 +3,12 @@
  */
 
 sap.ui.define([
-	'./Base',
-	'sap/m/ToolbarSpacer'
+	"./Base",
+	"sap/m/Button"
 ],
 function(
 	Base,
-	ToolbarSpacer
+	Button
 ) {
 	"use strict";
 
@@ -32,47 +32,40 @@ function(
 		renderer: 'sap.ui.rta.toolbar.BaseRenderer',
 		type: 'personalization',
 		metadata: {
+			library: "sap.ui.rta",
 			events: {
 				/**
 				 * Events are fired when the Toolbar - Buttons are pressed
 				 */
-				"exit": {},
-				"restore": {}
+				exit: {},
+				restore: {}
 			}
+		},
+		constructor: function() {
+			Base.apply(this, arguments);
+			this.setJustifyContent("End");
 		}
 	});
 
-	Personalization.prototype.buildControls = function() {
-		var aControls = [
-			new ToolbarSpacer(),
-			new sap.m.Button({
+	Personalization.prototype.buildContent = function() {
+		[
+			new Button("sapUiRta_restore", {
 				type: "Transparent",
-				text: this.getTextResources().getText("BTN_RESTORE"),
-				tooltip: this.getTextResources().getText("BTN_RESTORE"),
+				text: "{i18n>BTN_RESTORE}",
 				visible: true,
 				press: this.eventHandler.bind(this, 'Restore')
 			}).data('name', 'restore'),
-			new sap.m.Button({
-				type:"Emphasized",
-				text: this.getTextResources().getText("BTN_DONE"),
-				tooltip: this.getTextResources().getText("BTN_DONE_TOOLTIP"),
+			new Button("sapUiRta_exit", {
+				type: "Emphasized",
+				text: "{i18n>BTN_DONE}",
 				press: this.eventHandler.bind(this, 'Exit')
 			}).data('name', 'exit')
-		];
+		].forEach(function (oControl) {
+			this.addItem(oControl);
+		}.bind(this));
 
-		return aControls;
-	};
-
-	Personalization.prototype.setUndoRedoEnabled = function() {
-	};
-
-	Personalization.prototype.setPublishEnabled = function() {
-	};
-
-	Personalization.prototype.setRestoreEnabled = function (bEnabled) {
-		this.getControl('restore').setEnabled(bEnabled);
+		return Promise.resolve();
 	};
 
 	return Personalization;
-
 }, true);

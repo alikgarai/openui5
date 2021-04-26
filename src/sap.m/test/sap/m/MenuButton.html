@@ -300,24 +300,25 @@ var oMenu22 = new sap.m.Menu({
         var oLabel3 = new sap.m.Label({
             text: "This one has a type Accept and no default action"
         });
-        var oMenuButton3 = new sap.m.MenuButton({
+        var oMenuButton3 = new sap.m.MenuButton('mb3', {
             text: "Accept",
             buttonMode: sap.m.MenuButtonMode.Split,
             type: sap.m.ButtonType.Accept,
             useDefaultActionOnly: true,
-            menu: oMenu3,
-            defaultAction: function() {
-                sap.m.MessageToast.show("Accepted");
-            }
-        });
+			menu: oMenu3,
+			defaultAction: function() {
+				sap.m.MessageToast.show("Accepted");
+			}
+		});
 
-		var oMenuButton4 = new sap.m.MenuButton({
+		var oMenuButton4 = new sap.m.MenuButton('mb4', {
 			text: "Accept",
 			buttonMode: sap.m.MenuButtonMode.Regular,
 			type: sap.m.ButtonType.Accept,
 			useDefaultActionOnly: true,
 			menu: oMenu3,
 			defaultAction: function() {
+				oMenuButton3.setType(sap.m.ButtonType.Reject);
 				sap.m.MessageToast.show("Accepted");
 			}
 		});
@@ -526,6 +527,19 @@ var oMenu22 = new sap.m.Menu({
             }
         });
 
+		var oDensitySelect = new sap.m.Select("density_select", {
+			items: [
+				new sap.ui.core.Item("item_cozy", {text: "Cozy"}),
+				new sap.ui.core.Item("item_compact", {text: "Compact"})
+			],
+			change: function (oEvent) {
+				var bCompactMode = oEvent.getParameter("selectedItem").getText() === "Compact";
+
+				oPage.toggleStyleClass("sapUiSizeCompact", bCompactMode);
+				oPage.rerender();
+			}
+		});
+
         function getControls() {
             var keys = [
                 "buttonMode",
@@ -635,7 +649,8 @@ var oMenu22 = new sap.m.Menu({
                 oMenuButton15,
 
                 oButton,
-                oButtonShowTruncation
+				oButtonShowTruncation,
+				oDensitySelect
             ]
         });
 
@@ -784,10 +799,13 @@ var oMenu22 = new sap.m.Menu({
                 oVBox,
                 oList
             ],
-            footer: new sap.m.Toolbar({
-                content: [
+            footer: new sap.m.Bar({
+                contentMiddle: [
                     oLabel2,
-                    oMenuButton2
+                    oMenuButton2,
+                    new sap.m.MenuButton({
+                        text: "Test"
+                    })
                 ]
             })
         });
@@ -802,6 +820,6 @@ var oMenu22 = new sap.m.Menu({
         oApp.placeAt("body");
     </script>
 </head>
-<body id="body" class="sapUiBody" role="application">
+<body id="body" class="sapUiBody">
 </body>
 </html>

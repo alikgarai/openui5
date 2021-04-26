@@ -4,12 +4,10 @@
 
 // Provides object sap.ui.dt.OverlayUtil.
 sap.ui.define([
-	'jquery.sap.global',
-	'sap/ui/dt/OverlayRegistry',
-	'sap/ui/dt/ElementUtil'
+	"sap/ui/dt/OverlayRegistry",
+	"sap/ui/dt/ElementUtil"
 ],
 function(
-	jQuery,
 	OverlayRegistry,
 	ElementUtil
 ) {
@@ -52,7 +50,7 @@ function(
 	 */
 	OverlayUtil.getParentInformation = function(oElementOverlay) {
 		var oParentOverlay = oElementOverlay.getParentElementOverlay();
-		if (oParentOverlay){
+		if (oParentOverlay) {
 			//calculate index in direct (maybe in hidden tree) parent
 			var oParent = oParentOverlay.getElement();
 			var sParentAggregationName = oElementOverlay.getParentAggregationOverlay().getAggregationName();
@@ -62,17 +60,16 @@ function(
 
 			return {
 				parent: oParent,
-				aggregation : sParentAggregationName,
+				aggregation: sParentAggregationName,
 				index: iIndex
-			};
-		} else {
-			return {
-				parent: null,
-				aggregation: "",
-				index: -1
 			};
 		}
 
+		return {
+			parent: null,
+			aggregation: "",
+			index: -1
+		};
 	};
 
 	/**
@@ -103,9 +100,12 @@ function(
 	 * @private
 	 */
 	OverlayUtil.getGeometry = function(aGeometry) {
-		var minLeft, maxRight, minTop, maxBottom;
+		var minLeft;
+		var maxRight;
+		var minTop;
+		var maxBottom;
 		aGeometry.forEach(function(oElementGeometry) {
-			if (oElementGeometry) {
+			if (oElementGeometry && oElementGeometry.visible) {
 				if (!minLeft || oElementGeometry.position.left < minLeft) {
 					minLeft = oElementGeometry.position.left;
 				}
@@ -134,7 +134,7 @@ function(
 					left: minLeft,
 					top: minTop
 				},
-				visible : true
+				visible: true
 			};
 		}
 	};
@@ -167,6 +167,33 @@ function(
 	};
 
 	/**
+	 * Returns last descendant of given ElementOverlay which fulfills
+	 * the given condition. Recursive function.
+	 *
+	 * @param {sap.ui.dt.ElementOverlay} oOverlay - Source overlay object
+	 * @param {function} fnCondition - condition to search
+	 * @returns {sap.ui.dt.ElementOverlay} Returns the overlay which fulfills the condition, otherwise it returns 'undefined'
+	 * @private
+	 */
+	OverlayUtil.getLastDescendantByCondition = function(oOverlay, fnCondition) {
+		if (!fnCondition) {
+			throw new Error("expected condition is 'undefined' or not a function");
+		}
+		var aChildrenOverlays = OverlayUtil.getAllChildOverlays(oOverlay);
+		for (var i = aChildrenOverlays.length - 1, n = -1; i > n; i--) {
+			var oChildOverlay = aChildrenOverlays[i];
+			if (fnCondition(oChildOverlay)) {
+				return oChildOverlay;
+			}
+			var oDescendantOverlay = this.getLastDescendantByCondition(oChildOverlay, fnCondition);
+			if (oDescendantOverlay) {
+				return oDescendantOverlay;
+			}
+		}
+		return undefined;
+	};
+
+	/**
 	 * Returns all overlay children as ElementOverlay.
 	 *
 	 * @param {sap.ui.dt.ElementOverlay} oOverlay - Source overlay object
@@ -174,7 +201,8 @@ function(
 	 * @private
 	 */
 	OverlayUtil.getAllChildOverlays = function(oElementOverlay) {
-		var aChildElementOverlays = [], aChildren = [];
+		var aChildElementOverlays = [];
+		var aChildren = [];
 		if (!oElementOverlay) {
 			return aChildElementOverlays;
 		}
@@ -378,10 +406,10 @@ function(
 		var oParentOverlay = oOverlay.getParentElementOverlay();
 		var aRelevantOverlays = [];
 
-		if (oParentOverlay){
-			if (oParentOverlay !== oRelevantContainerOverlay){
+		if (oParentOverlay) {
+			if (oParentOverlay !== oRelevantContainerOverlay) {
 				var aParents = OverlayUtil.findAllSiblingOverlaysInContainer(oParentOverlay, oRelevantContainerOverlay);
-				aRelevantOverlays = aParents.map(function(oParentOverlay){
+				aRelevantOverlays = aParents.map(function(oParentOverlay) {
 					var oAggregationOverlay = oParentOverlay.getAggregationOverlay(oOverlay.getParentAggregationOverlay().getAggregationName());
 					return oAggregationOverlay ? oAggregationOverlay.getChildren() : [];
 				}).reduce(function(aFlattenedArray, oCurrentValue) {
@@ -413,6 +441,11 @@ function(
 		var oRelevantContainer = oOverlay.getRelevantContainer() || oOverlay.getElement();
 		var oRelevantContainerOverlay = OverlayRegistry.getOverlay(oRelevantContainer);
 		var aRelevantOverlays = [];
+
+		// Overlay might be destroyed in the meantime
+		if (!oRelevantContainerOverlay) {
+			return aRelevantOverlays;
+		}
 
 		// Get all the siblings and parents of the overlay
 		var mRelevantOverlays = OverlayUtil._findAllSiblingsAndParents(oOverlay, oRelevantContainerOverlay, 0);
@@ -456,9 +489,9 @@ function(
 			return [];
 		}
 
-		if (oParent !== oRelevantContainerOverlay){
+		if (oParent !== oRelevantContainerOverlay) {
 			var mParents = OverlayUtil._findAllSiblingsAndParents(oParent, oRelevantContainerOverlay, iLevel + 1);
-			var aOverlays = mParents[iLevel + 1].map(function(oParent){
+			var aOverlays = mParents[iLevel + 1].map(function(oParent) {
 				var oAggregationOverlay = oParent.getAggregationOverlay(oOverlay.getParentAggregationOverlay().getAggregationName());
 				return oAggregationOverlay ? oAggregationOverlay.getChildren() : [];
 			}).reduce(function(a, b) {
@@ -483,7 +516,7 @@ function(
 	 * @private
 	 */
 	OverlayUtil._findAllChildrenInContainer = function(oElementOverlay, oRelevantContainer, _aRelevantOverlays) {
-		_aRelevantOverlays = _aRelevantOverlays ? _aRelevantOverlays : [];
+		_aRelevantOverlays = _aRelevantOverlays || [];
 		if (oElementOverlay.getChildren().length > 0) {
 			oElementOverlay.getChildren().forEach(function(oAggregationOverlay) {
 				oAggregationOverlay.getChildren().forEach(function(oChildElementOverlay) {
@@ -513,24 +546,18 @@ function(
 	};
 
 	/**
-	 * Checks if an Overlay is part of an aggregation binding
-	 * The check is done recursively
-	 * @param  {sap.ui.dt.ElementOverlay} oElementOverlay Overlay being checked
-	 * @param  {string}  sAggregationName The name of the aggregation being checked
-	 * @return {Boolean}                  Returns true if Overlay is in aggregation binding
+	 * Returns the index of an element in a parent aggregation
+	 * Only the elements of the aggregation which have overlays are counted
+	 * @param {object} oElement Element for which we want to find the index
+	 * @param {object} oParent Parent of the Element
+	 * @param {string} sAggregationName Name of the parent aggregation
+	 * @return {int} Returns the index
 	 */
-	OverlayUtil.isInAggregationBinding = function(oElementOverlay, sAggregationName) {
-		if (sAggregationName && oElementOverlay.getElement().getBinding(sAggregationName)) {
-			return true;
-		}
-		return oElementOverlay.isRoot()
-			? false
-			: (
-				this.isInAggregationBinding(
-					oElementOverlay.getParentElementOverlay(),
-					oElementOverlay.getElement().sParentAggregationName
-				)
-			);
+	OverlayUtil.getIndexInAggregation = function(oElement, oParent, sAggregationName) {
+		var aElements = ElementUtil.getAggregation(oParent, sAggregationName).filter(function(oCompareElement) {
+			return !!OverlayRegistry.getOverlay(oCompareElement) || oCompareElement === oElement;
+		});
+		return aElements.indexOf(oElement);
 	};
 
 	return OverlayUtil;

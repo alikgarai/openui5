@@ -6,9 +6,8 @@ sap.ui.define([
 	"sap/ui/core/Control",
 	"sap/m/Label",
 	"sap/m/library",
-	"jquery.sap.global",
 	"./DraftIndicatorRenderer"
-], function(Control, Label, library, jQuery, DraftIndicatorRenderer) {
+], function(Control, Label, library, DraftIndicatorRenderer) {
 	"use strict";
 
 	// shortcut for sap.m.DraftIndicatorState
@@ -17,6 +16,7 @@ sap.ui.define([
 	/**
 	 * Constructor for a new DraftIndicator.
 	 * @param {string} [sId] ID for the new control, generated automatically if no ID is given
+	 * @param {object} [mSettings] Initial settings for the new control
 	 *
 	 * @class
 	 * A draft indicator is {@link sap.m.Label}.
@@ -163,7 +163,7 @@ sap.ui.define([
 			this._proceed();
 			return;
 		}
-		this.iDelayedCallId = jQuery.sap.delayedCall(iTimeOut, this, this._proceed);
+		this.iDelayedCallId = setTimeout(this._proceed.bind(this), iTimeOut);
 	};
 
 	/**
@@ -191,7 +191,7 @@ sap.ui.define([
 	 * @private
 	 */
 	DraftIndicator.prototype._resetDraftTimer = function() {
-		jQuery.sap.clearDelayedCall(this.iDelayedCallId);
+		clearTimeout(this.iDelayedCallId);
 		this.iDelayedCallId = null;
 	};
 

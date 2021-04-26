@@ -28,11 +28,12 @@
 				"</ol>";
 
 		var aMockMessages = {
-			count: 5,
+			count: 6,
 			messages: [{
 				type: "Error",
 				title: "Error message",
-				description: "First Error message description"
+				description: "First Error message description",
+				active: true
 			}, {
 				type: "Warning",
 				title: "Warning without description",
@@ -54,7 +55,14 @@
 				type: "Information",
 				title: "Information message (Long) 2",
 				description: "Just some text description",
-				longtextUrl: "./SampleHTML.html"
+				longtextUrl: "./SampleHTML.html",
+				active: true
+			}, {
+				type: "Information",
+				title: "Information message (Long Title) - Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmodtempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodoconsequat.",
+				description: "Just some text description",
+				longtextUrl: "./SampleHTML.html",
+				active: true
 			}],
 			reducedSet: [{
 				type: "Error",
@@ -85,7 +93,8 @@
 			title: "{title}",
 			description: "{description}",
 			longtextUrl: "{longtextUrl}",
-			markupDescription: "{markupDescription}"
+			markupDescription: "{markupDescription}",
+			activeTitle: "{active}"
 		});
 
 		var oMessageViewDialog = new sap.m.MessageView("mMView1", {
@@ -98,7 +107,7 @@
 				setTimeout(function () {
 					console.log('validate this url', config.url);
 
-					// simulated answer from whitelist service: relative URLs are fine
+					// simulated answer from URL validator service: relative URLs are fine
 					var allowed = config.url.lastIndexOf("http", 0) < 0;
 
 					config.promise.resolve({
@@ -111,6 +120,9 @@
 		});
 
 		var oMessageViewPage = new sap.m.MessageView("mMView2", {
+			activeTitlePress: function () {
+				alert('navigate');
+			},
 			items: {
 				path: "/messages",
 				template: oMessageTemplate
@@ -120,7 +132,7 @@
 				setTimeout(function () {
 					console.log('validate this url', config.url);
 
-					// simulated answer from whitelist service: relative URLs are fine
+					// simulated answer from URL validator service: relative URLs are fine
 					var allowed = config.url.lastIndexOf("http", 0) < 0;
 
 					config.promise.resolve({
@@ -142,7 +154,7 @@
 				setTimeout(function () {
 					console.log('validate this url', config.url);
 
-					// simulated answer from whitelist service: relative URLs are fine
+					// simulated answer from URL validator service: relative URLs are fine
 					var allowed = config.url.lastIndexOf("http", 0) < 0;
 
 					config.promise.resolve({
@@ -203,7 +215,6 @@
 
 		// Dialog will have no padding because of compatVersion setting on main script
 		var oDialog1 = new sap.m.Dialog({
-//                title: "Dialog with MessageView",
 			content: oMessageViewDialog,
 			showHeader: false,
 			beginButton: new sap.m.Button("dialogCloseButton", {
@@ -273,7 +284,7 @@
 				setTimeout(function () {
 					console.log('validate this url', config.url);
 
-					// simulated answer from whitelist service: relative URLs are fine
+					// simulated answer from URL validator service: relative URLs are fine
 					var allowed = config.url.lastIndexOf("http", 0) < 0;
 
 					config.promise.resolve({
@@ -482,6 +493,7 @@
 				oMessageViewPage
 			],
 			footer: new sap.m.OverflowToolbar({
+				id: "overflow-tb",
 				content: [
 					new sap.m.ToolbarSpacer(),
 					oMessagePopoverButton,
@@ -496,6 +508,7 @@
 		});
 
 		var oSplitApp = new sap.m.SplitApp({
+			id: "split-app",
 			masterPages: [page1],
 			initialMaster: "page1",
 
@@ -508,7 +521,7 @@
 		oSplitApp.placeAt("content");
 	</script>
 </head>
-<body class="sapUiBody" role="application">
+<body class="sapUiBody">
 <div id="content">
 </div>
 </body>

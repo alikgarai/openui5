@@ -3,12 +3,26 @@
  */
 
 // Provides the Design Time Metadata for the sap.ui.fl.variants.VariantManagement control.
-sap.ui.define([], function() {
+sap.ui.define([
+	"sap/ui/fl/Utils"
+], function(
+	flUtils
+) {
 	"use strict";
+	var fnSetControlAttributes = function (oVariantManagement, bDesignTimeMode) {
+		var oAppComponent = flUtils.getAppComponentForControl(oVariantManagement);
+		var sControlId = oVariantManagement.getId();
+		var oModel = oAppComponent.getModel(flUtils.VARIANT_MODEL_NAME);
+		var sVariantManagementReference = oAppComponent.getLocalId(sControlId) || sControlId;
+
+		if (!oModel) {
+			return;
+		}
+
+		oModel.setModelPropertiesForControl(sVariantManagementReference, bDesignTimeMode, oVariantManagement);
+		oModel.checkUpdate(true);
+	};
 	return {
-		domRef: function(oControl) {
-			return oControl.getTitle().getDomRef("inner");
-		},
 		annotations: {},
 		properties: {
 			showExecuteOnSelection: {
@@ -33,6 +47,40 @@ sap.ui.define([], function() {
 				ignore: false
 			}
 		},
-		customData: {}
+		variantRenameDomRef: function(oVariantManagement) {
+			return oVariantManagement.getTitle().getDomRef("inner");
+		},
+		customData: {},
+		tool: {
+			start: function(oVariantManagement) {
+				// In personalization mode the variant management overlay cannot be selected
+				var bDesignTimeMode = true;
+				fnSetControlAttributes(oVariantManagement, bDesignTimeMode);
+			},
+			stop: function(oVariantManagement) {
+				var bDesignTimeMode = false;
+				fnSetControlAttributes(oVariantManagement, bDesignTimeMode);
+			}
+		},
+		actions: {
+			controlVariant: function(oVariantManagement) {
+				var oAppComponent = flUtils.getAppComponentForControl(oVariantManagement);
+				var sControlId = oVariantManagement.getId();
+				var oModel = oAppComponent.getModel(flUtils.VARIANT_MODEL_NAME);
+				var sVariantManagementReference = oAppComponent.getLocalId(sControlId) || sControlId;
+				return {
+					validators: [
+						"noEmptyText",
+						{
+							validatorFunction: function(sNewText) {
+								var iDuplicateCount = oModel._getVariantTitleCount(sNewText, sVariantManagementReference) || 0;
+								return iDuplicateCount === 0;
+							},
+							errorMessage: sap.ui.getCore().getLibraryResourceBundle("sap.ui.fl").getText("VARIANT_MANAGEMENT_ERROR_DUPLICATE")
+						}
+					]
+				};
+			}
+		}
 	};
-}, /* bExport= */false);
+});

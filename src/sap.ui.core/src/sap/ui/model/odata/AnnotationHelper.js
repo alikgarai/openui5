@@ -4,11 +4,11 @@
 
 // Provides object sap.ui.model.odata.AnnotationHelper
 sap.ui.define([
-	"jquery.sap.global",
-	"sap/ui/base/BindingParser",
 	"./_AnnotationHelperBasics",
-	"./_AnnotationHelperExpression"
-], function(jQuery, BindingParser, Basics, Expression) {
+	"./_AnnotationHelperExpression",
+	"sap/base/Log",
+	"sap/ui/base/BindingParser"
+], function (Basics, Expression, Log, BindingParser) {
 		'use strict';
 
 		/**
@@ -17,20 +17,15 @@ sap.ui.define([
 		 *
 		 * @param {function} fnAfter
 		 *   the second function, taking a single argument
-		 * @param {function} [fnBefore]
-		 *   the optional first function, taking multiple arguments
+		 * @param {function} fnBefore
+		 *   the first function, taking multiple arguments
 		 * @returns {function}
 		 *   the composition <code>fnAfter</code> after <code>fnBefore</code>
 		 */
 		function chain(fnAfter, fnBefore) {
-			if (!fnBefore) {
-				return fnAfter;
-			}
-
-			function formatter() {
+			return function () {
 				return fnAfter.call(this, fnBefore.apply(this, arguments));
-			}
-			return formatter;
+			};
 		}
 
 		/**
@@ -110,7 +105,7 @@ sap.ui.define([
 			 * oControl.applySettings({"someProperty" : vPropertySetting});
 			 * </pre>
 			 *
-			 * @param {any[]} vParts
+			 * @param {any[]} aParts
 			 *   array of parts
 			 * @param {function} [fnRootFormatter]
 			 *   root formatter function; default: <code>Array.prototype.join(., " ")</code>
@@ -125,54 +120,55 @@ sap.ui.define([
 			 * @public
 			 * @since 1.31.0
 			 */
-			createPropertySetting : function (vParts, fnRootFormatter) {
+			createPropertySetting : function (aParts, fnRootFormatter) {
 				var bMergeNeeded = false,
 					vPropertySetting;
 
-				vParts = vParts.slice(); // shallow copy to avoid changes visible to caller
-				vParts.forEach(function (vPart, i) {
+				aParts = aParts.slice(); // shallow copy to avoid changes visible to caller
+				aParts.forEach(function (vPart, i) {
 					switch (typeof vPart) {
-					case "boolean":
-					case "number":
-					case "undefined":
-						bMergeNeeded = true;
-						break;
-
-					case "string":
-						vPropertySetting = BindingParser.complexParser(vPart, null, true, true);
-						if (vPropertySetting !== undefined) {
-							if (vPropertySetting.functionsNotFound) {
-								throw new Error("Function name(s) "
-									+ vPropertySetting.functionsNotFound.join(", ")
-									+  " not found");
-							}
-							vParts[i] = vPart = vPropertySetting;
-						}
-						// falls through
-					case "object":
-						// merge is needed if some parts are constants or again have parts
-						// Note: a binding info object has either "path" or "parts"
-						if (!vPart || typeof vPart !== "object" || !("path" in vPart)) {
+						case "boolean":
+						case "number":
+						case "undefined":
 							bMergeNeeded = true;
-						}
-						break;
+							break;
 
-					default:
-						throw new Error("Unsupported part: " + vPart);
+						case "string":
+							vPropertySetting = BindingParser.complexParser(vPart, null, true, true);
+							if (vPropertySetting !== undefined) {
+								if (vPropertySetting.functionsNotFound) {
+									throw new Error("Function name(s) "
+										+ vPropertySetting.functionsNotFound.join(", ")
+										+  " not found");
+								}
+								aParts[i] = vPart = vPropertySetting;
+							}
+							// falls through
+						case "object":
+							// merge is needed if some parts are constants or again have parts
+							// Note: a binding info object has either "path" or "parts"
+							if (!vPart || typeof vPart !== "object" || !("path" in vPart)) {
+								bMergeNeeded = true;
+							}
+							break;
+
+						default:
+							throw new Error("Unsupported part: " + vPart);
 					}
 				});
 
 				vPropertySetting = {
 					formatter : fnRootFormatter,
-					parts : vParts
+					parts : aParts
 				};
 				if (bMergeNeeded) {
 					BindingParser.mergeParts(vPropertySetting);
 				}
+				fnRootFormatter = vPropertySetting.formatter; // may have changed due to merge
 
 				if (vPropertySetting.parts.length === 0) {
 					// special case: all parts are constant values, call formatter once
-					vPropertySetting = vPropertySetting.formatter && vPropertySetting.formatter();
+					vPropertySetting = fnRootFormatter && fnRootFormatter();
 					if (typeof vPropertySetting === "string") {
 						vPropertySetting = BindingParser.complexParser.escape(vPropertySetting);
 					}
@@ -180,12 +176,17 @@ sap.ui.define([
 					// special case: a single property setting only
 					// Note: sap.ui.base.ManagedObject#_bindProperty cannot handle the single-part
 					//       case with two formatters, unless the root formatter is marked with
-					//       "textFragments". We unpack here and chain the formatters ourselves.
-					fnRootFormatter = vPropertySetting.formatter;
-					vPropertySetting = vPropertySetting.parts[0];
-					if (fnRootFormatter) {
+					//       "textFragments". Unpacking the single part does not work in case it has
+					//       a type! We do not unpack here, but chain the formatters ourselves.
+					// Note: we prefer a root formatter because it has access to "this" and has an
+					//       influence on the binding mode (OneTime/OneWay)
+					if (fnRootFormatter && !fnRootFormatter.textFragments
+							&& vPropertySetting.parts[0].formatter) {
 						vPropertySetting.formatter
-							= chain(fnRootFormatter, vPropertySetting.formatter);
+							= chain(fnRootFormatter, vPropertySetting.parts[0].formatter);
+						// avoid changes visible to caller
+						vPropertySetting.parts[0] = Object.assign({}, vPropertySetting.parts[0]);
+						delete vPropertySetting.parts[0].formatter;
 					}
 				}
 
@@ -386,7 +387,7 @@ sap.ui.define([
 				}
 
 				if (!sEntitySetPath) {
-					jQuery.sap.log.warning(oContext.getPath() + ": found '" + sEntitySet
+					Log.warning(oContext.getPath() + ": found '" + sEntitySet
 						+ "' which is not a name of an entity set", undefined,
 						"sap.ui.model.odata.AnnotationHelper");
 				}
@@ -420,7 +421,7 @@ sap.ui.define([
 					oResult = oContext.getModel().getODataEntityType(sEntityType, true);
 
 				if (!oResult) {
-					jQuery.sap.log.warning(oContext.getPath() + ": found '" + sEntityType
+					Log.warning(oContext.getPath() + ": found '" + sEntityType
 						+ "' which is not a name of an entity type", undefined,
 						"sap.ui.model.odata.AnnotationHelper");
 				}
@@ -458,7 +459,7 @@ sap.ui.define([
 					oResult = oContext.getModel().getODataFunctionImport(sFunctionImport, true);
 
 				if (!oResult) {
-					jQuery.sap.log.warning(oContext.getPath() + ": found '" + sFunctionImport
+					Log.warning(oContext.getPath() + ": found '" + sFunctionImport
 						+ "' which is not a name of a function import", undefined,
 						"sap.ui.model.odata.AnnotationHelper");
 				}
@@ -556,7 +557,7 @@ sap.ui.define([
 				var oResult = Basics.followPath(oContext, oContext.getObject());
 
 				if (!oResult) {
-					jQuery.sap.log.warning(oContext.getPath() + ": Path could not be resolved ",
+					Log.warning(oContext.getPath() + ": Path could not be resolved ",
 						undefined, "sap.ui.model.odata.AnnotationHelper");
 				}
 

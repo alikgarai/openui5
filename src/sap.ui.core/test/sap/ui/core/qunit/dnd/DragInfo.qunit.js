@@ -1,12 +1,14 @@
+/*global QUnit,sinon*/
+
 sap.ui.define([
 	"jquery.sap.global",
-	'test/TestControl',
+	'./TestControl',
 	"sap/ui/core/dnd/DragInfo",
-	"sap/ui/base/ManagedObject"
-], function(jQuery, TestControl, DragInfo, ManagedObject) {
+	"sap/ui/base/ManagedObject",
+	"sap/ui/core/ElementMetadata",
+	"sap/base/Log"
+], function(jQuery, TestControl, DragInfo, ManagedObject, ElementMetadata, Log) {
 	"use strict";
-
-	/*global QUnit,sinon*/
 
 	QUnit.test("Default values", function(assert) {
 		var oDragInfo = new DragInfo();
@@ -107,14 +109,17 @@ sap.ui.define([
 			children: oChild
 		});
 
-		var fnLogSpy = this.spy(jQuery.sap.log, "warning");
-		this.stub(sap.ui.core.ElementMetadata.prototype, "getDragDropInfo").returns({draggable: false});
+		var fnLogSpy = this.spy(Log, "warning");
+		this.stub(ElementMetadata.prototype, "getDragDropInfo").returns({draggable: false});
 		assert.notOk(oDragInfo.isDraggable(oParent), "Not draggable: Element metadata does not allow dragging");
 		assert.strictEqual(fnLogSpy.callCount, 1, "Not draggable is logged");
 
 		oDragInfo.setSourceAggregation("children");
 		assert.notOk(oDragInfo.isDraggable(oChild), "Not draggable: Aggregation metadata does not allow dragging");
 		assert.strictEqual(fnLogSpy.callCount, 2, "Not draggable is logged again");
+
+		oDragInfo.bIgnoreMetadataCheck = true;
+		assert.ok(oDragInfo.isDraggable(oChild), "Draggable: private flag ignores metadata check");
 
 		oParent.destroy();
 	});
@@ -133,7 +138,7 @@ sap.ui.define([
 		assert.ok(fnDragStartSpy.notCalled, "dragStart event is not fired, dragSession does not exist");
 
 		oDragInfo.destroy();
-	})
+	});
 
 	QUnit.test("fireDragStart - event parameters", function(assert) {
 		var fnDragStartSpy = sinon.spy(function(oEvent) {
@@ -185,7 +190,7 @@ sap.ui.define([
 		assert.ok(fnDragEndSpy.notCalled, "dragEnd event is not fired, dragSession does not exist");
 
 		oDragInfo.destroy();
-	})
+	});
 
 	QUnit.test("fireDragEnd - event parameters", function(assert) {
 		var fnDragEndSpy = sinon.spy(function(oEvent) {

@@ -4,15 +4,18 @@
 
 /*global location */
 sap.ui.define([
-		"jquery.sap.global",
-		"sap/ui/documentation/sdk/controller/BaseController",
-		"sap/ui/model/json/JSONModel",
-		"sap/ui/documentation/library"
-	], function (jQuery, BaseController, JSONModel, library) {
+    "sap/ui/thirdparty/jquery",
+    "sap/ui/documentation/sdk/controller/BaseController",
+    "sap/ui/model/json/JSONModel",
+    "sap/ui/documentation/library",
+    "sap/base/util/Version",
+    "sap/base/Log",
+    "sap/ui/documentation/sdk/util/Resources"
+], function(jQuery, BaseController, JSONModel, library, Version, Log, ResourcesUtil) {
 		"use strict";
 
-		var sNeoAppJsonPath = "neo-app.json",
-			sSapUiVersionJsonPath = "resources/sap-ui-version.json";
+		var sNeoAppJsonPath = ResourcesUtil.getResourceOriginPath("neo-app.json"),
+			sSapUiVersionJsonPath = ResourcesUtil.getResourceOriginPath("resources/sap-ui-version.json");
 
 		return BaseController.extend("sap.ui.documentation.sdk.controller.ReleaseNotes", {
 
@@ -30,7 +33,6 @@ sap.ui.define([
 				this._oView.setModel(this._oModel);
 				this._oView.setModel(this._oVersionModel, "select");
 
-				library._loadAllLibInfo("", "_getLibraryInfoAndReleaseNotes", "", this._processLibInfo.bind(this));
 				library._getAppInfo(this._processAppInfo.bind(this));
 
 			},
@@ -45,7 +47,7 @@ sap.ui.define([
 					return;
 				}
 
-				oVersion = jQuery.sap.Version(oAppInfo.version);
+				oVersion = Version(oAppInfo.version);
 				iMajor = oVersion.getMajor();
 				iMinor = oVersion.getMinor();
 
@@ -56,6 +58,9 @@ sap.ui.define([
 				}
 
 				sVersion = iMajor + "." + iMinor;
+
+				this._updateVersionInformation(sVersion);
+
 				oVersions = {
 					items : []
 				};
@@ -66,9 +71,11 @@ sap.ui.define([
 						key : sVersion,
 						value : sVersion
 					});
-					iMinor = iMinor - 2;
+					iMinor = iMinor - (iMinor <= 60 ? 2 : 1);
 				}
 				this._oVersionModel.setData(oVersions);
+
+				this.appendPageTitle(this.getModel("i18n").getProperty("RELEASE_NOTES_TITLE"));
 			},
 			_processLibInfo: function (aLibs, oLibInfos) {
 				var iReleaseNotes,
@@ -86,7 +93,7 @@ sap.ui.define([
 					});
 
 					aLibs[i].versions.sort(function(a, b) {
-						return jQuery.sap.Version(b.version).compareTo(a.version);
+						return Version(b.version).compareTo(a.version);
 					});
 				};
 
@@ -124,7 +131,7 @@ sap.ui.define([
 					}.bind(this),
 					// Error
 					function() {
-						jQuery.sap.log.warning("No neo-app.json was detected");
+						Log.warning("No neo-app.json was detected");
 					}
 				);
 			},
@@ -133,8 +140,8 @@ sap.ui.define([
 			 * @returns {boolean}
 			 */
 			_compareUI5Versions: function (sVersionA, sVersionB) {
-				var oVA = jQuery.sap.Version(sVersionA),
-					oVB = jQuery.sap.Version(sVersionB);
+				var oVA = Version(sVersionA),
+					oVB = Version(sVersionB);
 
 				return (oVA.getMajor() + "." + oVA.getMinor()) === (oVB.getMajor() + "." + oVB.getMinor());
 			},
@@ -161,8 +168,12 @@ sap.ui.define([
 			},
 			handleVersionChange: function (oEvent) {
 				var oItem = oEvent.getParameter("selectedItem"),
-					sSelectedVersion = oItem.getKey(),
-					sVersion;
+					sSelectedVersion = oItem.getKey();
+				this._updateVersionInformation(sSelectedVersion);
+			},
+
+			_updateVersionInformation: function(sSelectedVersion) {
+				var sVersion;
 
 				this._sLastReleasedVersion = this._getLastVersionFromNeoAppJson(sSelectedVersion);
 				this._updateLastReleasedVersion(sSelectedVersion);
@@ -174,6 +185,7 @@ sap.ui.define([
 				library._loadAllLibInfo("", "_getLibraryInfoAndReleaseNotes", sVersion,
 					this._processLibInfo.bind(this));
 			},
+
 			_showBusyIndicator: function () {
 				this.byId("releaseNotesObjectPage").setBusy(true);
 			},

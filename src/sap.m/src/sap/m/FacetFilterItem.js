@@ -23,7 +23,7 @@ sap.ui.define(['./ListItemBase', './library', './FacetFilterItemRenderer'],
 	 * @constructor
 	 * @public
 	 * @alias sap.m.FacetFilterItem
-	 * @see {@link topic:395392f30f2a4c4d80d110d5f923da77/ Facet Filter Item}
+	 * @see {@link topic:395392f30f2a4c4d80d110d5f923da77 Facet Filter Item}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var FacetFilterItem = ListItemBase.extend("sap.m.FacetFilterItem", /** @lends sap.m.FacetFilterItem.prototype */ { metadata : {
@@ -52,7 +52,7 @@ sap.ui.define(['./ListItemBase', './library', './FacetFilterItemRenderer'],
 	/*
 	 * Sets count for the FacetFilterList.
 	 * @param {int} iCount The counter to be set to
-	 * @returns {sap.m.FacetFilterItem} this for chaining
+	 * @returns {this} this for chaining
 	 */
 	FacetFilterItem.prototype.setCount = function(iCount) {
 
@@ -65,7 +65,7 @@ sap.ui.define(['./ListItemBase', './library', './FacetFilterItemRenderer'],
 	/**
 	 * Sets counter for the FacetFilter list.
 	 * @param {int} iCount The counter to be set to
-	 * @returns {sap.m.FacetFilterItem} this for chaining
+	 * @returns {this} this for chaining
 	 */
 	FacetFilterItem.prototype.setCounter = function(iCount) {
 

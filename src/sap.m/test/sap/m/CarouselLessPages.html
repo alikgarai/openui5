@@ -6,6 +6,9 @@
 		<title>sap.m.Carousel Test</title>
 		<script src="shared-config.js"></script>
 		<script src="../../../resources/sap-ui-core.js"
+			data-sap-ui-resourceroots='{
+				"qunit.internal.acc": "../../../test-resources/sap/ui/core/qunit/internal/acc"
+			}'
 			id="sap-ui-bootstrap"
 			data-sap-ui-libs="sap.m"
 			data-sap-ui-compatVersion="1.20">
@@ -15,7 +18,7 @@
 		// Create Images
 		var imgDesert = new sap.m.Image("desert", {
 			src: "images/demo/nature/desert.jpg",
-			alt: "Majestic Desert",
+			alt: "Majestic Desert Image",
 			tooltip: "Majestic Desert",
 			densityAware: false,
 			decorative: false
@@ -23,7 +26,7 @@
 
 		var imgPrairie = new sap.m.Image("prairie", {
 			src: "images/demo/nature/prairie.jpg",
-			alt: "Prairie in Dawn",
+			alt: "Prairie in Dawn Image",
 			tooltip: "Prairie in Dawn",
 			densityAware: false,
 			decorative: false
@@ -31,7 +34,7 @@
 
 		var imgWaterfall = new sap.m.Image("waterfall", {
 			src: "images/demo/nature/waterfall.jpg",
-			alt: "Waterfall in the Jungle",
+			alt: "Waterfall in the Jungle Image",
 			tooltip: "Waterfall in the Jungle",
 			densityAware: false,
 			decorative: false
@@ -62,6 +65,6 @@
 		</script>
 
 	</head>
-	<body id="body" class="sapUiBody" role="application">
+	<body id="body" class="sapUiBody">
 	</body>
 </html>

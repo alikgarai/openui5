@@ -1,6 +1,10 @@
-# Ignore .gitignore, target and tmp folders
+# Ignore .gitignore, target, dist and tmp folders
+lib/jsdoc/target
 src/*/.gitignore
 src/*/target/
+src/*/dist/
+src/*/coverage/
+src/*/surefire-reports/
 /target
 /tmp
 
@@ -23,6 +27,7 @@ grunt/bin
 # Ignore npm files/folders
 node_modules
 npm-debug.log
+src/**/package-lock.json
 
 # Ignore bower folder
 bower_components
@@ -41,9 +46,9 @@ web.config
 .vscode/
 
 # Ignore yarn files
-yarn.lock
-yarn-error.log
-*yarn
+yarn-error.log*
+yarn-debug.log*
+.yarn-integrity
 
 # Ignore documentation artifacts
 src/testsuite/src/main/webapp/documentation-config.js
@@ -52,3 +57,8 @@ src/sap.ui.documentation/src/sap/ui/documentation/sdk/model/data/guide/
 
 # Ignore default target directory for the npm package 'ui5-schemas'
 .tmp
+
+# Ignore REUSE summary file
+.reuse/spdx.txt
+.reuse/dep5_test
+.reuse/THIRDPARTY_test.txt

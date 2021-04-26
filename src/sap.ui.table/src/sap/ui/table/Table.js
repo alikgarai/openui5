@@ -4,64 +4,69 @@
 
 // Provides control sap.ui.table.Table.
 sap.ui.define([
-    'jquery.sap.global',
-    'sap/ui/Device',
-    'sap/ui/core/Control',
-    'sap/ui/core/Element',
-    'sap/ui/core/IconPool',
-    'sap/ui/model/ChangeReason',
-    'sap/ui/model/Filter',
-    'sap/ui/model/SelectionModel',
-    'sap/ui/model/Sorter',
-    'sap/ui/model/BindingMode',
-    './Column',
-    './Row',
-    './library',
-    './TableUtils',
-    './TableExtension',
-    './TableAccExtension',
-    './TableKeyboardExtension',
-    './TablePointerExtension',
-    './TableScrollExtension',
-    './TableDragAndDropExtension',
-    "./TableRenderer",
-    'jquery.sap.dom',
-    'jquery.sap.trace',
-    'jquery.sap.events'
+	'sap/ui/Device',
+	'sap/ui/core/Control',
+	'sap/ui/core/IconPool',
+	'sap/ui/core/util/PasteHelper',
+	'sap/ui/model/ChangeReason',
+	'sap/ui/model/Filter',
+	'sap/ui/model/Sorter',
+	'sap/ui/model/BindingMode',
+	'./Column',
+	'./Row',
+	'./library',
+	'./utils/TableUtils',
+	'./extensions/ExtensionBase',
+	'./extensions/Accessibility',
+	'./extensions/Keyboard',
+	'./extensions/Pointer',
+	'./extensions/Scrolling',
+	'./extensions/DragAndDrop',
+	"./TableRenderer",
+	"./rowmodes/FixedRowMode",
+	"./rowmodes/InteractiveRowMode",
+	"./rowmodes/AutoRowMode",
+	"./plugins/SelectionModelSelection",
+	"sap/ui/thirdparty/jquery",
+	"sap/base/Log"
 ],
 	function(
-	    jQuery,
 		Device,
 		Control,
-		Element,
 		IconPool,
+		PasteHelper,
 		ChangeReason,
 		Filter,
-		SelectionModel,
 		Sorter,
 		BindingMode,
 		Column,
 		Row,
 		library,
 		TableUtils,
-		TableExtension,
-		TableAccExtension,
-		TableKeyboardExtension,
-		TablePointerExtension,
-		TableScrollExtension,
-		TableDragAndDropExtension /*, jQuerySapPlugin,jQuerySAPTrace */,
-		TableRenderer
+		ExtensionBase,
+		AccExtension,
+		KeyboardExtension,
+		PointerExtension,
+		ScrollExtension,
+		DragAndDropExtension,
+		TableRenderer,
+		FixedRowMode,
+		InteractiveRowMode,
+		AutoRowMode,
+		SelectionModelSelectionPlugin,
+		jQuery,
+		Log
 	) {
 	"use strict";
 
-
-	// shortcuts
-	var GroupEventType = library.GroupEventType,
-		NavigationMode = library.NavigationMode,
-		SelectionMode = library.SelectionMode,
-		SelectionBehavior = library.SelectionBehavior,
-		SortOrder = library.SortOrder,
-		VisibleRowCountMode = library.VisibleRowCountMode;
+	var GroupEventType = library.GroupEventType;
+	var NavigationMode = library.NavigationMode;
+	var SelectionMode = library.SelectionMode;
+	var SelectionBehavior = library.SelectionBehavior;
+	var SortOrder = library.SortOrder;
+	var VisibleRowCountMode = library.VisibleRowCountMode;
+	var Hook = TableUtils.Hook.Keys.Table;
+	var _private = TableUtils.createWeakMapFacade();
 
 	/**
 	 * Constructor for a new Table.
@@ -86,8 +91,6 @@ sap.ui.define([
 	 *     The Table control relies completely on data binding, and its supported feature set is tightly coupled to
 	 *     the data model and binding being used.
 	 * </p>
-	 *
-	 *
 	 * @extends sap.ui.core.Control
 	 * @version ${version}
 	 *
@@ -96,11 +99,13 @@ sap.ui.define([
 	 * @alias sap.ui.table.Table
 	 * @see {@link topic:08197fa68e4f479cbe30f639cc1cd22c sap.ui.table}
 	 * @see {@link topic:148892ff9aea4a18b912829791e38f3e Tables: Which One Should I Choose?}
+	 * @see {@link fiori:/grid-table/ Grid Table}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var Table = Control.extend("sap.ui.table.Table", /** @lends sap.ui.table.Table.prototype */ { metadata : {
 
 		library : "sap.ui.table",
+		dnd : true,
 		properties : {
 
 			/**
@@ -109,13 +114,29 @@ sap.ui.define([
 			width : {type : "sap.ui.core.CSSSize", group : "Dimension", defaultValue : 'auto'},
 
 			/**
-			 * The height of the row content in pixel. The actual row height is also influenced by other factors, such as the border width.
-			 * If no value is set, a default height is applied based on the content density configuration.
+			 * Row height in pixel.
+			 *
+			 * In the table's header, it defines the minimum height of the row, but it cannot be less than the default height based on the
+			 * content density configuration. The actual height can increase based on the content.
+			 *
+			 * In the table's body, it defines the height of the row content. The actual row height is also influenced by other factors, such as
+			 * the border width. If the <code>visibleRowCountMode</code> property is set to {@link sap.ui.table.VisibleRowCountMode Fixed} or
+			 * {@link sap.ui.table.VisibleRowCountMode Interactive}, the value defines the minimum height, and the actual height can
+			 * increase based on the content. If the mode is {@link sap.ui.table.VisibleRowCountMode Auto}, the value defines the actual
+			 * height, and any content that doesn't fit is cut off.
+			 *
+			 * If no value is set (includes 0), a default height is applied based on the content density configuration. In any
+			 * <code>visibleRowCountMode</code>, the actual height can increase based on the content.
 			 */
 			rowHeight : {type : "int", group : "Appearance", defaultValue : null},
 
 			/**
-			 * Height of the column header of the Table in pixel.
+			 * Header row height in pixel. If a value greater than 0 is set, it overrides the height defined in the <code>rowHeight</code> property
+			 * for the rows in the table's header. The value defines the minimum height, but it cannot be less than the default height based on the
+			 * content density configuration. The actual height can increase based on the content.
+			 *
+			 * <b>Note</b>: In a {@link sap.ui.table.Column#getMultiLabels MultiLabel} scenario, the height is applied to each individual row of the
+			 * table's header.
 			 */
 			columnHeaderHeight : {type : "int", group : "Appearance", defaultValue : null},
 
@@ -140,6 +161,7 @@ sap.ui.define([
 			 * When the selection mode is changed, the current selection is removed.
 			 * <b>Note:</b> Since the group header visualization relies on the row selectors, the row selectors are always shown if the grouping
 			 * functionality (depends on table type) is enabled, even if <code>sap.ui.table.SelectionMode.None</code> is set.
+			 * <b>Note:</b> If a selection plugin is applied to the table, the selection mode is controlled by the plugin.
 			 */
 			selectionMode : {type : "sap.ui.table.SelectionMode", group : "Behavior", defaultValue : SelectionMode.MultiToggle},
 
@@ -156,8 +178,13 @@ sap.ui.define([
 			 * When multi-selection is enabled and multiple items are selected, the method returns
 			 * the lead selected item. Sets the zero-based index of the currently selected item. This method
 			 * removes any previous selections. When the given index is invalid, the call is ignored.
+			 * <b>Note:</b> If the rows of the table are bound, the value of the property is reset to -1.
+			 * If a selection plugin is applied to the table, the property is not bindable.
+			 *
+			 * @deprecated As of version 1.69, replaced by {@link sap.ui.table.Table#getSelectedIndices} and
+			 * {@link sap.ui.table.Table#setSelectedIndex}
 			 */
-			selectedIndex : {type : "int", group : "Appearance", defaultValue : -1},
+			selectedIndex : {type : "int", group : "Appearance", defaultValue : -1, deprecated: true},
 
 			/**
 			 * Flag whether the controls of the Table are editable or not (currently this only controls the background color in certain themes!)
@@ -169,7 +196,7 @@ sap.ui.define([
 			 *
 			 * @deprecated As of version 1.38
 			 */
-			navigationMode : {type : "sap.ui.table.NavigationMode", group : "Behavior", defaultValue : NavigationMode.Scrollbar},
+			navigationMode : {type : "sap.ui.table.NavigationMode", group : "Behavior", defaultValue : NavigationMode.Scrollbar, deprecated: true},
 
 			/**
 			 * The <code>threshold</code> defines how many additional (not yet visible records) shall be pre-fetched to enable smooth
@@ -193,6 +220,8 @@ sap.ui.define([
 			 * <ul>
 			 *  <li>Only client models are supported (e.g. {@link sap.ui.model.json.JSONModel}). Grouping does not work with OData models.</li>
 			 *  <li>The table can only be grouped by <b>one</b> column at a time. Grouping by another column will remove the current grouping.</li>
+			 *  <li>For the grouping to work correctly, {@link sap.ui.table.Column#getSortProperty sortProperty} must be set for the grouped
+			 *      column.</li>
 			 *  <li>If grouping has been done, sorting and filtering is not possible. Any existing sorting and filtering rules do no longer apply.
 			 *      The UI is not updated accordingly (e.g. menu items, sort and filter icons).</li>
 			 *  <li>The column, by which the table is grouped, is not visible. It will become visible again only if the table is grouped by another
@@ -217,12 +246,23 @@ sap.ui.define([
 			showNoData : {type : "boolean", group : "Appearance", defaultValue : true},
 
 			/**
-			 * This defines how the table handles the visible rows in the table. The default behavior is,
-			 * that a fixed row count is defined. If you change it to auto the visibleRowCount property is
-			 * changed by the table automatically. It will then adjust its maximum row count to the space it is
-			 * allowed to cover (limited by the surrounding container) and its minimum row count to the value of
-			 * the property minAutoRowCount (default value : 5) In manual mode the user can change
-			 * the visibleRowCount interactively.
+			 * Defines how the table handles the visible rows in the table.
+			 *
+			 * In the <code>"Fixed"</code> mode, the table always has as many rows as defined in the <code>visibleRowCount</code> property.
+			 *
+			 * In the <code>"Auto"</code> mode, the <code>visibleRowCount</code> property is changed by the table automatically. It will then
+			 * adjust its row count to the space it is allowed to cover (limited by the surrounding container), but it cannot have less than
+			 * defined in the <code>minAutoRowCount</code> property. The <code>visibleRowCount</code> property cannot be set manually.
+			 * <h3>Restrictions</h3>
+			 * <ul>
+			 *   <li>All rows need to have the same height.</li>
+			 *   <li>The table must be rendered without siblings in its parent DOM element. The only exception is if the parent element is a CSS flex
+			 *       container, and the table is a CSS flex item allowed to grow and shrink.</li>
+			 * </ul>
+			 *
+			 * In the <code>"Interactive"</code> mode, the table has as many rows as defined in the <code>visibleRowCount</code> property after
+			 * rendering. The user can change the <code>visibleRowCount</code> by dragging a resizer.
+			 *
 			 * @since 1.9.2
 			 */
 			visibleRowCountMode : {type : "sap.ui.table.VisibleRowCountMode", group : "Appearance", defaultValue : VisibleRowCountMode.Fixed},
@@ -247,11 +287,16 @@ sap.ui.define([
 
 			/**
 			 * Number of rows that are fix on the top. When you use a vertical scrollbar, only the rows which are not fixed, will scroll.
+			 *
+			 * This property is only supported if the <code>rows</code> aggregation is bound to a {@link sap.ui.model.ClientModel client model}.
 			 */
 			fixedRowCount : {type : "int", group : "Appearance", defaultValue : 0},
 
 			/**
 			 * Number of rows that are fix on the bottom. When you use a vertical scrollbar, only the rows which are not fixed, will scroll.
+			 *
+			 * This property is only supported if the <code>rows</code> aggregation is bound to a {@link sap.ui.model.ClientModel client model}.
+			 *
 			 * @since 1.18.7
 			 */
 			fixedBottomRowCount : {type : "int", group : "Appearance", defaultValue : 0},
@@ -309,15 +354,26 @@ sap.ui.define([
 			 * Alternate row coloring is not available for the tree mode.
 			 * @since 1.52
 			 */
-			alternateRowColors : {type : "boolean", group : "Appearance", defaultValue : false}
+			alternateRowColors : {type : "boolean", group : "Appearance", defaultValue : false},
+
+			/**
+			 * Constraints on the row counts of the table. May impact the result of the row count computation in the row modes.
+			 * This hidden property may only be used indirectly by row modes and may not be used otherwise.
+			 *
+			 * @see sap.ui.table.rowmodes.RowMode#getRowCountConstraints
+			 * @private
+			 */
+			rowCountConstraints : {type: "object", visibility: "hidden"}
 		},
 		defaultAggregation : "columns",
 		aggregations : {
 
 			/**
 			 * Control or text of title section of the Table (if not set it will be hidden)
+			 *
+			 * @deprecated As of 1.72. Use the <code>extension</code> aggregation instead.
 			 */
-			title : {type : "sap.ui.core.Control", altTypes : ["string"], multiple : false},
+			title : {type : "sap.ui.core.Control", altTypes : ["string"], multiple : false, deprecated: true},
 
 			/**
 			 * Control or text of footer section of the Table (if not set it will be hidden)
@@ -335,19 +391,52 @@ sap.ui.define([
 			/**
 			 * Extension section of the Table.
 			 * If not set, no extension area will be rendered.
-			 * Note: In case a <code>sap.m.Toolbar</code> is used as header the CSS class sapMTBHeader-CTX should be applied on this toolbar via <code>addStyleClass</code>.
+			 * Note: In case a <code>sap.m.Toolbar</code> is used as header the CSS class sapMTBHeader-CTX should be applied on this toolbar.
 			 */
 			extension : {type : "sap.ui.core.Control", multiple : true, singularName : "extension"},
 
 			/**
 			 * Columns of the Table
 			 */
-			columns : {type : "sap.ui.table.Column", multiple : true, singularName : "column", bindable : "bindable"},
+			columns : {type : "sap.ui.table.Column", multiple : true, singularName : "column", bindable : "bindable", dnd : { layout: "Horizontal" } },
 
 			/**
-			 * Rows of the Table
+			 * This aggregation is managed by the table itself. It can only be used with data binding, is read-only, and does not support templates or
+			 * factories.
+			 *
+			 * Rows are created and rendered only for a subset of the available data and reused for performance reasons. When scrolling, only the
+			 * binding contexts are updated to show the correct section of the data. This makes it possible to bind the rows to large data sets.
+			 * But you must not change rows and their children programmatically, as these changes might get lost when the table updates the rows
+			 * the next time. Also, properties must not be set to static values, as these would not change when scrolling.
+			 *
+			 * The cells of rows can be defined with the {@link sap.ui.table.Column#setTemplate template} aggregation of the columns in the
+			 * {@link sap.ui.table.Table#getColumns columns} aggregation of the table.
+			 * The actions of rows can be defined with the {@link sap.ui.table.Table#setRowActionTemplate rowActionTemplate} aggregation of the table.
+			 * Furthermore, row-specific settings can be defined with the {@link sap.ui.table.Table#setRowSettingsTemplate rowSettingsTemplate}
+			 * aggregation of the table.
 			 */
 			rows : {type : "sap.ui.table.Row", multiple : true, singularName : "row", bindable : "bindable", selector : "#{id}-tableCCnt", dnd : true},
+
+			// TODO: should row modes be implemented as plugins?
+			// TODO: The type should be sap.ui.table.rowmodes.RowMode, but then the build fails because RowMode is a private class.
+			/**
+			 * Row mode
+			 *
+			 * @private
+			 * @ui5-restricted sap.ui.mdc
+			 */
+			rowMode : {type : "sap.ui.core.Element", multiple : false, visibility : "hidden"},
+
+			/**
+			 * This row can be used for user input to create new data.
+			 * Like in any other row, the cells of this row are also managed by the table and must not be modified. The cell content is defined
+			 * via the <code>creationTemplate</code> aggregation of the {@link sap.ui.table.Column}.
+			 * If the creation row is set, the busy indicator will no longer cover the horizontal scrollbar, even if the creation row is invisible.
+			 *
+			 * @private
+			 * @ui5-restricted sap.ui.mdc
+			 */
+			creationRow : {type : "sap.ui.core.Control", multiple : false, visibility : "hidden"},
 
 			/**
 			 * The value for the noData aggregation can be either a string value or a control instance.
@@ -375,18 +464,48 @@ sap.ui.define([
 			 *
 			 * <b>Note:</b> The context menu will also be available for the row selectors as well as in the row actions cell of the table control.
 			 *
-			 * The custom context menu will not be shown in the group header rows and the sum row of the <code>AnalyticalTable</code> control.
+			 * The custom context menu will not be shown in group header and summary rows.
 			 *
 			 * If this aggregation is set, then the <code>enableCellFilter</code> property will have no effect.
 			 *
 			 * @since 1.54
 			 */
-			contextMenu : {type : "sap.ui.core.IContextMenu", multiple : false}
+			contextMenu : {type : "sap.ui.core.IContextMenu", multiple : false},
+
+			/**
+			 * Plugin section of the table. Multiple plugins are possible, but always only <b>one</b> of a certain type.
+			 *
+			 * The following restrictions apply:
+			 * <ul>
+			 *  <li>If a selection plugin is applied to the table, the table's selection API must not be used. Instead, use the API of the
+			 *      plugin.</li>
+			 *  <li>Only one MultiSelectionPlugin can be applied. No other plugins can be applied.</li>
+			 * </ul>
+			 *
+			 * @since 1.64
+			 */
+			plugins : {type : "sap.ui.table.plugins.SelectionPlugin", multiple : true, singularName : "plugin"},
+
+			/**
+			 * Defines the message strip to display binding-related messages.
+			 * @since 1.73
+			 */
+			_messageStrip: {type : "sap.ui.core.Control", multiple : false, visibility : "hidden"},
+
+			/**
+			 * Hidden dependents are dependents that are not cloned. But like for normal dependents, their data binding context and
+			 * lifecycle are bound to the table.
+			 *
+			 * @since 1.75
+			 */
+			_hiddenDependents : {type : "sap.ui.core.Element", multiple : true, visibility : "hidden"}
 		},
 		associations : {
 
 			/**
 			 * The column by which the table is grouped. Grouping will only be performed if <code>enableGrouping</code> is set to <code>true</code>.
+			 * Setting <code>groupBy</code> in the view does not work and throws an error. It can only be set if the column by which the table
+			 * is grouped is already part of the <code>columns</code> aggregation of the table.
 			 *
 			 * @experimental Since 1.28. This feature has a limited functionality.
 			 * @see sap.ui.table.Table#setEnableGrouping
@@ -403,6 +522,8 @@ sap.ui.define([
 			/**
 			 * fired when the row selection of the table has been changed (the event parameters can be used to determine
 			 * selection changes - to find out the selected rows you should better use the table selection API)
+			 *
+			 * <b>Note:</b> If a selection plugin is applied to the table, this event won't be fired.
 			 */
 			rowSelectionChange : {
 				parameters : {
@@ -551,7 +672,7 @@ sap.ui.define([
 					/**
 					 * new value of the visible property.
 					 */
-					visible : {type : "boolean"}
+					newVisible : {type : "boolean"}
 				}
 			},
 
@@ -631,7 +752,8 @@ sap.ui.define([
 					 * Row binding context of the selected cell.
 					 */
 					rowBindingContext : {type : "sap.ui.model.Context"}
-				}
+				},
+				deprecated: true
 			},
 
 			/**
@@ -713,6 +835,34 @@ sap.ui.define([
 				 * busy state
 				 */
 				busy : {type : "boolean"}
+			},
+
+			/**
+			 * This event gets fired when the user pastes content from the clipboard to the table.
+			 * Pasting can be done with the standard keyboard shortcut, if the focus is inside the table.
+			 * @since 1.60
+			 */
+			paste : {
+				allowPreventDefault: true,
+				parameters : {
+					/**
+					 * 2D array of strings with data from the clipboard. The first dimension represents the rows, and the
+					 * second dimension represents the cells of the tabular data.
+					 */
+					data : {type : "string[][]"}
+				}
+			},
+
+			/**
+			 * This event is fired after the table rows have been updated due to rendering, a model update, or a user
+			 * interaction, for example.
+			 *
+			 * <b>Note</b>: This event is fired often and must not be used for performance-critical tasks.
+			 *
+			 * @since 1.86
+			 */
+			rowsUpdated : {
+
 			}
 		},
 		designtime:  "sap/ui/table/designtime/Table.designtime"
@@ -761,12 +911,46 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype.init = function() {
-		this._iBaseFontSize = parseFloat(jQuery("body").css("font-size")) || 16;
-		// create an information object which contains always required infos
-		this._bRtlMode = sap.ui.getCore().getConfiguration().getRTL();
+		// Skip propagation of properties (models and bindingContexts).
+		this.mSkipPropagation = {
+			rowActionTemplate: true,
+			rowSettingsTemplate: true
+		};
 
+		/*
+		 * The binding length that the table currently knows and that is not affected by a rebind or refresh where the actual binding length is 0.
+		 */
+		_private(this).iCachedBindingLength = 0;
+
+		_private(this).iFirstRenderedRowIndex = 0;
+		_private(this).iComputedFixedColumnCount = null;
+
+		// Extensions are part of the core of the table must be initialized first, for example for correct delegate order.
 		this._attachExtensions();
 
+		/*
+		 * Flag indicating whether the text direction is RTL. If <code>false</code>, the text direction is LTR.
+		 */
+		this._bRtlMode = sap.ui.getCore().getConfiguration().getRTL();
+
+		/*
+		 * Flag indicating whether the rows are currently being bound. This is the time between #bindRows and the actual instantiation of the
+		 * binding object in #_bindAggregation.
+		 *
+		 * @type {boolean}
+		 */
+		this._bRowsBeingBound = false;
+
+		/*
+		 * Flag indicating whether the binding contexts are available.
+		 * Is <code>false</code> if there is no binding, or the binding is being initialized or refreshed. Is set to <code>true</code>
+		 * in {@link sap.ui.table.Table#updateRows}.
+		 *
+		 * @type {boolean}
+		 */
+		this._bContextsAvailable = false;
+
+		this._aRowClones = [];
 		this._bRowAggregationInvalid = true;
 		this._mTimeouts = {};
 		this._mAnimationFrames = {};
@@ -774,61 +958,9 @@ sap.ui.define([
 		// TBD: Tooltips are not desired by Visual Design, discuss whether to switch it off by default
 		this._bHideStandardTooltips = false;
 
-		/**
-		 * Updates the row binding contexts and synchronizes the row heights. This function will be called by updateRows
-		 */
-		this._lastCalledUpdateRows = 0;
-		this._iBindingTimerDelay = 50;
 		this._aRowHeights = [];
-		this._iRenderedFirstVisibleRow = 0;
-
 		this._aSortedColumns = [];
-
-		var that = this;
-
-		this._performUpdateRows = function(sReason) {
-			// update only if control not marked as destroyed (could happen because updateRows is called during destroying the table)
-			if (!that.bIsDestroyed) {
-				that._lastCalledUpdateRows = Date.now();
-				that._updateBindingContexts();
-
-				if (!that._bInvalid) {
-					// subsequent DOM updates are only required if there is no rendering to be expected
-					that._updateTableContent();
-
-					that._getAccExtension().updateAccForCurrentCell(false);
-					that._updateSelection();
-
-					// TODO: check if this can be removed:
-					that._collectTableSizes();
-
-					// row heights
-					that._aRowHeights = that._collectRowHeights(false);
-					that._updateRowHeights(that._collectRowHeights(true), true); // column header rows
-					that._updateRowHeights(that._aRowHeights, false); // table body rows
-
-					if (TableUtils.isVariableRowHeightEnabled(that)) {
-						that._iRenderedFirstVisibleRow = this._getFirstRenderedRowIndex();
-					}
-					that._getScrollExtension().updateVerticalScrollbarVisibility();
-				}
-
-				that._mTimeouts.bindingTimer = undefined;
-				// Helper event for testing
-				that._fireRowsUpdated(sReason);
-			}
-		};
-
-		// basic selection model (by default the table uses multi selection)
-		this._initSelectionModel(SelectionModel.MULTI_SELECTION);
-
 		this._aTableHeaders = [];
-
-		// columns to cells map
-		this._aIdxCols2Cells = [];
-
-		// flag whether the editable property should be inherited or not
-		this._bInheritEditableToControls = false;
 
 		// text selection for column headers?
 		this._bAllowColumnHeaderTextSelection = false;
@@ -837,18 +969,46 @@ sap.ui.define([
 		this._bPendingRequest = false; // Fallback in case a counter is not applicable.
 		this._iBindingLength = null;
 
-		this._iTableRowContentHeight = 0;
 		this._bFirstRendering = true;
 
-		// F6 Handling is done in TableRenderer to make sure the table content gets the focus. The
-		// Toolbar has its own F6 stop.
-		// this.data("sap-ui-fastnavgroup", "true", true); // Define group for F6 handling
-
 		this._nDevicePixelRatio = window.devicePixelRatio;
+
+		if (sap.ui.getCore().isThemeApplied()) {
+			TableUtils.readThemeParameters();
+		}
 
 		this._bInvalid = true;
 	};
 
+	/**
+	 * @inheritDoc
+	 */
+	Table.prototype.applySettings = function(mSettings, oScope) {
+		// Some settings might rely on the existence of a row mode or plugin. If row modes and plugins are in the settings and applied before
+		// other settings, initialization of legacy row modes and plugins can be avoided.
+		if (mSettings) {
+			var aEarlySettings = ["rowMode", "plugins"];
+			var mEarlySettings = {};
+
+			for (var i = 0; i < aEarlySettings.length; i++) {
+				var sSetting = aEarlySettings[i];
+
+				if (sSetting in mSettings) {
+					mEarlySettings[sSetting] = mSettings[sSetting];
+					delete mSettings[sSetting]; // Avoid applying it twice.
+				}
+			}
+
+			if (Object.keys(mEarlySettings).length > 0) {
+				Control.prototype.applySettings.call(this, mEarlySettings, oScope);
+			}
+		}
+
+		this._initLegacyRowMode();
+		this._initLegacySelectionPlugin();
+
+		Control.prototype.applySettings.call(this, mSettings, oScope);
+	};
 
 	/**
 	 * Attach table extensions
@@ -858,11 +1018,11 @@ sap.ui.define([
 		if (this._bExtensionsInitialized) {
 			return;
 		}
-		TableExtension.enrich(this, TablePointerExtension);
-		TableExtension.enrich(this, TableScrollExtension);
-		TableExtension.enrich(this, TableKeyboardExtension);
-		TableExtension.enrich(this, TableAccExtension); // Must be registered after keyboard to reach correct delegate order
-		TableExtension.enrich(this, TableDragAndDropExtension);
+		ExtensionBase.enrich(this, PointerExtension);
+		ExtensionBase.enrich(this, ScrollExtension);
+		ExtensionBase.enrich(this, KeyboardExtension);
+		ExtensionBase.enrich(this, AccExtension); // Must be registered after keyboard to reach correct delegate order
+		ExtensionBase.enrich(this, DragAndDropExtension);
 		this._bExtensionsInitialized = true;
 	};
 
@@ -872,27 +1032,13 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype.exit = function() {
-		// destroy the child controls
-		this._bExitCalled = true;
-
 		this.invalidateRowsAggregation();
-
-		// destroy helpers
 		this._detachExtensions();
-
-		// cleanup
-		if (this._dataReceivedHandlerId) {
-			jQuery.sap.clearDelayedCall(this._dataReceivedHandlerId);
-			delete this._dataReceivedHandlerId;
-		}
 		this._cleanUpTimers();
 		this._detachEvents();
-
-		// selection model
-		if (this._oSelection) {
-			this._oSelection.destroy(); // deregisters all the handler(s)
-			//Note: _oSelection is not nulled to avoid checks everywhere (in case table functions are called after the table destroy, see 1670448195)
-		}
+		TableUtils.Menu.cleanupDefaultContentCellContextMenu(this);
+		clearTimeout(this._dataReceivedHandlerId);
+		delete this._dataReceivedHandlerId;
 		delete this._aTableHeaders;
 	};
 
@@ -902,15 +1048,37 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype._detachExtensions = function(){
-		TableExtension.cleanup(this);
+		ExtensionBase.cleanup(this);
 	};
 
+	/**
+	 * Handles paste event and fires Paste event of the Table , so that it can be used in the application
+	 * @private
+	 * @param oEvent - browser paste event that occurs when a user pastes the data from the clipboard into the table
+	 */
+	Table.prototype.onpaste = function(oEvent) {
+
+		// Check whether the paste event is already handled by input enabled control and avoid pasting into this input-enabled control when focus is in there.
+		if (oEvent.isMarked() || /^(input|textarea)$/i.test(oEvent.target.tagName) || !this.getDomRef("sapUiTableCnt").contains(oEvent.target)) {
+			return;
+		}
+
+		// Get the data from the PasteHelper utility in format of 2D Array
+		var aData = PasteHelper.getPastedDataAs2DArray(oEvent.originalEvent);
+
+		if (aData.length === 0 /* no rows pasted */ || aData[0].length === 0 /* no columns pasted */) {
+			return; // no pasted data
+		}
+
+		this.firePaste({data: aData});
+	};
 
 	/**
 	 * Theme changed
 	 * @private
 	 */
 	Table.prototype.onThemeChanged = function() {
+		TableUtils.readThemeParameters();
 		if (this.getDomRef()) {
 			this.invalidate();
 		}
@@ -935,7 +1103,7 @@ sap.ui.define([
 	 *
 	 * @param {boolean} bRtlChanged Whether the text direction changed.
 	 * @param {boolean} bLangChanged Whether the language changed.
-	 * @return {Promise} A promise on the adaptation. If no adaptation is required, because text direction and language did not change, the
+	 * @returns {Promise} A promise on the adaptation. If no adaptation is required, because text direction and language did not change, the
 	 * promise will be rejected.
 	 * @private
 	 */
@@ -957,7 +1125,7 @@ sap.ui.define([
 		return pUpdateLocalizationInfo.then(function() {
 			if (bLangChanged) {
 				// Clear the cell context menu.
-				TableUtils.Menu.cleanupDataCellContextMenu(this);
+				TableUtils.Menu.cleanupDefaultContentCellContextMenu(this);
 
 				// Update the column menus.
 				this._invalidateColumnMenus();
@@ -979,17 +1147,21 @@ sap.ui.define([
 			return [];
 		}
 
-		if (bHeader && this.getColumnHeaderHeight()) {
-			return []; // column headers are set fix in the renderer
-		}
-
-		var iDefaultRowHeight = this._getDefaultRowHeight();
+		var iBaseRowHeight = this._getBaseRowHeight();
 		var sRowCSSClass = bHeader ? ".sapUiTableColHdrTr" : ".sapUiTableTr";
 		var aRowsInFixedColumnsArea = oDomRef.querySelectorAll(".sapUiTableCtrlFixed > tbody > tr" + sRowCSSClass);
 		var aRowsInScrollableColumnsArea = oDomRef.querySelectorAll(".sapUiTableCtrlScroll > tbody > tr" + sRowCSSClass);
-		var iRowCount = this.getRows().length;
+		var iRowCount = bHeader ? TableUtils.getHeaderRowCount(this) : this.getRows().length;
 		var aRowHeights = [];
 		var bIsZoomedInChrome = Device.browser.chrome && window.devicePixelRatio != 1;
+
+		if (bHeader) {
+			if (this.getColumnHeaderHeight() > 0) {
+				iBaseRowHeight = this.getColumnHeaderHeight();
+			} else if (this.getRowMode()) {
+				iBaseRowHeight = this._getDefaultRowHeight();
+			}
+		}
 
 		for (var i = 0; i < iRowCount; i++) {
 			var nFixedColumnsAreaRowHeight = aRowsInFixedColumnsArea[i] ? aRowsInFixedColumnsArea[i].getBoundingClientRect().height : 0;
@@ -997,19 +1169,28 @@ sap.ui.define([
 			var nRowHeight = Math.max(nFixedColumnsAreaRowHeight, nScrollableColumnsAreaRowHeight);
 
 			if (bIsZoomedInChrome) {
-				var nHeightDeviation = iDefaultRowHeight - nRowHeight;
+				var nHeightDeviation = iBaseRowHeight - nRowHeight;
 
 				// In Chrome with zoom != 100% the height of table rows can slightly differ from the height of divs (row selectors).
 				// See https://bugs.chromium.org/p/chromium/issues/detail?id=661991
 
 				// Allow the row height to be slightly smaller than the default row height.
 				if (nHeightDeviation > 0 && nHeightDeviation < 1) {
-					aRowHeights.push(Math.max(nRowHeight, iDefaultRowHeight - 1));
+					aRowHeights.push(Math.max(nRowHeight, iBaseRowHeight - 1));
 					continue;
 				}
 			}
 
-			aRowHeights.push(Math.max(nRowHeight, iDefaultRowHeight));
+			aRowHeights.push(Math.max(nRowHeight, iBaseRowHeight));
+		}
+
+		if (aRowHeights.length > 0 && !bHeader) {
+			TableUtils.dynamicCall(this._getSyncExtension, function(oSyncExtension) {
+				var aModifiedHeights = oSyncExtension.syncRowHeights(aRowHeights.slice());
+				if (aModifiedHeights && aModifiedHeights.length === aRowHeights.length) {
+					aRowHeights = aModifiedHeights.slice();
+				}
+			});
 		}
 
 		return aRowHeights;
@@ -1020,14 +1201,14 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype._resetRowHeights = function() {
-		var iRowHeight = this._getDefaultRowHeight();
+		var iRowHeight = this._getBaseRowHeight();
 
 		var sRowHeight = "";
 		if (iRowHeight) {
 			sRowHeight = iRowHeight + "px";
 		}
 
-		var oDomRef = this.getDomRef();
+		var oDomRef = this.getDomRef("tableCCnt");
 		if (oDomRef) {
 			var aRowItems = oDomRef.querySelectorAll(".sapUiTableTr");
 			for (var i = 0; i < aRowItems.length; i++) {
@@ -1041,10 +1222,6 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype._resetColumnHeaderHeights = function() {
-		if (this.getColumnHeaderHeight()) {
-			return; // height is set fixed in renderer
-		}
-
 		var oDomRef = this.getDomRef();
 		if (oDomRef) {
 			var aRowItems = oDomRef.querySelectorAll(".sapUiTableColHdrTr");
@@ -1052,64 +1229,6 @@ sap.ui.define([
 				aRowItems[i].style.height = null;
 			}
 		}
-	};
-
-	/**
-	 * Determines the space available for the rows.
-	 *
-	 * @returns {int} The available space in pixels.
-	 * @private
-	 */
-	Table.prototype._determineAvailableSpace = function() {
-		var oDomRef = this.getDomRef();
-
-		if (oDomRef && oDomRef.parentNode) {
-			var oCCnt = oDomRef.querySelector(".sapUiTableCCnt");
-
-			if (oCCnt) {
-				var iUsedHeight = oDomRef.scrollHeight - oCCnt.clientHeight;
-
-				// take into account controls above the table in the container
-				var iTableTop = 0;
-				if (oDomRef.parentNode.firstChild !== oDomRef) {
-					var iParentPadding = parseFloat(window.getComputedStyle(oDomRef.parentNode).paddingTop);
-					if (isNaN(iParentPadding)) {
-						iParentPadding = 0;
-					}
-					iTableTop = oDomRef.offsetTop - iParentPadding;
-				}
-
-				// For simplicity always add the default height of the horizontal scrollbar to the used height, even if it will not be visible.
-				var oScrollExtension = this._getScrollExtension();
-				var oHSb = oScrollExtension.getHorizontalScrollbar();
-
-				if (!oHSb || !oScrollExtension.isHorizontalScrollbarVisible()) {
-					var mDefaultScrollbarHeight = {};
-					mDefaultScrollbarHeight[Device.browser.BROWSER.CHROME] = 16;
-					mDefaultScrollbarHeight[Device.browser.BROWSER.FIREFOX] = 16;
-					mDefaultScrollbarHeight[Device.browser.BROWSER.INTERNET_EXPLORER] = 18;
-					mDefaultScrollbarHeight[Device.browser.BROWSER.EDGE] = 12;
-					mDefaultScrollbarHeight[Device.browser.BROWSER.SAFARI] = 16;
-					mDefaultScrollbarHeight[Device.browser.BROWSER.ANDROID] = 8;
-					iUsedHeight += mDefaultScrollbarHeight[Device.browser.name];
-				}
-
-				if (this._iLastAvailableSpace == null) {
-					this._iLastAvailableSpace = 0;
-				}
-
-				var iNewAvailableSpace = Math.floor(jQuery(oDomRef.parentNode).height() - iUsedHeight - iTableTop);
-				var iAvailableSpaceDifference = Math.abs(iNewAvailableSpace - this._iLastAvailableSpace);
-
-				if (iAvailableSpaceDifference >= 5) {
-					this._iLastAvailableSpace = iNewAvailableSpace;
-				}
-
-				return this._iLastAvailableSpace;
-			}
-		}
-
-		return 0;
 	};
 
 	/**
@@ -1122,7 +1241,6 @@ sap.ui.define([
 			tableCtrlScrollWidth: 0,
 			tableRowHdrScrWidth: 0,
 			tableCtrlScrWidth: 0,
-			tableHSbScrollLeft: 0,
 			tableCtrlFixedWidth: 0,
 			tableCntHeight: 0,
 			tableCntWidth: 0
@@ -1154,34 +1272,43 @@ sap.ui.define([
 			oSizes.tableCtrlScrWidth = oCtrlScrDomRef.clientWidth;
 		}
 
-		var oHsb = this._getScrollExtension().getHorizontalScrollbar();
-		if (oHsb) {
-			oSizes.tableHSbScrollLeft = oHsb.scrollLeft;
-		}
-
 		var oCtrlFixed = oDomRef.querySelector(".sapUiTableCtrlScrFixed:not(.sapUiTableCHA) > .sapUiTableCtrlFixed");
 		if (oCtrlFixed) {
 			oSizes.tableCtrlFixedWidth = oCtrlFixed.clientWidth;
 		}
 
-		var iFixedColumnCount = this.getFixedColumnCount();
+		var iFixedColumnCount = this._getSpanBasedComputedFixedColumnCount();
 		var iFixedHeaderWidthSum = 0;
+
 		if (iFixedColumnCount) {
+			var aColumns = this.getColumns();
 			var aHeaderElements = oDomRef.querySelectorAll(".sapUiTableCtrlFirstCol:not(.sapUiTableCHTHR) > th");
+
 			for (var i = 0; i < aHeaderElements.length; i++) {
-				var iColIndex = parseInt(aHeaderElements[i].getAttribute("data-sap-ui-headcolindex"), 10);
+				var iColIndex = parseInt(aHeaderElements[i].getAttribute("data-sap-ui-headcolindex"));
+
 				if (!isNaN(iColIndex) && (iColIndex < iFixedColumnCount)) {
-					iFixedHeaderWidthSum += aHeaderElements[i].getBoundingClientRect().width;
+					var oColumn = aColumns[iColIndex];
+					var iWidth;
+
+					if (oColumn._iFixWidth != null) {
+						iWidth = oColumn._iFixWidth;
+					} else {
+						iWidth = aHeaderElements[i].getBoundingClientRect().width;
+					}
+
+					iFixedHeaderWidthSum += iWidth;
 				}
 			}
 		}
 
 		if (iFixedHeaderWidthSum > 0) {
+			var oScrollExtension = this._getScrollExtension();
 			var iUsedHorizontalTableSpace = oSizes.tableRowHdrScrWidth;
 
-			var oVsb = this.getDomRef("vsb");
-			if (oVsb) {
-				iUsedHorizontalTableSpace += oVsb.offsetWidth;
+			var oVSb = oScrollExtension.getVerticalScrollbar();
+			if (oVSb && !oScrollExtension.isVerticalScrollbarExternal()) {
+				iUsedHorizontalTableSpace += oVSb.offsetWidth;
 			}
 
 			if (TableUtils.hasRowActions(this)) {
@@ -1191,20 +1318,11 @@ sap.ui.define([
 				}
 			}
 
-			// If the columns fit into the table, we do not need to ignore the fixed column count.
-			// Otherwise, check if the new fixed columns fit into the table. If they don't, the fixed column count setting will be ignored.
-			var bNonFixedColumnsFitIntoTable = oSizes.tableCtrlScrollWidth === oSizes.tableCtrlScrWidth; // Also true if no non-fixed columns exist.
+			iUsedHorizontalTableSpace += TableUtils.Column.getMinColumnWidth();
 
-			if (!bNonFixedColumnsFitIntoTable) { // horizontal scrollbar should be at least 48px wide
-				iUsedHorizontalTableSpace += TableUtils.Column.getMinColumnWidth();
-			}
-
-			var bFixedColumnsFitIntoTable = oSizes.tableCtrlFixedWidth + iUsedHorizontalTableSpace <= oSizes.tableCntWidth; // Also true if no fixed columns exist.
-			var bIgnoreFixedColumnCountCandidate = false;
-
-			if (!bNonFixedColumnsFitIntoTable || !bFixedColumnsFitIntoTable) {
-				bIgnoreFixedColumnCountCandidate = (oSizes.tableCntWidth - iUsedHorizontalTableSpace < iFixedHeaderWidthSum);
-			}
+			var iAvailableSpace = oSizes.tableCntWidth - iUsedHorizontalTableSpace;
+			var bFixedColumnsFitIntoTable = iAvailableSpace > iFixedHeaderWidthSum;
+			var bIgnoreFixedColumnCountCandidate = !bFixedColumnsFitIntoTable;
 
 			if (this._bIgnoreFixedColumnCount !== bIgnoreFixedColumnCountCandidate) {
 				this._bIgnoreFixedColumnCount = bIgnoreFixedColumnCountCandidate;
@@ -1229,11 +1347,7 @@ sap.ui.define([
 			return;
 		}
 
-		if (bHeader && this.getColumnHeaderHeight()) {
-			return; // column headers are set fix in the renderer
-		}
-
-		function updateRow (row, index) {
+		function updateRow(row, index) {
 			var rowHeight = aRowItemHeights[index];
 			if (rowHeight) {
 				row.style.height = rowHeight + "px";
@@ -1242,18 +1356,15 @@ sap.ui.define([
 
 		// select rows
 		var cssClass = bHeader ? ".sapUiTableColHdrTr" : ".sapUiTableTr";
-		var aRowHeaderItems = bHeader ? [] : oDomRef.querySelectorAll(".sapUiTableRowHdr");
-		var aRowActionItems = bHeader ? [] : oDomRef.querySelectorAll(".sapUiTableRowAction");
+		var aRowHeaderItems = bHeader ? [] : oDomRef.querySelectorAll(".sapUiTableRowSelectionCell");
+		var aRowActionItems = bHeader ? [] : oDomRef.querySelectorAll(".sapUiTableRowActionCell");
 		var aFixedRowItems = oDomRef.querySelectorAll(".sapUiTableCtrlFixed > tbody > tr" + cssClass);
 		var aScrollRowItems = oDomRef.querySelectorAll(".sapUiTableCtrlScroll > tbody > tr" + cssClass);
 
-		var a = [];
-
-		a.forEach.call(aRowHeaderItems, updateRow);
-		a.forEach.call(aRowActionItems, updateRow);
-		a.forEach.call(aFixedRowItems, updateRow);
-		a.forEach.call(aScrollRowItems, updateRow);
-
+		Array.prototype.forEach.call(aRowHeaderItems, updateRow);
+		Array.prototype.forEach.call(aRowActionItems, updateRow);
+		Array.prototype.forEach.call(aFixedRowItems, updateRow);
+		Array.prototype.forEach.call(aScrollRowItems, updateRow);
 	};
 
 	/**
@@ -1261,32 +1372,17 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype.onBeforeRendering = function(oEvent) {
+		// The table can be re-rendered as part of the rendering of its parent, without being invalidated before.
+		this._bInvalid = true;
+
+		this._detachEvents();
+
 		if (oEvent && oEvent.isMarked("renderRows")) {
 			return;
 		}
 
-		if (this._mTimeouts.bindingTimer) {
-			this._updateBindingContexts();
-		}
-
 		this._cleanUpTimers();
-		this._detachEvents();
-
-		var sVisibleRowCountMode = this.getVisibleRowCountMode();
-
-		var aRows = this.getRows();
-		if (sVisibleRowCountMode == VisibleRowCountMode.Interactive ||
-			sVisibleRowCountMode == VisibleRowCountMode.Fixed ||
-			(sVisibleRowCountMode == VisibleRowCountMode.Auto && this._iTableRowContentHeight && aRows.length == 0)) {
-
-			// Necessary due to the fact that getBinding initializes the grouping functionality
-			this.getBinding("rows");
-
-			this._updateRows(this._calculateRowsToDisplay(), TableUtils.RowsUpdateReason.Render);
-		} else if (this._bRowAggregationInvalid && aRows.length > 0) {
-			// Rows got invalidated, recreate rows with new template
-			this._updateRows(aRows.length, TableUtils.RowsUpdateReason.Render);
-		}
+		this.getBinding(); // Initializes the experimental grouping functionality (just in case it is required).
 		this._aTableHeaders = []; // free references to DOM elements
 	};
 
@@ -1298,8 +1394,6 @@ sap.ui.define([
 		var bRenderedRows = oEvent && oEvent.isMarked("renderRows");
 
 		this._bInvalid = false;
-		this._bOnAfterRendering = true;
-		var $this = this.$();
 
 		this._attachEvents();
 
@@ -1307,54 +1401,30 @@ sap.ui.define([
 		// update their domrefs after the rendering is done. This is required to allow performant access to row domrefs
 		this._initRowDomRefs();
 
-		// restore the column icons
-		var aCols = this.getColumns();
-		for (var i = 0, l = aCols.length; i < l; i++) {
-			if (aCols[i].getVisible()) {
-				aCols[i]._restoreIcons();
-			}
-		}
-
 		// enable/disable text selection for column headers
 		if (!this._bAllowColumnHeaderTextSelection && !bRenderedRows) {
-			this._disableTextSelection($this.find(".sapUiTableColHdrCnt"));
+			this._disableTextSelection(this.$().find(".sapUiTableCHA"));
 		}
 
-		this._bOnAfterRendering = false;
-
-		// invalidate item navigation
-		this._getKeyboardExtension().invalidateItemNavigation();
-
-		this._updateTableContent();
-
-		if (this._bFirstRendering && this.getVisibleRowCountMode() == VisibleRowCountMode.Auto) {
-			this._bFirstRendering = false;
-			// Wait until everything is rendered (parent height!) before reading/updating sizes. Use a promise to make sure
-			// to be executed before timeouts may be executed.
-			Promise.resolve().then(this._updateTableSizes.bind(this, TableUtils.RowsUpdateReason.Render, true));
-		} else {
-			this._updateTableSizes(TableUtils.RowsUpdateReason.Render, null, bRenderedRows,
-				bRenderedRows && TableUtils.isVariableRowHeightEnabled(this));
-		}
+		// If only the rows are rendered, the css flag is not removed while the positioning of the actions is reset. Therefore, the flag must be
+		// manually removed so that the actions are later correctly positioned.
+		this.getDomRef().classList.remove("sapUiTableRActFlexible");
 
 		if (!bRenderedRows) {
 			// needed for the column resize ruler
 			this._aTableHeaders = this.$().find(".sapUiTableColHdrCnt th");
-
-			if (this.getBinding("rows")) {
-				this._fireRowsUpdated(TableUtils.RowsUpdateReason.Render);
-			}
 		}
+
+		this._updateTableSizes(TableUtils.RowsUpdateReason.Render, true);
+		TableUtils.registerResizeHandler(this, "Table", this._onTableResize.bind(this));
+
+		this._bFirstRendering = false;
 	};
 
 	Table.prototype.invalidate = function() {
-		if (!this._ignoreInvalidateOfChildControls) {
-			this._bInvalid = true;
-			var vReturn = Control.prototype.invalidate.call(this);
-			TableUtils.Column.invalidateColumnUtils(this);
-		}
-
-		return vReturn;
+		this._bInvalid = true;
+		TableUtils.Column.invalidateColumnUtils(this);
+		return Control.prototype.invalidate.call(this);
 	};
 
 	Table.prototype._initRowDomRefs = function() {
@@ -1368,44 +1438,22 @@ sap.ui.define([
 	 * First collects all table sizes, then synchronizes row/column heights, updates scrollbars and selection.
 	 * @private
 	 */
-	Table.prototype._updateTableSizes = function(sReason, bForceUpdateTableSizes, bSkipHandleRowCountMode, bForceSetRowContentHeight) {
+	Table.prototype._updateTableSizes = function(sReason, bSkipResetRowHeights) {
+		bSkipResetRowHeights = bSkipResetRowHeights === true;
+
 		var oDomRef = this.getDomRef();
-		var that = this;
 
-		if (this._bInvalid || !oDomRef) {
+		if (this._bInvalid || !oDomRef || !sap.ui.getCore().isThemeApplied() || oDomRef.offsetWidth === 0) {
 			return;
 		}
 
-		if (!oDomRef.offsetWidth) { // do not update sizes of an invisible table
-			TableUtils.deregisterResizeHandler(this, "");
-			registerResizeHandler();
-			return;
+		if (!bSkipResetRowHeights) {
+			this._resetRowHeights();
+			this._resetColumnHeaderHeights();
 		}
 
-		this._resetRowHeights();
-		this._resetColumnHeaderHeights();
 		this._aRowHeights = this._collectRowHeights(false);
 		var aColumnHeaderRowHeights = this._collectRowHeights(true);
-
-		if (TableUtils.isVariableRowHeightEnabled(this)) {
-			// Necessary in case the visible row count does not change after a resize (for example, this is always the case
-			// if visibleRowCountMode is set to "Fixed"). The row heights might change due to decreased column widths, so the inner scroll position
-			// must be adjusted.
-			this._getScrollExtension().updateInnerVerticalScrollPosition();
-		}
-
-		var iRowContentSpace = null;
-		if (!bSkipHandleRowCountMode && this.getVisibleRowCountMode() == VisibleRowCountMode.Auto) {
-			iRowContentSpace = this._determineAvailableSpace();
-			// if no height is granted we do not need to do any further row adjustment or layout sync.
-			// Saves time on initial start up and reduces flickering on rendering.
-			if (this._handleRowCountModeAuto(iRowContentSpace, sReason) && !bForceUpdateTableSizes) {
-				// updateTableSizes was already called by _renderRows, therefore skip the rest of this function execution
-				return;
-			}
-		}
-
-		TableUtils.deregisterResizeHandler(this, "");
 
 		// the only place to fix the minimum column width
 		function setMinColWidths(oTable) {
@@ -1451,8 +1499,8 @@ sap.ui.define([
 
 			function adaptColWidth(oColInfo) {
 				if (oColInfo) {
-					Array.prototype.forEach.call(oColInfo.headers, function (header) {
-							header.style.width = oColInfo.newWidth;
+					Array.prototype.forEach.call(oColInfo.headers, function(header) {
+						header.style.width = oColInfo.newWidth;
 					});
 				}
 			}
@@ -1467,7 +1515,7 @@ sap.ui.define([
 				for (var i = 0; i < aNotFixedVariableColumns.length; i++) {
 					iDomWidth = aNotFixedVariableColumns[i].header && aNotFixedVariableColumns[i].header.offsetWidth;
 					aNotFixedVariableColumns[i].newWidth = calcNewWidth(iDomWidth, aNotFixedVariableColumns[i].minWidth);
-					if (parseInt(aNotFixedVariableColumns[i].newWidth, 10) >= 0) {
+					if (parseInt(aNotFixedVariableColumns[i].newWidth) >= 0) {
 						adaptColWidth(aNotFixedVariableColumns[i]);
 					}
 				}
@@ -1475,36 +1523,19 @@ sap.ui.define([
 		}
 		setMinColWidths(this);
 
+		var oTableSizes = this._collectTableSizes();
+
 		// Manipulation of UI Sizes
 		this._updateRowHeights(this._aRowHeights, false);
 		this._updateRowHeights(aColumnHeaderRowHeights, true);
 
-		if (!bSkipHandleRowCountMode || bForceSetRowContentHeight) {
-			this._setRowContentHeight(iRowContentSpace);
-		}
-
-		if (this.getVisibleRowCountMode() == VisibleRowCountMode.Auto) {
-			//if visibleRowCountMode is auto change the visibleRowCount according to the parents container height
-			var iRows = this._calculateRowsToDisplay(iRowContentSpace != null ? iRowContentSpace : this._determineAvailableSpace());
-			// if minAutoRowCount has reached, table should use block this height.
-			// In case row > minAutoRowCount, the table height is 0, because ResizeTrigger must detect any changes of the table parent.
-			if (iRows == this._determineMinAutoRowCount()) {
-				this.$().height("auto");
-			} else {
-				this.$().height("0px");
-			}
-		}
-
-		var oTableSizes = this._collectTableSizes();
-
-		if (oTableSizes.tableCntHeight == 0 && oTableSizes.tableCntWidth == 0) {
-			// the table has no size at all. This may be due to one of the parents has display:none. In order to
-			// recognize when the parent size changes, the resize handler must be registered synchronously, otherwise
-			// the browser may finish painting before the resize handler is registered
-			TableUtils.registerResizeHandler(this, "", this._onTableResize.bind(this), true);
-
-			return;
-		}
+		TableUtils.dynamicCall(this._getSyncExtension, function(oSyncExtension) {
+			oSyncExtension.syncLayout({
+				top: this.getDomRef("sapUiTableCnt").offsetTop,
+				headerHeight: this.getDomRef().querySelector(".sapUiTableColHdrCnt").getBoundingClientRect().height,
+				contentHeight: this.getDomRef("tableCCnt").getBoundingClientRect().height
+			});
+		}, this);
 
 		var oScrollExtension = this._getScrollExtension();
 		oScrollExtension.updateHorizontalScrollbar(oTableSizes);
@@ -1513,39 +1544,43 @@ sap.ui.define([
 
 		var $this = this.$();
 
-		if (TableUtils.hasRowActions(this)) {
+		if (TableUtils.hasRowActions(this) || TableUtils.hasRowNavigationIndicators(this)) {
 			var bHasFlexibleRowActions = $this.hasClass("sapUiTableRActFlexible");
-			var oDummyCol = this.getDomRef("dummycolhdr");
-			var iDummyColWidth = oDummyCol ? oDummyCol.clientWidth : 0;
-			if (!bHasFlexibleRowActions && iDummyColWidth > 0) {
-				var iRowActionPos = oTableSizes.tableCtrlScrWidth + oTableSizes.tableRowHdrScrWidth + oTableSizes.tableCtrlFixedWidth - iDummyColWidth;
-				var oRowActionStyles = {width: "auto"};
-				oRowActionStyles[this._bRtlMode ? "right" : "left"] = iRowActionPos;
-				this.$("sapUiTableRowActionScr").css(oRowActionStyles);
-				this.$("rowacthdr").css(oRowActionStyles);
-				$this.toggleClass("sapUiTableRActFlexible", true);
-			} else if (bHasFlexibleRowActions && iDummyColWidth <= 0) {
-				this.$("sapUiTableRowActionScr").removeAttr("style");
-				this.$("rowacthdr").removeAttr("style");
-				$this.toggleClass("sapUiTableRActFlexible", false);
+			var oDummyColumn = this.getDomRef("dummycolhdr");
+
+			if (oDummyColumn) {
+				// This complexity is required because of Chrome's zoom math.
+				var oTableElement = this.getDomRef("header");
+				var iTableWidth = oTableElement.clientWidth;
+				var iColumnsWidth = this.getColumns().reduce(function(iColumnsWidth, oColumn) {
+					if (oColumn.getDomRef() && oColumn.getIndex() >= this.getComputedFixedColumnCount()) {
+						return iColumnsWidth + TableUtils.convertCSSSizeToPixel(oColumn.getWidth());
+					}
+					return iColumnsWidth;
+				}.bind(this), 0);
+				var bDummyColumnHasWidth = iTableWidth > iColumnsWidth;
+
+				if (!bHasFlexibleRowActions && bDummyColumnHasWidth) {
+					var iRowActionPos = iColumnsWidth + oTableSizes.tableRowHdrScrWidth + oTableSizes.tableCtrlFixedWidth;
+					var oRowActionStyles = {};
+					if (!TableUtils.hasRowActions(this)) {
+						iRowActionPos = iRowActionPos - TableUtils.ThemeParameters.navIndicatorWidth + TableUtils.BaseBorderWidth;
+					}
+					oRowActionStyles[this._bRtlMode ? "right" : "left"] = iRowActionPos;
+					this.$("sapUiTableRowActionScr").css(oRowActionStyles);
+					this.$("rowacthdr").css(oRowActionStyles);
+					$this.toggleClass("sapUiTableRActFlexible", true);
+				} else if (bHasFlexibleRowActions && !bDummyColumnHasWidth) {
+					this.$("sapUiTableRowActionScr").removeAttr("style");
+					this.$("rowacthdr").removeAttr("style");
+					$this.toggleClass("sapUiTableRActFlexible", false);
+				}
 			}
 		}
 
 		$this.find(".sapUiTableNoOpacity").addBack().removeClass("sapUiTableNoOpacity");
 
-		function registerResizeHandler() {
-			TableUtils.registerResizeHandler(that, "", that._onTableResize.bind(that), true);
-		}
-
-		if ($this.closest(".sapUiLoSplitter").length) {
-			// a special workaround for the splitter control due to concurrence issues
-			registerResizeHandler();
-		} else {
-			// Size changes of the parent happen due to adaptations of the table sizes. In order to first let the
-			// browser finish painting, the resize handler is registered in a promise. If this would be done synchronously,
-			// updateTableSizes would always run twice.
-			Promise.resolve().then(registerResizeHandler);
-		}
+		TableUtils.Hook.call(this, Hook.UpdateSizes, sReason);
 	};
 
 	Table.prototype.setShowOverlay = function(bShow) {
@@ -1553,37 +1588,36 @@ sap.ui.define([
 		this.setProperty("showOverlay", bShow, true);
 
 		if (this.getDomRef()) {
-			var oFocusRef = document.activeElement;
 			this.$().toggleClass("sapUiTableOverlay", bShow);
 			this._getAccExtension().updateAriaStateForOverlayAndNoData();
-			this._getKeyboardExtension().updateNoDataAndOverlayFocus(oFocusRef);
+			this._getKeyboardExtension().updateNoDataAndOverlayFocus();
 		}
 
 		return this;
 	};
 
 	Table.prototype._updateFixedBottomRows = function() {
-		var iFixedBottomRows = this.getFixedBottomRowCount();
-
 		var oDomRef = this.getDomRef();
-		if (oDomRef && iFixedBottomRows > 0) {
-			var $sapUiTableFixedPreBottomRow = jQuery(oDomRef).find(".sapUiTableFixedPreBottomRow");
-			$sapUiTableFixedPreBottomRow.removeClass("sapUiTableFixedPreBottomRow");
-			var $sapUiTableFixedFirstBottomRow = jQuery(oDomRef).find(".sapUiTableFixedFirstBottomRow");
-			$sapUiTableFixedFirstBottomRow.removeClass("sapUiTableFixedFirstBottomRow");
 
-			var iFirstFixedButtomRowIndex = TableUtils.getFirstFixedButtomRowIndex(this);
-			var aRows = this.getRows();
-			var $rowDomRefs;
+		if (!oDomRef || this._getRowCounts().fixedBottom === 0) {
+			return;
+		}
 
-			if (iFirstFixedButtomRowIndex >= 0 && iFirstFixedButtomRowIndex < aRows.length) {
-				$rowDomRefs = aRows[iFirstFixedButtomRowIndex].getDomRefs(true);
-				$rowDomRefs.row.addClass("sapUiTableFixedFirstBottomRow", true);
-			}
-			if (iFirstFixedButtomRowIndex >= 1 && iFirstFixedButtomRowIndex < aRows.length) {
-				$rowDomRefs = aRows[iFirstFixedButtomRowIndex - 1].getDomRefs(true);
-				$rowDomRefs.row.addClass("sapUiTableFixedPreBottomRow", true);
-			}
+		var iFirstFixedButtomRowIndex = TableUtils.getFirstFixedBottomRowIndex(this);
+		var aRows = this.getRows();
+		var $rowDomRefs;
+
+		jQuery(oDomRef).find(".sapUiTableRowLastScrollable").removeClass("sapUiTableRowLastScrollable");
+		jQuery(oDomRef).find(".sapUiTableRowFirstFixedBottom").removeClass("sapUiTableRowFirstFixedBottom");
+
+		if (iFirstFixedButtomRowIndex >= 0 && iFirstFixedButtomRowIndex < aRows.length) {
+			$rowDomRefs = aRows[iFirstFixedButtomRowIndex].getDomRefs(true);
+			$rowDomRefs.row.addClass("sapUiTableRowFirstFixedBottom", true);
+		}
+
+		if (iFirstFixedButtomRowIndex >= 1 && iFirstFixedButtomRowIndex < aRows.length) {
+			$rowDomRefs = aRows[iFirstFixedButtomRowIndex - 1].getDomRefs(true);
+			$rowDomRefs.row.addClass("sapUiTableRowLastScrollable", true);
 		}
 	};
 
@@ -1600,7 +1634,7 @@ sap.ui.define([
 		if (sId) {
 			return {customId: sId};
 		} else {
-			return Element.prototype.getFocusInfo.apply(this, arguments);
+			return Control.prototype.getFocusInfo.apply(this, arguments);
 		}
 	};
 
@@ -1609,10 +1643,9 @@ sap.ui.define([
 	 */
 	Table.prototype.applyFocusInfo = function(mFocusInfo) {
 		if (mFocusInfo && mFocusInfo.customId) {
-			jQuery.sap.byId(mFocusInfo.customId, this.getDomRef()).focus();
+			jQuery(document.getElementById(mFocusInfo.customId)).trigger("focus");
 		} else {
-			//TBD: should be applyFocusInfo but changing it breaks the unit tests
-			Element.prototype.getFocusInfo.apply(this, arguments);
+			Control.prototype.applyFocusInfo.apply(this, arguments);
 		}
 		return this;
 	};
@@ -1630,8 +1663,7 @@ sap.ui.define([
 		var oTitle = vTitle;
 		if (typeof (vTitle) === "string" || vTitle instanceof String) {
 			oTitle = library.TableHelper.createTextView({
-				text: vTitle,
-				width: "100%"
+				text: vTitle
 			});
 			oTitle.addStyleClass("sapUiTableHdrTitle");
 		}
@@ -1647,8 +1679,7 @@ sap.ui.define([
 		var oFooter = vFooter;
 		if (typeof (vFooter) === "string" || vFooter instanceof String) {
 			oFooter = library.TableHelper.createTextView({
-				text: vFooter,
-				width: "100%"
+				text: vFooter
 			});
 		}
 		this.setAggregation("footer", oFooter);
@@ -1658,86 +1689,202 @@ sap.ui.define([
 
 	/**
 	 * Sets the selection mode. The current selection is lost.
-	 * @param {string} sSelectionMode the selection mode, see sap.ui.table.SelectionMode
+	 *
+	 * @param {sap.ui.table.SelectionMode} sSelectionMode the selection mode, see sap.ui.table.SelectionMode
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
-	 * @returns a reference on the table for chaining
 	 */
 	Table.prototype.setSelectionMode = function(sSelectionMode) {
-		this.clearSelection();
-		if (sSelectionMode === SelectionMode.Single) {
-			this._oSelection.setSelectionMode(SelectionModel.SINGLE_SELECTION);
-		} else {
-			this._oSelection.setSelectionMode(SelectionModel.MULTI_SELECTION);
+		if (sSelectionMode === SelectionMode.Multi) {
+			sSelectionMode = SelectionMode.MultiToggle;
+			Log.warning("The selection mode 'Multi' is deprecated and must not be used anymore."
+						+ " Your setting was defaulted to selection mode 'MultiToggle'", this);
 		}
 
-		// Check for valid selection modes (e.g. change deprecated mode "Multi" to "MultiToggle")
-		sSelectionMode = TableUtils.sanitizeSelectionMode(this, sSelectionMode);
+		if (this._hasSelectionPlugin()) {
+			Log.error("If a selection plugin is applied to the table, the selection mode is controlled by the plugin.", this);
+		} else {
+			this.setProperty("selectionMode", sSelectionMode);
+			this._oLegacySelectionPlugin.setSelectionMode(sSelectionMode);
+		}
 
-		this.setProperty("selectionMode", sSelectionMode);
 		return this;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
-	Table.prototype.setFirstVisibleRow = function(iRowIndex, bOnScroll, bSuppressEvent) {
-		if (parseInt(iRowIndex, 10) < 0) {
-			jQuery.sap.log.error("The index of the first visible row must be greater than or equal to 0." +
-								 " The value has been set to 0.", this);
+	Table.prototype.setFirstVisibleRow = function(iRowIndex) {
+		if (iRowIndex == null) {
 			iRowIndex = 0;
-		}
-		if (this._getTotalRowCount() > 0) {
+		} else if (iRowIndex < 0) {
+			Log.error("The index of the first visible row must be greater than or equal to 0. The value has been set to 0.", this);
+			iRowIndex = 0;
+		} else if (this._bContextsAvailable) {
 			var iMaxRowIndex = this._getMaxFirstVisibleRowIndex();
 
 			if (iMaxRowIndex < iRowIndex) {
-				jQuery.sap.log.warning("The index of the first visible row must be lesser or equal than the scrollable row count minus the visible row count." +
-									   " The value has been set to " + iMaxRowIndex + ".", this);
+				Log.warning("The index of the first visible row is too high. The value has been set to " + iMaxRowIndex + ".", this);
 				iRowIndex = iMaxRowIndex;
 			}
 		}
 
-		var bFirstVisibleRowChanged = this.getFirstVisibleRow() != iRowIndex;
-		var oScrollExtension = this._getScrollExtension();
-
-		if (bFirstVisibleRowChanged) {
-			var iOldFirstRenderedRowIndex = this._getFirstRenderedRowIndex();
-			// Prevent re-rendering of the table, just update the rows.
-			this.setProperty("firstVisibleRow", iRowIndex, true);
-			var bFirstRenderedRowChanged = this._getFirstRenderedRowIndex() !== iOldFirstRenderedRowIndex;
-
-			if (this.getBinding("rows")) {
-				if (bFirstRenderedRowChanged) {
-					var sReason = bOnScroll === true ? TableUtils.RowsUpdateReason.VerticalScroll : TableUtils.RowsUpdateReason.FirstVisibleRowChange;
-					this.updateRows(sReason);
-				}
-
-				// If changing the first visible row was initiated by a scroll action, the scroll position is already accurate.
-				// If the first visible row is set to the maximum row index, the table is scrolled to the bottom including the overflow.
-				if (!bOnScroll) {
-					oScrollExtension.updateVerticalScrollPosition();
-				}
-			}
-
-			if (!bSuppressEvent) {
-				this.fireFirstVisibleRowChanged({
-					firstVisibleRow: iRowIndex
-				});
-			}
-		} else if (!bOnScroll) {
-			// Even if the first visible row was not changed, this row may not be visible because of the inner scroll position. Therefore the
-			// scroll position is adjusted to make it visible (by resetting the inner scroll position).
-			oScrollExtension.updateVerticalScrollPosition();
-		}
+		this._setFirstVisibleRowIndex(iRowIndex);
 
 		return this;
 	};
 
+	/**
+	 * Sets the <code>firstVisibleRow</code> property of the table, updates the rows, and fires the <code>firstVisibleRowChanged</code> event.
+	 *
+	 * @param {int} iRowIndex
+	 *     The new first visible row index.
+	 * @param {Object} [mOptions]
+	 *     Config options.
+	 * @param {boolean} [mOptions.onScroll=false]
+	 *     Whether the first visible row is changed by scrolling. Any scroll-related updates are suppressed. The
+	 *     setting <code>suppressScrolling</code> is ignored.
+	 * @param {boolean} [mOptions.suppressScrolling=false]
+	 *     Whether to suppress any scroll-related updates.
+	 * @param {boolean} [mOptions.suppressEvent=false]
+	 *     Whether to suppress the <code>firstVisibleRowChanged</code> event.
+	 * @param {boolean} [mOptions.forceEvent=false]
+	 *     Whether to force the <code>firstVisibleRowChanged</code> event. Ignored if <code>suppressEvent=true</code>.
+	 * @param {boolean} [mOptions.suppressRendering=false]
+	 *     Whether the first visible row should only be set, without re-rendering the rows.
+	 * @param {boolean} [mOptions.onlySetProperty=false]
+	 *     Shortcut for <code>suppressScrolling=true</code>, <code>suppressEvent=true</code>, and <code>suppressRendering=true</code>.
+	 *     Overrules other settings.
+	 * @returns {boolean}
+	 *     Whether the <code>rowsUpdated</code> event will be fired.
+	 * @private
+	 */
+	Table.prototype._setFirstVisibleRowIndex = function(iRowIndex, mOptions) {
+		mOptions = Object.assign({
+			onScroll: false,
+			suppressScrolling: false,
+			suppressEvent: false,
+			forceEvent: false,
+			suppressRendering: false,
+			onlySetProperty: false
+		}, mOptions);
+
+		if (this._bContextsAvailable) {
+			iRowIndex = Math.min(iRowIndex, this._getMaxFirstVisibleRowIndex());
+		}
+		iRowIndex = Math.max(0, iRowIndex);
+
+		var bFirstVisibleRowChanged = this.getFirstVisibleRow() !== iRowIndex;
+		var iOldFirstRenderedRowIndex = this._getFirstRenderedRowIndex();
+		var iNewFirstRenderedRowIndex = this._bContextsAvailable ? Math.min(iRowIndex, this._getMaxFirstRenderedRowIndex()) : iRowIndex;
+		var oScrollExtension = this._getScrollExtension();
+
+		this.setProperty("firstVisibleRow", iRowIndex, true);
+
+		if (!mOptions.suppressRendering) {
+			_private(this).iFirstRenderedRowIndex = iNewFirstRenderedRowIndex;
+		}
+
+		if (mOptions.onlySetProperty) {
+			return false;
+		}
+
+		if ((bFirstVisibleRowChanged || mOptions.forceEvent) && !mOptions.suppressEvent) {
+			this.fireFirstVisibleRowChanged({
+				firstVisibleRow: iRowIndex
+			});
+		}
+
+		if (!this.getBinding()) {
+			oScrollExtension.updateVerticalScrollPosition();
+			return false;
+		}
+
+		var bExpectRowsUpdatedEvent = false;
+		var bRowsUpdateRequired = this.getBinding() != null && iNewFirstRenderedRowIndex !== iOldFirstRenderedRowIndex;
+
+		if (bRowsUpdateRequired) {
+			if (!mOptions.suppressRendering) {
+				triggerRowsUpdate(this, mOptions.onScroll
+										? TableUtils.RowsUpdateReason.VerticalScroll
+										: TableUtils.RowsUpdateReason.FirstVisibleRowChange);
+				bExpectRowsUpdatedEvent = true;
+			}
+
+			// If changing the first visible row was initiated by a scroll action, the scroll position is already accurate.
+			// If the first visible row is set to the maximum row index, the table is scrolled to the bottom including the overflow.
+			if (!mOptions.onScroll && !mOptions.suppressScrolling) {
+				oScrollExtension.updateVerticalScrollPosition(bExpectRowsUpdatedEvent);
+			}
+		} else if (!mOptions.onScroll && !mOptions.suppressScrolling) {
+			// Even if the first visible row was not changed, this row may not be fully visible because of the inner scroll position. Therefore, the
+			// scroll position is adjusted to make it fully visible.
+			oScrollExtension.updateVerticalScrollPosition(!this._bContextsAvailable);
+		}
+
+		return bExpectRowsUpdatedEvent;
+	};
+
+	/**
+	 * Sets the focus on the row. If <code>bFirstInteractiveElement</code> is <code>true</code> and there are
+	 * interactive elements in the row, sets the focus on the first interactive element. Otherwise sets the
+	 * focus on the first data cell.
+	 *
+	 * If the given index is not in the visible area, it scrolls it into view and then sets the focus.
+	 *
+	 * @param {number} iIndex The index of the row that is to be focused
+	 * @param {boolean} [bFirstInteractiveElement=false] Indicates whether to set the focus on the first
+	 * interactive element
+	 *
+	 * @private
+	 * @returns {Promise} A <code>Promise</code> that resolves after the focus has been set
+	 */
+	Table.prototype._setFocus = function(iIndex, bFirstInteractiveElement) {
+		return new Promise(function(resolve) {
+			if (iIndex === -1) {
+				iIndex = this._getTotalRowCount() - 1;
+			}
+
+			if (typeof iIndex !== 'number' || iIndex < -1) {
+				iIndex = 0;
+			}
+
+			var iFirstVisibleRow = this.getFirstVisibleRow();
+			var iRowCount = this._getRowCounts().count;
+
+			if (iIndex > iFirstVisibleRow && iIndex < iFirstVisibleRow + iRowCount) {
+				this.getRows()[iIndex - iFirstVisibleRow]._setFocus(bFirstInteractiveElement);
+				return resolve();
+			}
+
+			if (this._setFirstVisibleRowIndex(iIndex)) {
+				this.attachEventOnce("rowsUpdated", function() {
+					setFocus(this, iIndex, bFirstInteractiveElement);
+					return resolve();
+				});
+			} else {
+				setFocus(this, iIndex, bFirstInteractiveElement);
+				return resolve();
+			}
+		}.bind(this));
+	};
+
+	function setFocus(oTable, iIndex, bFirstInteractiveElement) {
+		var iTotalRowCount = oTable._getTotalRowCount();
+		var iFirstRenderedRowIndex = oTable._getFirstRenderedRowIndex();
+		oTable.getRows()[Math.min(iIndex, iTotalRowCount - 1) - iFirstRenderedRowIndex]._setFocus(bFirstInteractiveElement);
+	}
+
 	// enable calling 'bindAggregation("rows")' without a factory
 	Table.getMetadata().getAggregation("rows")._doesNotRequireFactory = true;
 
-	Table.prototype.bindAggregation = function(sName) {
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.bindAggregation = function(sName, oBindingInfo) {
 		if (sName === "rows") {
-			return this.bindRows.apply(this, [].slice.call(arguments, 1));
+			this._bindRows(getSanitizedBindingInfo(Array.prototype.slice.call(arguments, 1)));
+			return this;
 		}
 
 		return Control.prototype.bindAggregation.apply(this, arguments);
@@ -1747,12 +1894,37 @@ sap.ui.define([
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.bindRows = function(oBindingInfo) {
+		this._bindRows(getSanitizedBindingInfo(arguments));
+		return this;
+	};
+
+	Table.prototype._bindRows = function(oBindingInfo) {
+		resetBindingFlags(this);
+		this._bRowsBeingBound = true;
+		destroyVirtualRow(this);
+
+		// Temporary fix for the Support Assistant hacks. Support Assistant should implement a selection plugin.
+		// TODO: Before we recommend to implement a selection plugin -> Complete BLI CPOUIFTEAMB-1464
+		Table._addBindingListener(oBindingInfo, "change", function() {
+			this._onBindingChange.apply(this, arguments);
+		}.bind(this));
+		Table._addBindingListener(oBindingInfo, "dataRequested", function() {
+			this._onBindingDataRequested.apply(this, arguments);
+		}.bind(this));
+		Table._addBindingListener(oBindingInfo, "dataReceived", function() {
+			this._onBindingDataReceived.apply(this, arguments);
+		}.bind(this));
+		//Table._addBindingListener(oBindingInfo, "change", this._onBindingChange, this);
+		//Table._addBindingListener(oBindingInfo, "dataRequested", this._onBindingDataRequested, this);
+		//Table._addBindingListener(oBindingInfo, "dataReceived", this._onBindingDataReceived, this);
+
 		if (this.getEnableBusyIndicator()) {
 			this.setBusy(false);
 		}
-		this._iPendingRequests = 0;
-		this._bPendingRequest = false;
-		return Control.prototype.bindAggregation.call(this, "rows", Table._getSanitizedBindingInfo(arguments));
+
+		TableUtils.Hook.call(this, Hook.BindRows, oBindingInfo);
+		Control.prototype.bindAggregation.call(this, "rows", oBindingInfo);
+		this._bRowsBeingBound = false;
 	};
 
 	/**
@@ -1762,43 +1934,95 @@ sap.ui.define([
 	 */
 	Table.prototype._bindAggregation = function(sName, oBindingInfo) {
 		if (sName === "rows") {
-			Table._addBindingListener(oBindingInfo, "change", this._onBindingChange.bind(this));
-			Table._addBindingListener(oBindingInfo, "dataRequested", this._onBindingDataRequested.bind(this));
-			Table._addBindingListener(oBindingInfo, "dataReceived", this._onBindingDataReceived.bind(this));
-			this._bContextsRequested = false;
+			// If only the model has been changed, the ManagedObject only calls _bindAggregation while bindAggregation / bindRows is not called.
+			resetBindingFlags(this);
+			this._bRowsBeingBound = true;
 		}
 
 		// Create the binding.
-		Element.prototype._bindAggregation.call(this, sName, oBindingInfo);
+		Control.prototype._bindAggregation.call(this, sName, oBindingInfo);
 
-		var oBinding = this.getBinding("rows");
+		if (sName === "rows") {
+			TableUtils.Grouping.setupExperimentalGrouping(this);
 
-		if (sName === "rows" && oBinding) {
-			var oModel = oBinding.getModel();
+			var oBinding = this.getBinding();
+			var oModel = oBinding ? oBinding.getModel() : null;
+
+			this._bRowsBeingBound = false;
+			TableUtils.Hook.call(this, Hook.RowsBound, oBinding);
+
 			if (oModel && oModel.getDefaultBindingMode() === BindingMode.OneTime) {
-				jQuery.sap.log.error("The binding mode of the model is set to \"OneTime\"."
-									 + " This binding mode is not supported for the \"rows\" aggregation!"
-									 + " Scrolling can not be performed.", this);
+				Log.error("The binding mode of the model is set to \"OneTime\"."
+						  + " This binding mode is not supported for the \"rows\" aggregation!"
+						  + " Scrolling can not be performed.", this);
 			}
 		}
-
-		// Re-initialize the selection model. Might be necessary in case the table gets "rebound".
-		this._initSelectionModel(SelectionModel.MULTI_SELECTION);
 	};
+
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.unbindAggregation = function(sName, bSuppressReset) {
+		if (sName === "rows") {
+			this._unbindRows();
+			return this;
+		}
+
+		return Control.prototype.unbindAggregation.apply(this, arguments);
+	};
+
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.unbindRows = function() {
+		this._unbindRows();
+		return this;
+	};
+
+	Table.prototype._unbindRows = function() {
+		var oBindingInfo = this.getBindingInfo("rows");
+
+		if (oBindingInfo) {
+			TableUtils.Hook.call(this, Hook.UnbindRows, oBindingInfo);
+		}
+
+		Control.prototype.unbindAggregation.call(this, "rows", true);
+
+		// We don't further react to unbind operations that are part of rebind and destruction
+		// to avoid unnecessary DOM updates and UI flickering.
+		if (this._bRowsBeingBound || this.bIsDestroyed || this._bIsBeingDestroyed) {
+			return;
+		}
+
+		this._adjustToTotalRowCount();
+
+		if (oBindingInfo) {
+			TableUtils.Hook.call(this, Hook.RowsUnbound);
+		}
+
+		resetBindingFlags(this);
+	};
+
+	function resetBindingFlags(oTable) {
+		oTable._bRowsBeingBound = false;
+		oTable._bContextsAvailable = false;
+		oTable._iPendingRequests = 0;
+		oTable._bPendingRequest = false;
+		oTable._iBindingLength = null;
+	}
 
 	/**
 	 * Converts old binding configuration APIs to the new API.
 	 *
 	 * @param {...*} [args] Binding configuration arguments.
 	 * @returns {Object|null} The binding info object or null.
-	 * @static
 	 * @private
 	 */
-	Table._getSanitizedBindingInfo = function(args) {
+	function getSanitizedBindingInfo(args) {
 		var oBindingInfo;
 
 		if (args == null || args[0] == null) {
-			oBindingInfo = null;
+			oBindingInfo = {};
 		} else if (typeof args[0] === "string") {
 			/* Old API compatibility */
 
@@ -1809,7 +2033,7 @@ sap.ui.define([
 			var aFilters = args[3];
 
 			// (sPath, [oSorter], [aFilters])
-			if (oTemplate instanceof Sorter || jQuery.isArray(oSorter) && oSorter[0] instanceof Filter) {
+			if (oTemplate instanceof Sorter || Array.isArray(oSorter) && oSorter[0] instanceof Filter) {
 				aFilters = oSorter;
 				oSorter = oTemplate;
 				oTemplate = undefined;
@@ -1827,42 +2051,23 @@ sap.ui.define([
 		}
 
 		return oBindingInfo;
-	};
+	}
 
-	Table._addBindingListener = function(oBindingInfo, sEventName, fHandler) {
+	Table._addBindingListener = function(oBindingInfo, sEventName, fHandler, oThis) {
 		if (!oBindingInfo.events) {
 			oBindingInfo.events = {};
 		}
 
-		if (!oBindingInfo.events[sEventName]) {
-			oBindingInfo.events[sEventName] = fHandler;
-		} else {
-			// Wrap the event handler of the other party to add our handler.
-			var fOriginalHandler = oBindingInfo.events[sEventName];
-			oBindingInfo.events[sEventName] = function() {
-				fHandler.apply(this, arguments);
+		// Wrap the event handler of the other party to add our handler.
+		var fOriginalHandler = oBindingInfo.events[sEventName];
+
+		oBindingInfo.events[sEventName] = function() {
+			fHandler.apply(oThis, arguments);
+
+			if (fOriginalHandler) {
 				fOriginalHandler.apply(this, arguments);
-			};
-		}
-	};
-
-	/**
-	 * Initialises a new selection model for the Table instance.
-	 * @param {sap.ui.model.SelectionModel.MULTI_SELECTION|sap.ui.model.SelectionModel.SINGLE_SELECTION} sSelectionMode the selection mode of the
-	 *     selection model
-	 * @returns {sap.ui.table.Table} the table instance for chaining
-	 * @private
-	 */
-	Table.prototype._initSelectionModel = function (sSelectionMode) {
-		// detach old selection model event handler
-		if (this._oSelection) {
-			this._oSelection.detachSelectionChanged(this._onSelectionChanged, this);
-		}
-		//new selection model with the currently set selection mode
-		this._oSelection = new SelectionModel(sSelectionMode);
-		this._oSelection.attachSelectionChanged(this._onSelectionChanged, this);
-
-		return this;
+			}
+		};
 	};
 
 	/**
@@ -1871,9 +2076,9 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype._onBindingChange = function(oEvent) {
-		var sReason = typeof (oEvent) === "object" ? oEvent.getParameter("reason") : oEvent;
-		if (sReason === "sort" || sReason === "filter") {
-			this.clearSelection();
+		var sReason = oEvent.getParameter("reason");
+
+		if (sReason === ChangeReason.Sort || sReason === ChangeReason.Filter) {
 			this.setFirstVisibleRow(0);
 		}
 	};
@@ -1881,67 +2086,168 @@ sap.ui.define([
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
-	Table.prototype.unbindAggregation = function(sName, bSuppressReset) {
-		var oBinding = this.getBinding("rows");
-		if (sName === "rows" && this.isBound("rows")) {
-			bSuppressReset = true;
+	Table.prototype.setRowMode = function(oRowMode) {
+		this._destroyLegacyRowMode();
+		this.setAggregation("rowMode", oRowMode);
+		this._initLegacyRowMode();
+	};
+
+	// this method can be removed when the aggregation is made public
+	Table.prototype.getRowMode = function() {
+		return this.getAggregation("rowMode");
+	};
+
+	/**
+	 * Gets the row mode of the table. If no row mode is set, a legacy row mode is returned.
+	 *
+	 * @returns {sap.ui.table.rowmodes.RowMode} The row mode of the table.
+	 * @private
+	 */
+	Table.prototype._getRowMode = function() {
+		var oRowMode = this.getRowMode() || this._oLegacyRowMode;
+
+		if (!oRowMode) {
+			// To avoid null checks everywhere if the row mode is accessed after destroying the table.
+			this._initLegacyRowMode();
+			oRowMode = this._oLegacyRowMode;
 		}
 
-		var vReturn = Element.prototype.unbindAggregation.apply(this, [sName, bSuppressReset]);
+		return oRowMode;
+	};
 
-		if (sName === "rows" && oBinding) {
-			//Reset needs to be resetted, else destroyRows is called, which is not allowed to be called
-			this._restoreAppDefaultsColumnHeaderSortFilter();
-			// metadata might have changed
-			this._invalidateColumnMenus();
-			this._updateTotalRowCount(true);
-			this.updateRows(TableUtils.RowsUpdateReason.Unbind);
+	/**
+	 * Initializes a legacy row mode based on the <code>visibleRowCountMode</code> property, if no row mode is set in the <code>rowMode</code>
+	 * aggregation.
+	 *
+	 * @private
+	 */
+	Table.prototype._initLegacyRowMode = function() {
+		if (this._oLegacyRowMode || this.getRowMode()) {
+			// No legacy row mode needs to be created if it already exists, or if a row mode is set.
+			return;
 		}
 
-		return vReturn;
+		this._oLegacyRowMode = createLegacyRowMode(this);
+		this.addAggregation("_hiddenDependents", this._oLegacyRowMode);
+	};
+
+	Table.prototype._destroyLegacyRowMode = function() {
+		if (this._oLegacyRowMode) {
+			this._oLegacyRowMode.destroy();
+			delete this._oLegacyRowMode;
+		}
+	};
+
+	function createLegacyRowMode(oTable) {
+		var oRowMode;
+
+		switch (oTable.getVisibleRowCountMode()) {
+			case VisibleRowCountMode.Fixed:
+				oRowMode = new FixedRowMode(true);
+				break;
+			case VisibleRowCountMode.Interactive:
+				oRowMode = new InteractiveRowMode(true);
+				break;
+			case VisibleRowCountMode.Auto:
+				oRowMode = new AutoRowMode(true);
+				break;
+			default:
+		}
+
+		return oRowMode;
+	}
+
+	/**
+	 * Gets the numbers of scrollable and fixed rows as they are currently computed by the row mode that is applied to the table.
+	 *
+	 * @returns {{count: int, scrollable: int, fixedTop: int, fixedBottom: int}} The numbers of scrollable and fixed rows.
+	 * @private
+	 */
+	Table.prototype._getRowCounts = function() {
+		var mRowCounts = this._getRowMode().getComputedRowCounts();
+
+		// TODO: Enhance the RowMode interface and move these calculations to the row modes that support variable row heights.
+		// TableUtils.isVariableRowHeightEnabled can't be used because it calls this method, which causes infinite recursion.
+		var bVariableRowHeightEnabled = this._bVariableRowHeightEnabled && !mRowCounts.fixedTop && !mRowCounts.fixedBottom;
+		mRowCounts._fullsize = mRowCounts.count;
+		mRowCounts._scrollSize = mRowCounts.scrollable;
+		if (mRowCounts.count > 0 && bVariableRowHeightEnabled) {
+			mRowCounts.count++;
+			mRowCounts.scrollable++;
+		}
+
+		return mRowCounts;
+	};
+
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.setVisibleRowCountMode = function(sVisibleRowCountMode) {
+		if (this.getRowMode()) {
+			Log.warning("If the \"rowMode\" aggregation is set, setting the \"visibleRowCountMode\" has no effect");
+			return this.setProperty("visibleRowCountMode", sVisibleRowCountMode, true);
+		}
+
+		var sOldVisibleRowCountMode = this.getVisibleRowCountMode();
+		this.setProperty("visibleRowCountMode", sVisibleRowCountMode);
+		var sNewVisibleRowCountMode = this.getVisibleRowCountMode();
+
+		if (sNewVisibleRowCountMode !== sOldVisibleRowCountMode) {
+			this._destroyLegacyRowMode();
+			this._initLegacyRowMode();
+		}
+
+		return this;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.setVisibleRowCount = function(iVisibleRowCount) {
-		if (iVisibleRowCount != null && !isFinite(iVisibleRowCount)) {
+		var sVisibleRowCountMode = this.getVisibleRowCountMode();
+		if (sVisibleRowCountMode == VisibleRowCountMode.Auto) {
+			Log.error("VisibleRowCount will be ignored since VisibleRowCountMode is set to Auto", this);
 			return this;
 		}
 
-		var sVisibleRowCountMode = this.getVisibleRowCountMode();
-		if (sVisibleRowCountMode == VisibleRowCountMode.Auto) {
-			jQuery.sap.log.error("VisibleRowCount will be ignored since VisibleRowCountMode is set to Auto", this);
+		if (iVisibleRowCount != null && !isFinite(iVisibleRowCount)) {
 			return this;
 		}
 
 		var iFixedRowsCount = this.getFixedRowCount() + this.getFixedBottomRowCount();
 		if (iVisibleRowCount <= iFixedRowsCount && iFixedRowsCount > 0) {
-			jQuery.sap.log.error("Table: " + this.getId() + " visibleRowCount('" + iVisibleRowCount + "') must be bigger than number of fixed rows('" + (this.getFixedRowCount() + this.getFixedBottomRowCount()) + "')", this);
+			Log.error("Table: " + this.getId() + " visibleRowCount('" + iVisibleRowCount + "') must be bigger than number of"
+					  + " fixed rows('" + (this.getFixedRowCount() + this.getFixedBottomRowCount()) + "')", this);
 			return this;
 		}
 
-		iVisibleRowCount = this.validateProperty("visibleRowCount", iVisibleRowCount);
-		if (this.getBinding("rows") && this._getTotalRowCount() <= iVisibleRowCount) {
-			this.setProperty("firstVisibleRow", 0);
+		if (this.getRowMode()) {
+			Log.warning("If the \"rowMode\" aggregation is set, setting the \"visibleRowCount\" has no effect");
+			return this.setProperty("visibleRowCount", iVisibleRowCount, true);
 		}
+
+		iVisibleRowCount = this.validateProperty("visibleRowCount", iVisibleRowCount);
 		this.setProperty("visibleRowCount", iVisibleRowCount);
-		this._setRowContentHeight(iVisibleRowCount * this._getDefaultRowHeight());
+
+		TableUtils.dynamicCall(this._getSyncExtension, function(oSyncExtension) {
+			oSyncExtension.syncRowCount(iVisibleRowCount);
+		});
+
 		return this;
 	};
 
 	Table.prototype.setMinAutoRowCount = function(iMinAutoRowCount) {
-		if (parseInt(iMinAutoRowCount, 10) < 1) {
-			jQuery.sap.log.error("The minAutoRowCount property must be greater than 0. The value has been set to 1.", this);
+		if (parseInt(iMinAutoRowCount) < 1) {
+			Log.error("The minAutoRowCount property must be greater than 0. The value has been set to 1.", this);
 			iMinAutoRowCount = 1;
 		}
-		this.setProperty("minAutoRowCount", iMinAutoRowCount);
-	};
 
-	Table.prototype.setRowHeight = function(iRowHeight) {
-		this.setProperty("rowHeight", iRowHeight);
-		this._iTableRowContentHeight = undefined;
-		return this;
+		if (this.getRowMode()) {
+			Log.warning("If the \"rowMode\" aggregation is set, setting the \"minAutoRowCount\" has no effect");
+			return this.setProperty("minAutoRowCount", iMinAutoRowCount, true);
+		}
+
+		return this.setProperty("minAutoRowCount", iMinAutoRowCount);
 	};
 
 	/**
@@ -1954,19 +2260,20 @@ sap.ui.define([
 	 * Please note that tooltips are not rendered for the table. The tooltip property will be set
 	 * but it won't effect the DOM.
 	 *
-	 * @param {string|sap.ui.core.TooltipBase} vTooltip
-	 * @returns {sap.ui.table.Table} This-reference for chaining
+	 * @param {string|sap.ui.core.TooltipBase} vTooltip The tooltip
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 * @override
 	 */
 	Table.prototype.setTooltip = function(vTooltip) {
-		jQuery.sap.log.warning("The aggregation tooltip is not supported for sap.ui.table.Table");
+		Log.warning("The aggregation tooltip is not supported for sap.ui.table.Table", this);
 		return this.setAggregation("tooltip", vTooltip, true);
 	};
 
 	Table.prototype.setNavigationMode = function() {
 		this.setProperty("navigationMode", NavigationMode.Scrollbar, true);
-		jQuery.sap.log.error("The navigationMode property is deprecated and must not be used anymore. Your setting was defaulted to 'Scrollbar'", this);
+		Log.error("The navigationMode property is deprecated and must not be used anymore. Your setting was defaulted to 'Scrollbar'", this);
+		return this;
 	};
 
 	/**
@@ -1974,22 +2281,15 @@ sap.ui.define([
 	 * @returns {sap.ui.model.Context[]} Array of fixed bottom row context
 	 * @private
 	 */
-	Table.prototype._getFixedBottomRowContexts = function (iFixedBottomRowCount, iBindingLength) {
-		var oBinding = this.getBinding("rows");
-		var aContexts = [];
-		if (!oBinding) {
-			return aContexts;
+	Table.prototype._getFixedBottomRowContexts = function() {
+		var mRowCounts = this._getRowCounts();
+		var iTotalRowCount = getTotalRowCount(this, true);
+
+		if (mRowCounts.fixedBottom > 0 && mRowCounts.count - mRowCounts.fixedBottom < iTotalRowCount) {
+			return this._getContexts(iTotalRowCount - mRowCounts.fixedBottom, mRowCounts.fixedBottom, 0, true);
+		} else {
+			return [];
 		}
-
-		iFixedBottomRowCount = iFixedBottomRowCount || this.getFixedBottomRowCount();
-		iBindingLength = iBindingLength || this._getTotalRowCount();
-
-		var iVisibleRowCount = this.getVisibleRowCount();
-		if (iFixedBottomRowCount > 0 && (iVisibleRowCount - iFixedBottomRowCount) < iBindingLength) {
-			aContexts = this._getContexts(iBindingLength - iFixedBottomRowCount, iFixedBottomRowCount, 1);
-		}
-
-		return aContexts;
 	};
 
 	/**
@@ -1997,93 +2297,96 @@ sap.ui.define([
 	 * @returns {sap.ui.model.Context[]} Array of fixed top row context
 	 * @private
 	 */
-	Table.prototype._getFixedRowContexts = function(iFixedRowCount) {
-		iFixedRowCount = iFixedRowCount || this.getFixedRowCount();
-		if (iFixedRowCount > 0) {
-			return this._getContexts(0, iFixedRowCount);
+	Table.prototype._getFixedRowContexts = function() {
+		var mRowCounts = this._getRowCounts();
+
+		if (mRowCounts.fixedTop > 0) {
+			return this._getContexts(0, mRowCounts.fixedTop, 0, true);
 		} else {
 			return [];
 		}
 	};
 
-	Table.prototype._getContexts = function(iStartIndex, iLength, iThreshold) {
-		var oBinding = this.getBinding("rows");
+	/**
+	 * Gets contexts from the binding of the <code>rows</code> aggregation. If no binding exists, an empty array is returned.
+	 *
+	 * @param {int} [iStartIndex] The start index of the requested contexts.
+	 * @param {int} [iLength] The requested amount of contexts.
+	 * @param {int} [iThreshold] The threshold value.
+	 * @param {boolean} [bKeepCurrent] Whether this call keeps the result of {@link sap.ui.model.ListBinding#getCurrentContexts} untouched.
+	 * @returns {sap.ui.model.Context[]} The requested contexts.
+	 * @see sap.ui.model.ListBinding#getContexts
+	 * @private
+	 */
+	Table.prototype._getContexts = function(iStartIndex, iLength, iThreshold, bKeepCurrent) {
+		var oBinding = this.getBinding();
+
 		if (oBinding) {
-			return oBinding.getContexts(iStartIndex, iLength, iThreshold);
+			return oBinding.getContexts(iStartIndex, iLength, iThreshold, bKeepCurrent);
 		} else {
 			return [];
 		}
-	};
-
-	Table.prototype._computeRequestLength = function(iLength) {
-		if (this.getVisibleRowCountMode() === VisibleRowCountMode.Auto && !this._bContextsRequested) {
-			var iEstimatedRowCount = Math.ceil(Device.resize.height / TableUtils.DEFAULT_ROW_HEIGHT.sapUiSizeCondensed);
-			return Math.max(iLength, iEstimatedRowCount);
-		}
-		return iLength;
 	};
 
 	/**
 	 * Requests all contexts from the binding which are required to display the data in the current viewport.
 	 *
-	 * @param {int} [iVisibleRows=undefined] The amount of rows to display. Default value is the number of rows in the rows aggregation.
-	 * @param {boolean} [bSuppressUpdate=false] If set to <code>true</code>, no UI updates will be performed.
+	 * @param {int} [iRequestLength=undefined] The amount of contexts to request. The default value is the number of rows in the rows aggregation.
+	 * @param {boolean} [bSuppressAdjustToBindingLength=false] If set to <code>true</code>, no UI updates will be performed.
 	 * @param {boolean} [bSecondCall=false] If this parameter is set to <code>true</code>, it means that the function called itself recursively.
 	 * 										In this case some parts of the function will be skipped.
 	 * @returns {Object[]} Array of row contexts returned from the binding.
 	 * @private
 	 */
-	Table.prototype._getRowContexts = function (iVisibleRows, bSuppressUpdate, bSecondCall) {
-		var oBinding = this.getBinding("rows");
-		var iVisibleRowCount = iVisibleRows == null ? this.getRows().length : iVisibleRows;
+	Table.prototype._getRowContexts = function(iRequestLength, bSuppressAdjustToBindingLength, bSecondCall) {
+		var oBinding = this.getBinding();
+		var iRowCount = this.getRows().length;
 
-		if (!oBinding || iVisibleRowCount <= 0) {
+		iRequestLength = iRequestLength == null ? iRowCount : iRequestLength;
+		iRequestLength = Math.max(iRequestLength, this._getRowMode().getMinRequestLength());
+
+		if (!oBinding || iRequestLength <= 0) {
 			// Without binding there are no contexts to be retrieved.
 			return [];
 		}
 
-		bSuppressUpdate = bSuppressUpdate === true;
+		bSuppressAdjustToBindingLength = bSuppressAdjustToBindingLength === true;
 		bSecondCall = bSecondCall === true;
 
-		var iFirstVisibleRow = this._getFirstRenderedRowIndex();
-		var iFixedRowCount = this.getFixedRowCount();
-		var iFixedBottomRowCount = this.getFixedBottomRowCount();
-		var iReceivedLength = 0;
-		var bReceivedLessThanRequested;
+		var iFirstRenderedRowIndex = this._getFirstRenderedRowIndex();
+		var mRowCounts = this._getRowCounts();
 		var aContexts = [];
 		var aTmpContexts;
 
 		// because of the analytical table the fixed bottom row must always be requested separately as it is the grand
 		// total row for the table.
-		var iLength = iVisibleRowCount - iFixedBottomRowCount;
+		var iLength = iRequestLength - mRowCounts.fixedBottom;
 		var iMergeOffsetScrollRows = 0;
 		var iMergeOffsetBottomRow = iLength;
 
-		// if the threshold is not explicitly disabled by setting it to 0,
-		// the default threshold should be at the visibleRowCount.
+		// If the threshold is not explicitly disabled by setting it to 0, the default threshold should be the number of rows.
 		var iThreshold = this.getThreshold();
-		iThreshold = iThreshold ? Math.max(iVisibleRowCount, iThreshold) : 0;
+		iThreshold = iThreshold ? Math.max(iRowCount, iThreshold) : 0;
 
 		// data can be requested with a single getContexts call if the fixed rows and the scrollable rows overlap.
-		var iStartIndex = iFirstVisibleRow;
+		var iStartIndex = iFirstRenderedRowIndex;
 
-		var fnMergeArrays = function (aTarget, aSource, iStartIndex) {
+		var fnMergeArrays = function(aTarget, aSource, iStartIndex) {
 			for (var i = 0; i < aSource.length; i++) {
 				aTarget[iStartIndex + i] = aSource[i];
 			}
 		};
 
-		if (iFixedRowCount > 0 && iFirstVisibleRow > 0) {
+		if (mRowCounts.fixedTop > 0 && iFirstRenderedRowIndex > 0) {
 			// since there is a gap between first visible row and fixed rows it must be requested separately
 			// the first visible row always starts counting with 0 in the scroll part of the table no matter
 			// how many fixed rows there are.
-			iStartIndex = iFirstVisibleRow + iFixedRowCount;
+			iStartIndex = iFirstRenderedRowIndex + mRowCounts.fixedTop;
 			// length must be reduced by number of fixed rows since they were just requested separately
-			iLength -= iFixedRowCount;
-			iMergeOffsetScrollRows = iFixedRowCount;
+			iLength -= mRowCounts.fixedTop;
+			iMergeOffsetScrollRows = mRowCounts.fixedTop;
 			// retrieve fixed rows separately
-			aTmpContexts = this._getFixedRowContexts(iFixedRowCount);
-			iReceivedLength += aTmpContexts.length;
+			aTmpContexts = this._getFixedRowContexts();
 			aContexts = aContexts.concat(aTmpContexts);
 		}
 
@@ -2091,213 +2394,213 @@ sap.ui.define([
 		// if this is done before requesting fixed bottom rows, it saves some performance for the analytical table
 		// since the tree gets only build once (as result of getContexts call). If first the fixed bottom row would
 		// be requested the analytical binding would build the tree twice.
-		aTmpContexts = this._getContexts(iStartIndex, this._computeRequestLength(iLength), iThreshold);
-		var iBindingLength = this._updateTotalRowCount(!bSuppressUpdate);
+		aTmpContexts = this._getContexts(iStartIndex, iLength, iThreshold);
 
-		this._bContextsRequested = true;
+		if (!bSuppressAdjustToBindingLength) {
+			this._adjustToTotalRowCount();
+		}
 
-		// iLength is the number of rows which shall get filled. It might be more than the binding actually has data.
-		// Therefore Math.min is required to make sure to not request data again from the binding.
-		bReceivedLessThanRequested = aTmpContexts.length < Math.min(iLength, iBindingLength - iFixedBottomRowCount);
+		var iTotalRowCount = this._getTotalRowCount();
 
 		// get the binding length after getContext call to make sure that for TreeBindings the client tree was correctly rebuilt
 		// this step can be moved to an earlier point when the TreeBindingAdapters all implement tree invalidation in case of getLength calls
-		iReceivedLength += aTmpContexts.length;
 		fnMergeArrays(aContexts, aTmpContexts, iMergeOffsetScrollRows);
 
 		// request binding length after getContexts call to make sure that in case of tree binding and analytical binding
 		// the tree gets only built once (by getContexts call).
-		iMergeOffsetBottomRow = Math.min(iMergeOffsetBottomRow, Math.max(iBindingLength - iFixedBottomRowCount, 0));
-		if (iFixedBottomRowCount > 0) {
+		iMergeOffsetBottomRow = Math.min(iMergeOffsetBottomRow, Math.max(iTotalRowCount - mRowCounts.fixedBottom, 0));
+		if (mRowCounts.fixedBottom > 0) {
 			// retrieve fixed bottom rows separately
 			// instead of just concatenating them to the existing contexts it must be made sure that they are put
 			// to the correct row index otherwise they would flip into the scroll area in case data gets requested for
 			// the scroll part.
-			aTmpContexts = this._getFixedBottomRowContexts(iFixedBottomRowCount, iBindingLength);
-			iReceivedLength += aTmpContexts.length;
+			aTmpContexts = this._getFixedBottomRowContexts();
 			fnMergeArrays(aContexts, aTmpContexts, iMergeOffsetBottomRow);
 		}
 
+		// If the Binding#getContexts call triggers recalculation of the binding length, the first visible row index needs to be corrected and a new
+		// context range needs to be requested.
+
 		var iMaxRowIndex = this._getMaxFirstRenderedRowIndex();
-
-		if (bReceivedLessThanRequested
-			&& iBindingLength > 0
-			&& iMaxRowIndex < iFirstVisibleRow
-			&& !bSecondCall) {
-
-			iFirstVisibleRow = iMaxRowIndex;
-			this.setProperty("firstVisibleRow", iFirstVisibleRow, true);
-
-			// Get the contexts again, this time with the maximum possible value for the first visible row.
-			aContexts = this._getRowContexts(iVisibleRowCount, bSuppressUpdate, true);
+		if (iMaxRowIndex < iFirstRenderedRowIndex && this._bContextsAvailable && !bSecondCall) {
+			this._setFirstVisibleRowIndex(this.getFirstVisibleRow(), {
+				onlySetProperty: true
+			});
+			aContexts = this._getRowContexts(iRequestLength, bSuppressAdjustToBindingLength, true);
 		}
 
 		return aContexts;
 	};
 
 	/**
-	 * Updates the cached total number of rows (binding length) and stores it in <code>Table._iBindingLength</code>.
+	 * Updates the UI according to the current total row count.
 	 *
-	 * @param {boolean} [bUpdateUI=true] If set to <code>true</code>, the parts of the UI which are dependent on the total row count will
-	 *                                   be updated, if the total row count has changed.
-	 * @returns {int} The updated total row count.
 	 * @private
 	 */
-	Table.prototype._updateTotalRowCount = function(bUpdateUI) {
-		// If the binding length changes it must call updateAggregation (updateRows).
-		// Therefore it should be save to buffer the binding length here. This gives some performance advantage,
-		// especially for tree bindings using the TreeBindingAdapter, where a tree structure must be created to
-		// calculate the correct length.
-		if (this._iBindingLength === null) {
-			this._iBindingLength = 0; // Initialize the binding length. From now on always the cached version should be used.
-		}
+	Table.prototype._adjustToTotalRowCount = function() {
+		var oBinding = this.getBinding();
+		var iTotalRowCount = this._getTotalRowCount();
+		var oScrollExtension = this._getScrollExtension();
 
-		var oBinding = this.getBinding("rows");
-		var iCurrentTotalRowCount = this._getTotalRowCount();
-		var iNewTotalRowCount = oBinding ? oBinding.getLength() : 0;
+		if (this._iBindingLength !== iTotalRowCount) {
+			this._iBindingLength = iTotalRowCount;
+			this._updateFixedBottomRows();
+			this._getAccExtension()._updateAriaRowCount();
+			oScrollExtension.adjustToTotalRowCount();
 
-		if (iCurrentTotalRowCount !== iNewTotalRowCount) {
-			this._iBindingLength = iNewTotalRowCount;
-
-			// If the binding length changes, some parts of the UI need to be updated.
-			if (bUpdateUI !== false) {
-				var oScrollExtension = this._getScrollExtension();
-				var bClientBinding = TableUtils.isInstanceOf(oBinding, "sap/ui/model/ClientListBinding")
-									 || TableUtils.isInstanceOf(oBinding, "sap/ui/model/ClientTreeBinding");
-
-				this._updateFixedBottomRows();
-				oScrollExtension.updateVerticalScrollbarVisibility();
-				oScrollExtension.updateVerticalScrollHeight();
-
-				if (!oBinding || bClientBinding) {
-					// A client binding does not fire dataReceived events. Therefore we need to update the no data area here.
-					// When the binding has been removed, the table might not be completely re-rendered (just the content). But the cached binding
-					// length changes. In this case the no data area needs to be updated.
-					this._updateNoData();
-				}
+			if (!oBinding || !TableUtils.hasPendingRequests(this)) {
+				// A client binding -or- an $expand filled list binding does not fire dataReceived events. Therefore we need to update the no data area here.
+				// When the binding has been removed, the table might not be completely re-rendered (just the content). But the cached binding
+				// length changes. In this case the no data area needs to be updated.
+				this._updateNoData();
 			}
-		}
-
-		return iNewTotalRowCount;
-	};
-
-	/**
-	 * Refresh rows
-	 * @private
-	 */
-	Table.prototype.refreshRows = function(vEvent) {
-		var oBinding = this.getBinding("rows");
-		if (!oBinding) {
-			jQuery.sap.log.error("RefreshRows must not be called without a binding", this);
-			return;
-		}
-
-		var that = this;
-		var sReason = typeof (vEvent) === "object" ? vEvent.getParameter("reason") : vEvent;
-
-		// make getContexts call to force data load
-		var sVisibleRowCountMode = this.getVisibleRowCountMode();
-		if ((this.bOutput && sVisibleRowCountMode === VisibleRowCountMode.Auto) || sVisibleRowCountMode !== VisibleRowCountMode.Auto) {
-			// the correct number of records to be requested can only be determined when the table row content height is known or if the
-			// visible row count mode is not Auto
-			if (this.bOutput) {
-				oBinding.attachEventOnce("dataRequested", function() {
-					// doing it in a timeout will allow the data request to be sent before the rows get created
-					if (that._mTimeouts.refreshRowsAdjustRows) {
-						window.clearTimeout(that._mTimeouts.refreshRowsAdjustRows);
-					}
-					that._mTimeouts.refreshRowsAdjustRows = window.setTimeout(function() {
-						that._updateRows(that._calculateRowsToDisplay(), sReason, false);
-					}, 0);
-				});
-			}
-			// request contexts from binding
-			if (sReason === ChangeReason.Filter || sReason === ChangeReason.Sort) {
-				this.setFirstVisibleRow(0);
-			}
-			var bSuppressUpdate = sReason != null;
-			this._updateBindingContexts(this._calculateRowsToDisplay(), bSuppressUpdate);
 		}
 	};
 
 	/**
-	 * Updates the rows - called internally by the updateAggregation function when
-	 * anything in the model has been changed.
+	 * Notifies about a binding refresh - called internally by the <code>ManagedObject</code> when the binding fires a "refresh" event.
+	 * Only relevant for server-side bindings. The table is expected to call <code>Binding#getContexts</code>, which triggers a data request. The
+	 * table can expect {@link sap.ui.table.Table#updateRows} to be called after the response is successfully received.
+	 *
+	 * <b>Must not be called manually!</b>
+	 *
+	 * @param {sap.ui.model.ChangeReason} sReason The reason for the refresh.
 	 * @private
 	 */
-	Table.prototype.updateRows = function(sReason) {
-		if (this._bExitCalled) {
+	Table.prototype.refreshRows = function(sReason) {
+		this._bContextsAvailable = false;
+
+		if (sReason === ChangeReason.Sort || sReason === ChangeReason.Filter) {
+			this.setFirstVisibleRow(0);
+		}
+
+		TableUtils.Hook.call(this, Hook.RefreshRows, sReason || TableUtils.RowsUpdateReason.Unknown);
+	};
+
+	/**
+	 * Updates the rows - called internally by the ManagedObject when the binding fires a "change" event.
+	 *
+	 * <b>Must not be called manually!</b>
+	 *
+	 * @param {sap.ui.model.ChangeReason} sReason The reason for the update.
+	 * @param {object} oEventInfo Additional information about the update.
+	 * @param {string} [oEventInfo.detailedReason] A non-standardized string that further classifies the change event.
+	 * @private
+	 */
+	Table.prototype.updateRows = function(sReason, oEventInfo) {
+		// Called during destruction with reason "Unbind". In general, rows of a destroyed table should not be updated.
+		if (this.bIsDestroyed || this._bIsBeingDestroyed) {
 			return;
 		}
 
-		// Rows should only be created/cloned when the number of rows can be determined. For the VisibleRowCountMode: Auto
-		// this can only happen after the table control was rendered one. At this point in time we know how much space is
-		// consumed by the table header, toolbar, footer... and we can calculate how much space is left for the table rows.
-		var sVisibleRowCountMode = this.getVisibleRowCountMode();
-		if ((this.getRows().length <= 0 || this._bRowAggregationInvalid) && ((sVisibleRowCountMode == VisibleRowCountMode.Auto && this.bOutput) || sVisibleRowCountMode != VisibleRowCountMode.Auto)) {
-			if (this._iTableRowContentHeight) {
-				this._updateRows(this._calculateRowsToDisplay(), sReason);
-			}
+		if (oEventInfo.detailedReason === "AddVirtualContext") {
+			createVirtualRow(this);
+			return;
+		} else if (oEventInfo.detailedReason === "RemoveVirtualContext") {
+			destroyVirtualRow(this);
+			return;
 		}
 
-		// update the bindings only once the table is rendered
-		if (!this.bIsDestroyed) {
-			// update the bindings by using a delayed mechanism to avoid to many update
-			// requests: by using the mechanism below it will trigger an update each 50ms
-			// except if the reason is coming from the binding with reason "change" then
-			// we do an immediate update instead of a delayed one
-
-			var iBindingTimerDelay = (sReason === ChangeReason.Change
-									  || (!this._mTimeouts.bindingTimer && Date.now() - this._lastCalledUpdateRows > this._iBindingTimerDelay)
-									  || sReason === TableUtils.RowsUpdateReason.Unbind ?
-									  0 : this._iBindingTimerDelay);
-			var that = this;
-
-			if (iBindingTimerDelay === 0 && sReason) {
-				Promise.resolve().then(function() {
-					that._performUpdateRows(sReason);
-				});
-			} else {
-				this._mTimeouts.bindingTimer = this._mTimeouts.bindingTimer || window.setTimeout(function() {
-						that._performUpdateRows(sReason);
-					}, iBindingTimerDelay);
-			}
-		}
+		this._bContextsAvailable = true;
+		triggerRowsUpdate(this, sReason);
 	};
+
+	function createVirtualRow(oTable) {
+		var oVirtualContext = oTable._getRowContexts(null, true)[0];
+
+		destroyVirtualRow(oTable);
+		oTable._oVirtualRow = oTable._getRowClone("virtual");
+		oTable._oVirtualRow.setBindingContext(oVirtualContext, oTable.getBindingInfo("rows").model);
+		oTable.addAggregation("_hiddenDependents", oTable._oVirtualRow);
+	}
+
+	function destroyVirtualRow(oTable) {
+		if (oTable._oVirtualRow) {
+			oTable._oVirtualRow.destroy();
+			delete oTable._oVirtualRow;
+		}
+	}
+
+	/**
+	 * Triggers an update of the rows.
+	 *
+	 * @param {sap.ui.table.Table} oTable
+	 *     Instance of the table.
+	 * @param {sap.ui.table.utils.TableUtils.RowsUpdateReason} [sReason=sap.ui.table.utils.TableUtils.RowsUpdateReason.Unknown]
+	 *     The reason for the update.
+	 * @private
+	 */
+	function triggerRowsUpdate(oTable, sReason) {
+		if (oTable._bContextsAvailable) {
+			TableUtils.Hook.call(oTable, Hook.UpdateRows, sReason || TableUtils.RowsUpdateReason.Unknown);
+		}
+	}
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.insertRow = function() {
-		jQuery.sap.log.error("The control manages the rows aggregation. The method \"insertRow\" cannot be used programmatically!", this);
+		Log.error("The control manages the rows aggregation. The method \"insertRow\" cannot be used programmatically!", this);
+		return this;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.addRow = function() {
-		jQuery.sap.log.error("The control manages the rows aggregation. The method \"addRow\" cannot be used programmatically!", this);
+		Log.error("The control manages the rows aggregation. The method \"addRow\" cannot be used programmatically!", this);
+		return this;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.removeRow = function() {
-		jQuery.sap.log.error("The control manages the rows aggregation. The method \"removeRow\" cannot be used programmatically!", this);
+		Log.error("The control manages the rows aggregation. The method \"removeRow\" cannot be used programmatically!", this);
+		return null;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.removeAllRows = function() {
-		jQuery.sap.log.error("The control manages the rows aggregation. The method \"removeAllRows\" cannot be used programmatically!", this);
+		Log.error("The control manages the rows aggregation. The method \"removeAllRows\" cannot be used programmatically!", this);
+		return [];
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.destroyRows = function() {
-		jQuery.sap.log.error("The control manages the rows aggregation. The method \"destroyRows\" cannot be used programmatically!", this);
+		Log.error("The control manages the rows aggregation. The method \"destroyRows\" cannot be used programmatically!", this);
+		return this;
+	};
+
+	/**
+	 * Sets the creation row.
+	 *
+	 * @param {sap.ui.table.CreationRow} oCreationRow Instance of the creation row
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
+	 * @private
+	 * @ui5-restricted sap.ui.mdc
+	 */
+	Table.prototype.setCreationRow = function(oCreationRow) {
+		if (!TableUtils.isA(oCreationRow, "sap.ui.table.CreationRow")) {
+			oCreationRow = null;
+		}
+
+		return this.setAggregation("creationRow", oCreationRow);
+	};
+
+	/**
+	 * Gets the creation row.
+	 *
+	 * @returns {sap.ui.table.CreationRow} oCreationRow Instance of the creation row
+	 * @private
+	 * @ui5-restricted sap.ui.mdc
+	 */
+	Table.prototype.getCreationRow = function() {
+		return this.getAggregation("creationRow");
 	};
 
 	/**
@@ -2323,9 +2626,10 @@ sap.ui.define([
 	 */
 	Table.prototype._attachEvents = function() {
 		var $this = this.$();
+		var sTableId = this.getId();
 
 		if (sap.ui.getCore().getConfiguration().getAnimation()) {
-			jQuery(document.body).on("webkitTransitionEnd transitionend",
+			jQuery(document.body).on("webkitTransitionEnd." + sTableId + " transitionend." + sTableId,
 				function(oEvent) {
 					if (jQuery(oEvent.target).has($this).length > 0) {
 						this._updateTableSizes(TableUtils.RowsUpdateReason.Animation);
@@ -2335,7 +2639,7 @@ sap.ui.define([
 		}
 
 		Device.resize.attachHandler(this._onWindowResize, this);
-		TableExtension.attachEvents(this);
+		ExtensionBase.attachEvents(this);
 	};
 
 	/**
@@ -2343,11 +2647,11 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype._detachEvents = function() {
-		jQuery(document.body).off('webkitTransitionEnd transitionend');
-
-		TableUtils.deregisterResizeHandler(this);
+		var sTableId = this.getId();
+		jQuery(document.body).off('webkitTransitionEnd.' + sTableId + ' transitionend.' + sTableId);
+		TableUtils.deregisterResizeHandler(this, "Table");
 		Device.resize.detachHandler(this._onWindowResize, this);
-		TableExtension.detachEvents(this);
+		ExtensionBase.detachEvents(this);
 	};
 
 	/**
@@ -2377,43 +2681,6 @@ sap.ui.define([
 	// =============================================================================
 
 	/**
-	 * Updates the binding contexts of the cells (column template clones).
-	 *
-	 * @param {int} [iRowCount=undefined] The number of rows to be updated and number of contexts to be requested from binding.
-	 * @param {boolean} [bSuppressUpdate=false] If set to <code>true</code>, the contexts will only be requested, but not assigned to the cells.
-	 * @private
-	 */
-	Table.prototype._updateBindingContexts = function(iRowCount, bSuppressUpdate) {
-		var oBinding = this.getBinding("rows");
-		var aContexts;
-
-		bSuppressUpdate = bSuppressUpdate === true;
-
-		// Get the contexts from the binding.
-		if (oBinding) {
-			aContexts = this._getRowContexts(iRowCount, bSuppressUpdate);
-		}
-
-		if (!bSuppressUpdate) {
-			// Row heights must be reset to make sure that rows can shrink if they may have smaller content. The content
-			// shall control the row height.
-			this._resetRowHeights();
-
-			var aRows = this.getRows(),
-				oBindingInfo = this.mBindingInfos["rows"],
-				sModelName = oBindingInfo && oBindingInfo.model;
-
-			for (var iIndex = aRows.length - 1; iIndex >= 0; iIndex--) {
-				var oContext = aContexts ? aContexts[iIndex] : undefined;
-				var oRow = aRows[iIndex];
-				if (oRow) {
-					oRow.setRowBindingContext(oContext, sModelName, oBinding);
-				}
-			}
-		}
-	};
-
-	/**
 	 * Show or hide the no data container.
 	 * @private
 	 */
@@ -2422,37 +2689,41 @@ sap.ui.define([
 			return;
 		}
 
-		var oFocusRef = document.activeElement;
 		this.$().toggleClass("sapUiTableEmpty", TableUtils.isNoDataVisible(this));
 		this._getAccExtension().updateAriaStateForOverlayAndNoData();
-		this._getKeyboardExtension().updateNoDataAndOverlayFocus(oFocusRef);
+		this._getKeyboardExtension().updateNoDataAndOverlayFocus();
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
-	Table.prototype.removeColumn = function (oColumn, bSuppressInvalidate) {
-		var oResult = this.removeAggregation('columns', oColumn, bSuppressInvalidate);
+	Table.prototype.removeColumn = function(oColumn) {
+		oColumn = this.removeAggregation("columns", oColumn);
 
-		if (typeof oColumn === "number" && oColumn > -1) {
-			oColumn = this.getColumns()[oColumn];
+		if (oColumn === null) {
+			return oColumn;
 		}
 
-		var iIndex = jQuery.inArray(oColumn, this._aSortedColumns);
-		if (!this._bReorderInProcess && iIndex >= 0) {
-			this._aSortedColumns.splice(iIndex, 1);
+		if (!this._bReorderInProcess) {
+			var iIndexInSortedColumns = this._aSortedColumns.indexOf(oColumn);
+
+			if (iIndexInSortedColumns >= 0) {
+				this._aSortedColumns.splice(iIndexInSortedColumns, 1);
+			}
 		}
-		this.invalidateRowsAggregation();
-		return oResult;
+
+		onColumnsAggregationChange(this);
+
+		return oColumn;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.removeAllColumns = function() {
-		var oResult = this.removeAllAggregation('columns');
+		var oResult = this.removeAllAggregation("columns");
 		this._aSortedColumns = [];
-		this.invalidateRowsAggregation();
+		onColumnsAggregationChange(this);
 		return oResult;
 	};
 
@@ -2460,9 +2731,9 @@ sap.ui.define([
 	 * @see JSDoc generated by SAPUI5 contdrol API generator
 	 */
 	Table.prototype.destroyColumns = function() {
-		var oResult = this.destroyAggregation('columns');
+		var oResult = this.destroyAggregation("columns");
 		this._aSortedColumns = [];
-		this.invalidateRowsAggregation();
+		onColumnsAggregationChange(this);
 		return oResult;
 	};
 
@@ -2470,97 +2741,113 @@ sap.ui.define([
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
-	Table.prototype.addColumn = function (oColumn, bSuppressInvalidate) {
-		this.addAggregation('columns', oColumn, bSuppressInvalidate);
-		this.invalidateRowsAggregation();
+	Table.prototype.addColumn = function(oColumn) {
+		this.addAggregation("columns", oColumn);
+		onColumnsAggregationChange(this);
 		return this;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
-	Table.prototype.insertColumn = function (oColumn, iIndex, bSuppressInvalidate) {
-		this.insertAggregation('columns', oColumn, iIndex, bSuppressInvalidate);
-		this.invalidateRowsAggregation();
+	Table.prototype.insertColumn = function(oColumn, iIndex) {
+		this.insertAggregation("columns", oColumn, iIndex);
+		onColumnsAggregationChange(this);
 		return this;
 	};
 
-	/**
-	 * Returns the number of rows the <code>rows</code> aggregation is bound to. The return value of this function is cached for performance
-	 * reasons. If the <code>rows</code> aggregation is not bound, always 0 is returned.
-	 *
-	 * @param {boolean} [bIgnoreCache=false] If set to <code>true</code>, the length will be requested from the binding, ignoring any cached value.
-	 * @returns {int} The total number of rows.
-	 * @see sap.ui.table.Table#_updateTotalRowCount
-	 * @private
-	 */
-	Table.prototype._getTotalRowCount = function(bIgnoreCache) {
-		if (this._iBindingLength === null || bIgnoreCache === true) {
-			var oBinding = this.getBinding("rows");
-			return oBinding ? oBinding.getLength() : 0;
-		} else {
-			return this._iBindingLength;
+	function onColumnsAggregationChange(oTable) {
+		oTable.invalidateRowsAggregation();
+		oTable._invalidateComputedFixedColumnCount();
+
+		var oCreationRow = oTable.getCreationRow();
+		if (oCreationRow) {
+			oCreationRow._update();
 		}
-	};
+	}
 
 	/**
-	 * Returns the number of rows which can be selected.
+	 * Returns the number of rows the <code>rows</code> aggregation is bound to.
 	 *
-	 * @returns {int} The number of rows which can be selected.
+	 * @returns {int} The total number of rows. Returns 0 if the <code>rows</code> aggregation is not bound.
 	 * @private
 	 */
-	Table.prototype._getSelectableRowCount = function() {
-		return this._getTotalRowCount();
+	Table.prototype._getTotalRowCount = function() {
+		return getTotalRowCount(this);
 	};
 
 	/**
-	 * Returns the maximum row index to which can be scrolled to
+	 * Returns the number of rows the <code>rows</code> aggregation is bound to.
+	 *
+	 * @param {sap.ui.table.Table} oTable Instance of the table.
+	 * @param {boolean} [bIgnoreCache=false] Whether to ignore the cached binding length.
+	 * @returns {int} The total number of rows. Returns 0 if the <code>rows</code> aggregation is not bound.
+	 * @private
+	 */
+	function getTotalRowCount(oTable, bIgnoreCache) {
+		var oBinding = oTable.getBinding();
+		var oBindingInfo = oTable.getBindingInfo("rows");
+
+		if (!oBinding) {
+			return 0;
+		}
+
+		if (oBindingInfo.length != null) {
+			return oBindingInfo.length;
+		}
+
+		if (bIgnoreCache === true) {
+			return oBinding.getLength();
+		}
+
+		if (!oTable._bContextsAvailable) {
+			return _private(oTable).iCachedBindingLength;
+		}
+
+		_private(oTable).iCachedBindingLength = oBinding.getLength();
+
+		return _private(oTable).iCachedBindingLength;
+	}
+
+	/**
+	 * Returns the maximum row index to which can be scrolled to. It may not be accurate if the index is in the last page, but it never less
+	 * than the actual maximum.
+	 *
+	 * @returns {int} The maximum index of the first visible row.
 	 * @private
 	 */
 	Table.prototype._getMaxFirstVisibleRowIndex = function() {
 		var iMaxRowIndex;
 
 		if (TableUtils.isVariableRowHeightEnabled(this)) {
-			iMaxRowIndex = this._getTotalRowCount(true) - 1;
+			iMaxRowIndex = this._getTotalRowCount() - 1;
 		} else {
-			iMaxRowIndex = this._getTotalRowCount(true) - this.getVisibleRowCount();
+			iMaxRowIndex = this._getTotalRowCount() - this._getRowCounts().count;
 		}
 
 		return Math.max(0, iMaxRowIndex);
 	};
 
 	/**
-	 * Gets the maximum row index where rendering can start from.
+	 * Gets the maximum row index where rendering of scrollable rows can start from.
 	 *
-	 * @returns {int} The maximum first rendered row index
+	 * @returns {int} The maximum index of the first scrollable row.
 	 * @private
 	 */
 	Table.prototype._getMaxFirstRenderedRowIndex = function() {
-		var iMaxRowIndex;
-
-		if (TableUtils.isVariableRowHeightEnabled(this)) {
-			iMaxRowIndex = this._getTotalRowCount(true) - this.getVisibleRowCount() - 1;
-		} else {
-			iMaxRowIndex = this._getTotalRowCount(true) - this.getVisibleRowCount();
-		}
-
+		var iMaxRowIndex = this._getTotalRowCount() - this._getRowCounts().count;
 		return Math.max(0, iMaxRowIndex);
 	};
 
 	/**
-	 * Gets the index of the first rendered row.
+	 * Gets the index of the first rendered scrollable row. Rows do not need to exist or be rendered for the index to be available. It shows the
+	 * current status. The table may still be updated.
 	 *
-	 * @returns {int} The first rendered row index
+	 * @returns {int} The index of the first scrollable row.
 	 * @private
 	 */
 	Table.prototype._getFirstRenderedRowIndex = function() {
-		var iFirstVisibleRowIndex = this.getFirstVisibleRow();
-
-		if (TableUtils.isVariableRowHeightEnabled(this) && iFirstVisibleRowIndex > this._getMaxFirstRenderedRowIndex()) {
-			return this._getMaxFirstRenderedRowIndex();
-		} else {
-			return iFirstVisibleRowIndex;
-		}
+		return _private(this).iFirstRenderedRowIndex;
 	};
 
 	/**
@@ -2599,7 +2886,13 @@ sap.ui.define([
 
 		for (var i = iStartColumn, l = iEndColumn; i < l; i++) {
 			if (aCols[i] && aCols[i].shouldRender()) {
-				iColsWidth += this._CSSSizeToPixel(aCols[i].getWidth());
+				var iColumnWidth = TableUtils.convertCSSSizeToPixel(aCols[i].getWidth());
+
+				if (iColumnWidth == null) {
+					iColumnWidth = TableUtils.Column.getMinColumnWidth();
+				}
+
+				iColsWidth += iColumnWidth;
 			}
 		}
 
@@ -2608,40 +2901,14 @@ sap.ui.define([
 	};
 
 	/**
-	 * Calculates the pixel value from a given CSS size and returns it with or without unit.
-	 * @param {string} sCSSSize
-	 * @param {boolean} bReturnWithUnit
-	 * @returns {string|number} Converted CSS value in pixel
-	 * @private
-	 */
-	Table.prototype._CSSSizeToPixel = function(sCSSSize, bReturnWithUnit) {
-		var sPixelValue = TableUtils.Column.getMinColumnWidth();
-
-		if (sCSSSize) {
-			if (jQuery.sap.endsWith(sCSSSize, "px")) {
-				sPixelValue = parseInt(sCSSSize, 10);
-			} else if (jQuery.sap.endsWith(sCSSSize, "em") || jQuery.sap.endsWith(sCSSSize, "rem")) {
-				sPixelValue = Math.ceil(parseFloat(sCSSSize) * this._getBaseFontSize());
-			}
-		}
-
-		if (bReturnWithUnit) {
-			return sPixelValue + "px";
-		} else {
-			return parseInt(sPixelValue, 10);
-		}
-	};
-
-	Table.prototype._getBaseFontSize = function() {
-		return this._iBaseFontSize;
-	};
-
-	/**
 	 * Triggered by the ResizeHandler if width/height changed.
 	 * @private
 	 */
-	Table.prototype._onTableResize = function() {
-		if (this._bInvalid || !this.getDomRef()) {
+	Table.prototype._onTableResize = function(oEvent) {
+		var iOldWidth = oEvent.oldSize.width;
+		var iNewWidth = oEvent.size.width;
+
+		if (this._bInvalid || !this.getDomRef() || iOldWidth === iNewWidth) {
 			return;
 		}
 
@@ -2656,35 +2923,15 @@ sap.ui.define([
 		if (Device.browser.chrome && window.devicePixelRatio !== this._nDevicePixelRatio) {
 			this._nDevicePixelRatio = window.devicePixelRatio;
 			this._updateTableSizes(TableUtils.RowsUpdateReason.Zoom);
+			this._adjustOutlineOffset();
 		}
 	};
 
-	Table.prototype._handleRowCountModeAuto = function(iTableAvailableSpace, sReason) {
-		iTableAvailableSpace = iTableAvailableSpace || this._determineAvailableSpace();
-
-		var oBinding = this.getBinding("rows");
-		var iRows = this._calculateRowsToDisplay(iTableAvailableSpace);
-
-		if (oBinding && this.getRows().length > 0) {
-			return this._updateRows(iRows, sReason);
+	Table.prototype._adjustOutlineOffset = function(){
+		if (window.devicePixelRatio < 1) {
+			this.addStyleClass("sapUiTableZoomout");
 		} else {
-			var bReturn = !this._mTimeouts.handleRowCountModeAutoAdjustRows;
-			var that = this;
-
-			if (iTableAvailableSpace) {
-				this._setRowContentHeight(iTableAvailableSpace);
-			}
-
-			this._mTimeouts.handleRowCountModeAutoAdjustRows = this._mTimeouts.handleRowCountModeAutoAdjustRows || window.setTimeout(function() {
-				if (!that._updateRows(iRows, sReason)) {
-					// table sizes were not updated by AdjustRows
-					that._updateTableSizes(sReason, false, true);
-				}
-
-				delete that._mTimeouts.handleRowCountModeAutoAdjustRows;
-			}, 0);
-
-			return bReturn;
+			this.removeStyleClass("sapUiTableZoomout");
 		}
 	};
 
@@ -2692,7 +2939,7 @@ sap.ui.define([
 	 * disables text selection on the document (disabled fro Dnd)
 	 * @private
 	 */
-	Table.prototype._disableTextSelection = function (oElement) {
+	Table.prototype._disableTextSelection = function(oElement) {
 		// prevent text selection
 		jQuery(oElement || document.body).
 			attr("unselectable", "on").
@@ -2701,7 +2948,7 @@ sap.ui.define([
 				"-webkit-user-select": "none",
 				"user-select": "none"
 			}).
-			bind("selectstart", function(oEvent) {
+			on("selectstart", function(oEvent) {
 				oEvent.preventDefault();
 				return false;
 			});
@@ -2711,7 +2958,7 @@ sap.ui.define([
 	 * enables text selection on the document (disabled fro Dnd)
 	 * @private
 	 */
-	Table.prototype._enableTextSelection = function (oElement) {
+	Table.prototype._enableTextSelection = function(oElement) {
 		jQuery(oElement || document.body).
 			attr("unselectable", "off").
 			css({
@@ -2719,27 +2966,7 @@ sap.ui.define([
 				"-webkit-user-select": "",
 				"user-select": ""
 			}).
-			unbind("selectstart");
-	};
-
-	/**
-	 * clears the text selection on the document (disabled fro Dnd)
-	 * @private
-	 */
-	Table.prototype._clearTextSelection = function () {
-		if (window.getSelection) {
-		  if (window.getSelection().empty) {  // Chrome
-			window.getSelection().empty();
-		  } else if (window.getSelection().removeAllRanges) {  // Firefox
-			window.getSelection().removeAllRanges();
-		  }
-		} else if (document.selection && document.selection.empty) {  // IE?
-			try {
-				document.selection.empty();
-			} catch (ex) {
-				// ignore error to as a workaround for bug in IE8
-			}
-		}
+			off("selectstart");
 	};
 
 	// =============================================================================
@@ -2758,7 +2985,7 @@ sap.ui.define([
 	Table.prototype._findAndfireCellEvent = function(fnFire, oEvent, fnContextMenu) {
 		var $target = jQuery(oEvent.target);
 		// find out which cell has been clicked
-		var $cell = $target.closest("td.sapUiTableTd");
+		var $cell = $target.closest(".sapUiTableDataCell");
 		var sId = $cell.attr("id");
 		var aMatches = /.*-row(\d*)-col(\d*)/i.exec(sId);
 		var bCancel = false;
@@ -2770,13 +2997,8 @@ sap.ui.define([
 			var oRow = this.getRows()[iRow];
 			var oCell = oRow && oRow.getCells()[iCol];
 			var iRealRowIndex = oRow && oRow.getIndex();
-			var sColId = oCell.data("sap-ui-colid");
-
-			var oRowBindingContext;
-			if (this.getBindingInfo("rows")) {
-				oRowBindingContext = oRow.getBindingContext(this.getBindingInfo("rows").model);
-			}
-
+			var sColId = Column.ofCell(oCell).getId();
+			var oRowBindingContext = oRow.getRowBindingContext();
 			var mParams = {
 				rowIndex: iRealRowIndex,
 				columnIndex: iCol,
@@ -2797,29 +3019,23 @@ sap.ui.define([
 	Table.prototype.getFocusDomRef = function() {
 		this._getKeyboardExtension().initItemNavigation();
 
-		// Focus is handled by the item navigation. It's not the root element of the table which may get the focus but
-		// the last focused column header or cell.
-		var oFocusedItemInfo = TableUtils.getFocusedItemInfo(this);
-		if (oFocusedItemInfo) {
-			return oFocusedItemInfo.domRef || Control.prototype.getFocusDomRef.apply(this, arguments);
+		// The element that should get the focus is not the root element of the table, but the last focused column header or cell, the overlay, or
+		// the NoData element.
+
+		if (this.getShowOverlay()) {
+			return this.getDomRef("overlay");
 		}
 
-		return null;
-	};
+		if (TableUtils.isNoDataVisible(this)) {
+			return this.getDomRef("noDataCnt");
+		}
 
+		var oFocusedItemInfo = TableUtils.getFocusedItemInfo(this);
+		if (oFocusedItemInfo && oFocusedItemInfo.domRef) {
+			return oFocusedItemInfo.domRef;
+		}
 
-	// =============================================================================
-	// ROW SELECTION
-	// =============================================================================
-
-	/**
-	 *
-	 * @param {int} iRowIndex
-	 * @returns {boolean}
-	 * @private
-	 */
-	Table.prototype._isRowSelectable = function(iRowIndex) {
-		return iRowIndex >= 0 && iRowIndex < this._getTotalRowCount();
+		return Control.prototype.getFocusDomRef.apply(this, arguments);
 	};
 
 	// =============================================================================
@@ -2829,31 +3045,27 @@ sap.ui.define([
 	/**
 	 * Pushes the sorted column to array.
 	 *
-	 * @param {sap.ui.table.Column} oColumn
-	 *         column to be sorted
+	 * @param {sap.ui.table.Column} oColumn Column to be sorted
 	 * @param {Boolean} bAdd Set to true to add the new sort criterion to the existing sort criteria
-	 * @type sap.ui.table.Table
 	 * @private
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
-
 	Table.prototype.pushSortedColumn = function(oColumn, bAdd) {
-
 		if (!bAdd) {
 			this._aSortedColumns = [];
 		}
-
-		this._aSortedColumns.push(oColumn);
-
+		if (this._aSortedColumns.indexOf(oColumn) === -1) {
+			this._aSortedColumns.push(oColumn);
+		}
 	};
 
 	/**
-	 * Gets sorted columns in the order of which the sort API at the table or column was called.
-	 * Sorting on binding level is not reflected here.
+	 * Gets the sorted columns in the order in which sorting was performed through the {@link sap.ui.table.Table#sort} method and menus.
+	 * Does not reflect sorting at binding level or the columns sort visualization set with {@link sap.ui.table.Column#setSorted} and
+	 * {@link sap.ui.table.Column#setSortOrder}.
 	 *
-	 * @returns Array of sorted columns
 	 * @see sap.ui.table.Table#sort
-	 * @see sap.ui.table.Column#sort
+	 * @returns {sap.ui.table.Column[]} Array of sorted columns
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -2865,12 +3077,9 @@ sap.ui.define([
 	/**
 	 * Sorts the given column ascending or descending.
 	 *
-	 * @param {sap.ui.table.Column | undefined} oColumn
-	 *         column to be sorted or undefined to clear sorting
-	 * @param {sap.ui.table.SortOrder} oSortOrder
-	 *         sort order of the column (if undefined the default will be ascending)
+	 * @param {sap.ui.table.Column | undefined} oColumn Column to be sorted or undefined to clear sorting
+	 * @param {sap.ui.table.SortOrder} oSortOrder Sort order of the column (if undefined the default will be ascending)
 	 * @param {Boolean} bAdd Set to true to add the new sort criterion to the existing sort criteria
-	 * @type sap.ui.table.Table
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -2882,7 +3091,7 @@ sap.ui.define([
 				this._aSortedColumns[i].setSorted(false);
 			}
 
-			var oBinding = this.getBinding("rows");
+			var oBinding = this.getBinding();
 			if (oBinding) {
 				oBinding.sort();
 			}
@@ -2890,25 +3099,29 @@ sap.ui.define([
 			this._aSortedColumns = [];
 		}
 
-		if (jQuery.inArray(oColumn, this.getColumns()) >= 0) {
+		if (this.getColumns().indexOf(oColumn) >= 0) {
 			oColumn.sort(oSortOrder === SortOrder.Descending, bAdd);
 		}
 	};
 
 
 	/**
-	 * Filter the given column by the given value.
+	 * Filters a column by a value.
+	 * If no filter value is passed, the filter value equals an empty string, and the filter for this column is removed.
 	 *
-	 * @param {sap.ui.table.Column} oColumn
-	 *         column to be filtered
-	 * @param {string} sValue
-	 *         filter value as string (will be converted)
-	 * @type sap.ui.table.Table
+	 * @param {sap.ui.table.Column} oColumn Column to be filtered
+	 * @param {string} [sValue] Filter value as string (will be converted)
+	 * @throws {Error} If the filter value is not a string
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.filter = function(oColumn, sValue) {
-		if (jQuery.inArray(oColumn, this.getColumns()) >= 0) {
+		if (this.getColumns().indexOf(oColumn) >= 0) {
+			if (sValue == null) {
+				sValue = "";
+			} else if (typeof sValue !== "string") {
+				throw new Error("The filter value is not a string");
+			}
 			oColumn.filter(sValue);
 		}
 	};
@@ -2930,30 +3143,47 @@ sap.ui.define([
 			return;
 		}
 
-		// retrieve tooltip and aria texts only once and pass them to the rows _updateSelection function
-		var mTooltipTexts = this._getAccExtension().getAriaTextsForSelectionMode(true);
-
-		// check whether the row can be clicked to change the selection
-		var bSelectOnCellsAllowed = TableUtils.isRowSelectionAllowed(this);
+		var mRenderConfig = this._getSelectionPlugin().getRenderConfig();
+		var sSelectAllResourceTextID;
+		var sSelectAllText;
+		var $SelectAll = this.$("selall");
 
 		// trigger the rows to update their selection
 		var aRows = this.getRows();
+
 		for (var i = 0; i < aRows.length; i++) {
 			var oRow = aRows[i];
-			oRow._updateSelection(this, mTooltipTexts, bSelectOnCellsAllowed);
+			oRow._updateSelection();
 		}
-		// update internal property to reflect the correct index
-		this.setProperty("selectedIndex", this.getSelectedIndex(), true);
 
-		if (TableUtils.hasSelectAll(this)) {
-			var $SelectAll = this.$("selall");
+		if (!mRenderConfig.headerSelector.visible) {
+			return;
+		}
+
+		if (mRenderConfig.headerSelector.type === "toggle") {
 			var bAllRowsSelected = TableUtils.areAllRowsSelected(this);
 
 			$SelectAll.toggleClass("sapUiTableSelAll", !bAllRowsSelected);
 			this._getAccExtension().setSelectAllState(bAllRowsSelected);
 
+			sSelectAllResourceTextID = bAllRowsSelected ? "TBL_DESELECT_ALL" : "TBL_SELECT_ALL";
+		} else if (mRenderConfig.headerSelector.type === "clear") {
+			$SelectAll.toggleClass("sapUiTableSelAllDisabled", !mRenderConfig.headerSelector.enabled);
+			sSelectAllResourceTextID = "TBL_DESELECT_ALL";
+
+			if (mRenderConfig.headerSelector.enabled) {
+				$SelectAll.removeAttr("aria-disabled");
+			} else {
+				$SelectAll.attr("aria-disabled", "true");
+			}
+		}
+
+		if (sSelectAllResourceTextID) {
+			sSelectAllText = TableUtils.getResourceText(sSelectAllResourceTextID);
 			if (this._getShowStandardTooltips()) {
-				$SelectAll.attr('title', TableUtils.getResourceText(bAllRowsSelected ? "TBL_DESELECT_ALL" : "TBL_SELECT_ALL"));
+				$SelectAll.attr('title', sSelectAllText);
+			} else if (mRenderConfig.headerSelector.type === "toggle") {
+				this.getDomRef("ariaselectall").innerText = sSelectAllText;
 			}
 		}
 	};
@@ -2972,18 +3202,24 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype._onSelectionChanged = function(oEvent) {
+		var oSelectionPlugin = this._getSelectionPlugin();
 		var aRowIndices = oEvent.getParameter("rowIndices");
 		var bSelectAll = oEvent.getParameter("selectAll");
-		var iRowIndex = this._iSourceRowIndex !== undefined ? this._iSourceRowIndex : this.getSelectedIndex();
+		var iRowIndex = this._iSourceRowIndex !== undefined ? this._iSourceRowIndex : oSelectionPlugin.getSelectedIndex();
+
 		this._updateSelection();
 
-		this.fireRowSelectionChange({
-			rowIndex: iRowIndex,
-			rowContext: this.getContextByIndex(iRowIndex),
-			rowIndices: aRowIndices,
-			selectAll: bSelectAll,
-			userInteraction: this._iSourceRowIndex !== undefined
-		});
+		// If a selection plugin is applied to the table, the "rowSelectionChange" event should not be fired.
+		if (!this._hasSelectionPlugin()) {
+			this.setProperty("selectedIndex", oSelectionPlugin.getSelectedIndex(), true);
+			this.fireRowSelectionChange({
+				rowIndex: iRowIndex,
+				rowContext: this.getContextByIndex(iRowIndex),
+				rowIndices: aRowIndices,
+				selectAll: bSelectAll,
+				userInteraction: this._iSourceRowIndex !== undefined
+			});
+		}
 	};
 
 	/**
@@ -2996,68 +3232,87 @@ sap.ui.define([
 	 * the currently visible scroll area.
 	 *
 	 * @param {int} iIndex Index of the row to return the context from.
-	 * @type object
+	 * @returns {sap.ui.model.Context | null} The context at this index or null
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.getContextByIndex = function(iIndex) {
-		// TODO: ODataListBinding needs to make sure to prevent loading multiple times
-		// index must not be smaller than 0! otherwise the ODataModel fails
-		var oBinding = this.getBinding("rows");
-		return iIndex >= 0 && oBinding ? oBinding.getContexts(iIndex, 1)[0] : null;
+		var oBinding = this.getBinding();
+		return iIndex >= 0 && oBinding ? oBinding.getContexts(iIndex, 1, 0, true)[0] : null;
 	};
 
-	/*
-	 * @see JSDoc generated by SAPUI5 control API generator
+	// =============================================================================
+	// SELECTION API
+	// =============================================================================
+
+	/**
+	 * Retrieves the lead selection index.
+	 *
+	 * @returns {int} Currently Selected Index.
+	 * @throws {Error} If a selection plugin is applied
+	 * @public
+	 * @deprecated As of version 1.69, replaced by {@link sap.ui.table.Table#getSelectedIndices}
 	 */
 	Table.prototype.getSelectedIndex = function() {
-		return this._oSelection.getLeadSelectedIndex();
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#getSelectedIndex must not be called if a selection plugin is applied.");
+		}
+
+		return this._getSelectionPlugin().getSelectedIndex();
 	};
 
-	/*
-	 * @see JSDoc generated by SAPUI5 control API generator
+	/**
+	 * Sets the selected index. The previous selection is removed.
+	 *
+	 * @param {int} iIndex The index to select
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
+	 * @throws {Error} If a selection plugin is applied
+	 * @public
 	 */
 	Table.prototype.setSelectedIndex = function(iIndex) {
-		if (iIndex === -1) {
-			//If Index eq -1 no item is selected, therefore clear selection is called
-			//SelectionModel doesn't know that -1 means no selection
-			this.clearSelection();
-		} else {
-			this._oSelection.setSelectionInterval(iIndex, iIndex);
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#setSelectedIndex must not be called if a selection plugin is applied.");
 		}
+
+		this._getSelectionPlugin().setSelectedIndex(iIndex);
 		return this;
 	};
 
 	/**
 	 * Removes complete selection.
 	 *
-	 * @type sap.ui.table.Table
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
+	 * @throws {Error} If a selection plugin is applied
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.clearSelection = function() {
-		this._oSelection.clearSelection();
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#clearSelection must not be called if a selection plugin is applied.");
+		}
+
+		this._getSelectionPlugin().clearSelection();
 		return this;
 	};
 
 	/**
-	 * Add all rows to the selection.
+	 * Adds all rows to the selection.
 	 * Please note that for server based models like OData the indices which are considered to be selected might not
 	 * be available at the client yet. Calling getContextByIndex might not return a result but trigger a roundtrip
 	 * to request this single entity.
 	 *
-	 * @returns sap.ui.table.Table
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
+	 * @throws {Error} If a selection plugin is applied
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.selectAll = function() {
-		if (!TableUtils.hasSelectAll(this)) {
-			return this;
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#selectAll must not be called if a selection plugin is applied.");
 		}
 
-		var oBinding = this.getBinding("rows");
-		if (oBinding) {
-			this._oSelection.selectAll(this._getTotalRowCount() - 1);
+		if (TableUtils.hasSelectAll(this)) {
+			this._getSelectionPlugin().selectAll();
 		}
 
 		return this;
@@ -3066,81 +3321,91 @@ sap.ui.define([
 	/**
 	 * Zero-based indices of selected items, wrapped in an array. An empty array means "no selection".
 	 *
-	 * @returns int[]
+	 * @returns {int[]} Selected indices
+	 * @throws {Error} If a selection plugin is applied
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.getSelectedIndices = function() {
-		return this._oSelection.getSelectedIndices();
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#getSelectedIndices must not be called if a selection plugin is applied.");
+		}
+
+		return this._getSelectionPlugin().getSelectedIndices();
 	};
 
 	/**
-	 * Adds the given selection interval to the selection. In case of single selection the "indexTo" value will be used for as selected index.
+	 * Adds the given selection interval to the selection. In case of a single selection, only <code>iIndexTo</code> is added to the selection.
 	 *
-	 * @param {int} iIndexFrom
-	 *         Index from which .
-	 * @param {int} iIndexTo
-	 *         Indices of the items that shall additionally be selected.
-	 * @type sap.ui.table.Table
+	 * @param {int} iIndexFrom Index from which the selection starts
+	 * @param {int} iIndexTo Index up to which to select
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
+	 * @throws {Error} If a selection plugin is applied
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.addSelectionInterval = function(iIndexFrom, iIndexTo) {
-		if (this.getSelectionMode() === library.SelectionMode.None) {
-			return this;
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#addSelectionInterval must not be called if a selection plugin is applied.");
 		}
 
-		this._oSelection.addSelectionInterval(iIndexFrom, iIndexTo);
+		this._getSelectionPlugin().addSelectionInterval(iIndexFrom, iIndexTo);
 		return this;
 	};
 
 	/**
-	 * Sets the given selection interval as selection. In case of single selection the "indexTo" value will be used for as selected index.
+	 * Sets the given selection interval as selection. In case of a single selection, only <code>iIndexTo</code> is selected.
 	 *
-	 * @param {int} iIndexFrom
-	 *         Index from which .
-	 * @param {int} iIndexTo
-	 *         Indices of the items that shall additionally be selected.
-	 * @type sap.ui.table.Table
+	 * @param {int} iIndexFrom Index from which the selection starts
+	 * @param {int} iIndexTo Index up to which to select
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
+	 * @throws {Error} If a selection plugin is applied
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.setSelectionInterval = function(iIndexFrom, iIndexTo) {
-		if (this.getSelectionMode() === library.SelectionMode.None) {
-			return this;
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#setSelectionInterval must not be called if a selection plugin is applied.");
 		}
 
-		this._oSelection.setSelectionInterval(iIndexFrom, iIndexTo);
+		this._getSelectionPlugin().setSelectionInterval(iIndexFrom, iIndexTo);
 		return this;
 	};
 
 	/**
-	 * Removes the given selection interval from the selection. In case of single selection this call removeSelectedIndex with the "indexTo" value.
+	 * Removes the given selection interval from the selection. In case of single selection, only <code>iIndexTo</code> is removed from the selection.
 	 *
-	 * @param {int} iIndexFrom
-	 *         Index from which .
-	 * @param {int} iIndexTo
-	 *         Indices of the items that shall additionally be selected.
-	 * @type sap.ui.table.Table
+	 * @param {int} iIndexFrom Index from which the deselection should start
+	 * @param {int} iIndexTo Index up to which to deselect
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
+	 * @throws {Error} If a selection plugin is applied
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.removeSelectionInterval = function(iIndexFrom, iIndexTo) {
-		this._oSelection.removeSelectionInterval(iIndexFrom, iIndexTo);
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#removeSelectionInterval must not be called if a selection plugin is applied.");
+		}
+
+		this._getSelectionPlugin().removeSelectionInterval(iIndexFrom, iIndexTo);
 		return this;
 	};
 
 	/**
-	 * Returns whether the given index is selected.
+	 * Checks whether an index is selected.
 	 *
-	 * @param {int} iIndex
-	 *         Index which is checked for selection state.
-	 * @type boolean
+	 * @param {int} iIndex Index to check for selection
+	 * @returns {boolean} Whether the index is selected
+	 * @throws {Error} If a selection plugin is applied
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	Table.prototype.isIndexSelected = function(iIndex) {
-		return this._oSelection.isSelectedIndex(iIndex);
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#isIndexSelected must not be called if a selection plugin is applied.");
+		}
+
+		return this._getSelectionPlugin().isIndexSelected(iIndex);
 	};
 
 	// =============================================================================
@@ -3164,7 +3429,7 @@ sap.ui.define([
 		if (oGroupByColumn instanceof Column && oGroupByColumn !== oOldGroupByColumn) {
 
 			// check for column being part of the columns aggregation
-			if (jQuery.inArray(oGroupByColumn, this.getColumns()) === -1) {
+			if (this.getColumns().indexOf(oGroupByColumn) === -1) {
 				throw new Error("Column has to be part of the columns aggregation!");
 			}
 
@@ -3195,12 +3460,21 @@ sap.ui.define([
 		}
 
 		// set the new group by column (TODO: undefined doesn't work!)
-		return this.setAssociation("groupBy", oGroupByColumn);
+		this.setAssociation("groupBy", oGroupByColumn);
+		TableUtils.Grouping.setupExperimentalGrouping(this);
+
+		return this;
 	};
 
+	/**
+	 * Get the binding object for a specific aggregation/property.
+	 *
+	 * @param {string} [sName="rows"] Name of the property or aggregation
+	 * @return {sap.ui.model.Binding} The binding for the given name
+	 * @public
+	 */
 	Table.prototype.getBinding = function(sName) {
-		TableUtils.Grouping.setupExperimentalGrouping(this);
-		return Element.prototype.getBinding.call(this, [sName || "rows"]);
+		return Control.prototype.getBinding.call(this, sName == null ? "rows" : sName);
 	};
 
 	/*
@@ -3215,7 +3489,11 @@ sap.ui.define([
 			oGroupedByColumn.setGrouped(bEnableGrouping);
 		}
 
-		TableUtils.Grouping.resetExperimentalGrouping(this);
+		if (bEnableGrouping) {
+			TableUtils.Grouping.setupExperimentalGrouping(this);
+		} else {
+			TableUtils.Grouping.resetExperimentalGrouping(this);
+		}
 
 		// update the column headers
 		this._invalidateColumnMenus();
@@ -3251,12 +3529,12 @@ sap.ui.define([
 	};
 
 	/**
-	 * In contrast to the function <code>getFixedColumnCount</code> which returns the value of the property <code>fixedColumnCount</code>, this function
-	 * returns the actual fixed column count computed based on the table width.
+	 * In contrast to the function <code>getFixedColumnCount</code> which returns the value of the property
+	 * <code>fixedColumnCount</code>, this function returns the actual fixed column count computed based on the column
+	 * spans of the header, the width of the table and the width of the columns.
 	 *
-	 * <b>Note:</b> The computed column count is only available after the table is fully rendered.
-	 *
-	 * @returns {int} The actual fixed column count computed based on the table width.
+	 * @returns {int} The actual fixed column count computed based on the column spans of the header, the width of the
+	 * table and the width of the columns.
 	 * @protected
 	 */
 	Table.prototype.getComputedFixedColumnCount = function() {
@@ -3264,48 +3542,60 @@ sap.ui.define([
 			return 0;
 		}
 
-		return this.getFixedColumnCount();
+		return this._getSpanBasedComputedFixedColumnCount();
+	};
+
+	/**
+	 * Returns the fixed column count computed based on the column spans of the header.
+	 *
+	 * @returns {int} The fixed column count computed based on the column spans of the header.
+	 * @private
+	 */
+	Table.prototype._getSpanBasedComputedFixedColumnCount = function() {
+		if (_private(this).iComputedFixedColumnCount === null) {
+			var aCols = this.getColumns();
+			var oColumn;
+			var iFixedColumnCount = this.getFixedColumnCount();
+
+			for (var i = iFixedColumnCount - 1; i >= 0; i--) {
+				oColumn = aCols[i];
+				if (oColumn) {
+					iFixedColumnCount = Math.max(iFixedColumnCount, oColumn.getIndex() + TableUtils.Column.getHeaderSpan(oColumn));
+					break;
+				}
+			}
+			_private(this).iComputedFixedColumnCount = Math.min(iFixedColumnCount, aCols.length);
+		}
+
+		return _private(this).iComputedFixedColumnCount;
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
-	Table.prototype.setFixedColumnCount = function(iFixedColumnCount, bSuppressInvalidate) {
+	Table.prototype.setFixedColumnCount = function(iFixedColumnCount) {
+		this.setProperty("fixedColumnCount", iFixedColumnCount);
+		this._invalidateComputedFixedColumnCount();
 
 		var aCols = this.getColumns();
-
-		// There may be invisible columns and the last visible fixed column may have a colspan
-		// 1. Find the last visible fixed column
-		// 2. Check if it has a column span
-		// 3. Adjust iFixedColumnCount, if needed
-		var oColumn,
-			i;
-
-		for (i = iFixedColumnCount - 1; i >= 0; i--) {
-			oColumn = aCols[i];
-			if (oColumn && oColumn.getVisible()) {
-				iFixedColumnCount = Math.max(iFixedColumnCount, oColumn.getIndex() + TableUtils.Column.getHeaderSpan(oColumn));
-				break;
-			}
-		}
-
+		var oColumn;
 		//Set current width as fixed width for cols
 		var $ths = this.$().find(".sapUiTableCtrlFirstCol > th");
-		for (i = iFixedColumnCount - 1; i >= 0; i--) {
+
+		for (var i = this._getSpanBasedComputedFixedColumnCount() - 1; i >= 0; i--) {
 			oColumn = aCols[i];
 			if (oColumn && TableUtils.isVariableWidth(oColumn.getWidth())) {
 				// remember the current column width for the next rendering
 				oColumn._iFixWidth = $ths.filter("[data-sap-ui-headcolindex='" + oColumn.getIndex() + "']").width();
 			}
 		}
-		this.setProperty("fixedColumnCount", iFixedColumnCount, bSuppressInvalidate);
 
-		// call collectTableSizes to determine whether the number of fixed columns can be displayed at all
-		// this is required to avoid flickering of the table in IE if the fixedColumnCount must be adjusted
-		this._collectTableSizes();
+		this._collectTableSizes(); // Avoid double rendering if the fixed column count needs to be adjusted.
+
 		if (this.getEnableColumnFreeze()) {
 			this._invalidateColumnMenus();
 		}
+
 		return this;
 	};
 
@@ -3313,45 +3603,58 @@ sap.ui.define([
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.setFixedRowCount = function(iFixedRowCount) {
-		if (!(parseInt(iFixedRowCount, 10) >= 0)) {
-			jQuery.sap.log.error("Number of fixed rows must be greater or equal 0", this);
+		if (!(parseInt(iFixedRowCount) >= 0)) {
+			Log.error("Number of fixed rows must be greater or equal 0", this);
 			return this;
 		}
 
-		if ((iFixedRowCount + this.getFixedBottomRowCount()) < this.getVisibleRowCount()) {
-			this.setProperty("fixedRowCount", iFixedRowCount);
-			this._updateBindingContexts();
-		} else {
-			jQuery.sap.log.error("Table '" + this.getId() + "' fixed rows('" + (iFixedRowCount + this.getFixedBottomRowCount()) + "') must be smaller than numberOfVisibleRows('" + this.getVisibleRowCount() + "')", this);
+		if ((iFixedRowCount + this.getFixedBottomRowCount()) >= this.getVisibleRowCount()) {
+			Log.error("Table '" + this.getId() + "' fixed rows('" + (iFixedRowCount + this.getFixedBottomRowCount()) + "') must be smaller than"
+					  + " numberOfVisibleRows('" + this.getVisibleRowCount() + "')", this);
+			return this;
 		}
-		return this;
+
+		if (this.getRowMode()) {
+			Log.warning("If the \"rowMode\" aggregation is set, setting the \"fixedRowCount\" has no effect");
+			return this.setProperty("fixedRowCount", iFixedRowCount, true);
+		}
+
+		return this.setProperty("fixedRowCount", iFixedRowCount);
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.setFixedBottomRowCount = function(iFixedRowCount) {
-		if (!(parseInt(iFixedRowCount, 10) >= 0)) {
-			jQuery.sap.log.error("Number of fixed bottom rows must be greater or equal 0", this);
+		if (!(parseInt(iFixedRowCount) >= 0)) {
+			Log.error("Number of fixed bottom rows must be greater or equal 0", this);
 			return this;
 		}
 
-		if ((iFixedRowCount + this.getFixedRowCount()) < this.getVisibleRowCount()) {
-			this.setProperty("fixedBottomRowCount", iFixedRowCount);
-			this._updateBindingContexts();
-		} else {
-			jQuery.sap.log.error("Table '" + this.getId() + "' fixed rows('" + (iFixedRowCount + this.getFixedRowCount()) + "') must be smaller than numberOfVisibleRows('" + this.getVisibleRowCount() + "')", this);
+		if ((iFixedRowCount + this.getFixedRowCount()) >= this.getVisibleRowCount()) {
+			Log.error("Table '" + this.getId() + "' fixed rows('" + (iFixedRowCount + this.getFixedRowCount()) + "') must be smaller than"
+					  + " numberOfVisibleRows('" + this.getVisibleRowCount() + "')", this);
+			return this;
 		}
-		return this;
+
+		if (this.getRowMode()) {
+			Log.warning("If the \"rowMode\" aggregation is set, setting the \"iFixedBottomRowCount\" has no effect");
+			return this.setProperty("fixedBottomRowCount", iFixedRowCount, true);
+		}
+
+		return this.setProperty("fixedBottomRowCount", iFixedRowCount);
 	};
 
 	/**
-	 * Sets the threshold value, which will be added to all data requests in
-	 * case the Table is bound against an OData service.
+	 * Sets the threshold value, which will be added to all data requests in case the Table is bound against an OData service.
+	 *
+	 * @param {int} iThreshold The threshold
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
-	Table.prototype.setThreshold = function (iThreshold) {
+	Table.prototype.setThreshold = function(iThreshold) {
 		this.setProperty("threshold", iThreshold, true);
+		return this;
 	};
 
 	/**
@@ -3376,8 +3679,21 @@ sap.ui.define([
 		return !!(oEvent && oEvent.originalEvent && oEvent.originalEvent.touches);
 	};
 
-	Table.prototype._getRowClone = function(iIndex) {
-		var oRowClone = new Row(this.getId() + "-rows" + "-row" + iIndex);
+	Table.prototype._getRowClone = function(vIndex) {
+		var bIndexIsNumber = typeof vIndex === "number";
+		var bRowIsPoolable = bIndexIsNumber;
+		var oRowClone = bRowIsPoolable ? this._aRowClones[vIndex] : null;
+
+		if (oRowClone && !oRowClone.bIsDestroyed) {
+			return oRowClone;
+		}
+
+		// No intact row clone at this index exists. Therefore, create a new row clone.
+		oRowClone = new Row(this.getId() + "-rows" + "-row" + (bIndexIsNumber ? vIndex : "-" + vIndex));
+
+		if (bRowIsPoolable) {
+			this._aRowClones[vIndex] = oRowClone;
+		}
 
 		// Add cells to the row clone.
 		var aColumns = this.getColumns();
@@ -3393,9 +3709,6 @@ sap.ui.define([
 		// Add the row actions to the row clone.
 		if (TableUtils.hasRowActions(this)) {
 			var oRowAction = this.getRowActionTemplate().clone();
-			oRowAction._setFixedLayout(true);
-			oRowAction._setCount(this.getRowActionCount());
-			oRowAction._setIconLabel(this.getId() + "-rowacthdr");
 			oRowClone.setAggregation("_rowAction", oRowAction, true);
 		}
 
@@ -3411,6 +3724,7 @@ sap.ui.define([
 
 	/**
 	 * Sets a marker to indicate that the rows aggregation is invalid and should be destroyed within the next cycle
+	 *
 	 * @private
 	 */
 	Table.prototype.invalidateRowsAggregation = function() {
@@ -3418,276 +3732,66 @@ sap.ui.define([
 	};
 
 	/**
-	 * Updates the rows aggregation and renders the rows.
-	 * As specified by <code>bUpdateUI</code>, also the row binding contexts and the table cells are updated.
+	 * Invalidates the cached computed fixed column count.
 	 *
-	 * @param {int} iNumberOfRows The number of rows to be updated.
-	 * @param {sap.ui.table.TableUtils.RowsUpdateReason|undefined} [sReason=undefined] The reason for updating the rows.
-	 * @param {boolean} [bUpdateUI=true] Whether the contexts and the cells should be updated.
-	 * @returns {boolean} Returns <code>true</code>, if the UI was updated.
 	 * @private
 	 */
-	Table.prototype._updateRows = function(iNumberOfRows, sReason, bUpdateUI) {
-		if (isNaN(iNumberOfRows)) {
-			return false;
-		}
+	Table.prototype._invalidateComputedFixedColumnCount = function() {
+		_private(this).iComputedFixedColumnCount = null;
+	};
 
-		if (bUpdateUI == null) {
-			bUpdateUI = true;
-		}
+	/**
+	 * Gets the base row height. This number is a pixel value and is used, for example, for layout and scrolling calculations.
+	 *
+	 * @returns {int} The base row height.
+	 * @private
+	 */
+	Table.prototype._getBaseRowHeight = function() {
+		var iBaseRowContentHeight = this._getRowMode().getBaseRowContentHeight();
 
-		// Create one additional row, for half-scrolled rows at the bottom.
-		if (TableUtils.isVariableRowHeightEnabled(this)) {
-			iNumberOfRows = iNumberOfRows + 1;
-		}
-
-		var i;
-		var aRows = this.getRows();
-		if (this._bRowAggregationInvalid && aRows.length > 0) {
-			this.destroyAggregation("rows", true);
-			aRows = [];
-		}
-
-		if (iNumberOfRows == aRows.length) {
-			return false;
-		}
-
-		// Remove rows from the aggregation if they are no longer required.
-		for (i = aRows.length - 1; i >= iNumberOfRows; i--) {
-			this.removeAggregation("rows", i, true).destroy();
-		}
-
-		if (TableUtils.isVariableRowHeightEnabled(this)) {
-			// One additional row was created for half-scrolled rows at the bottom.,
-			// this should not lead to an increase of the visibleRowCount defined by the user.
-			this.setProperty("visibleRowCount", iNumberOfRows - 1, true);
+		if (iBaseRowContentHeight > 0) {
+			return iBaseRowContentHeight + TableUtils.RowHorizontalFrameSize;
 		} else {
-			this.setProperty("visibleRowCount", iNumberOfRows, true);
+			return this._getDefaultRowHeight();
 		}
-
-		// this call might cause the cell (controls) to invalidate themselves and therefore also the table. It should be
-		// avoided to rerender the complete table since rendering of the rows is handled here. All child controls get
-		// rendered.
-		this._ignoreInvalidateOfChildControls = true;
-		var aContexts;
-		var oBindingInfo;
-		var sModelName;
-		var oBinding = this.getBinding("rows");
-
-		if (bUpdateUI) {
-			// set binding contexts for known rows
-			oBindingInfo = this.getBindingInfo("rows");
-			sModelName = oBindingInfo && oBindingInfo.model;
-			aContexts = this._getRowContexts(iNumberOfRows);
-
-			for (i = 0; i < aRows.length; i++) {
-				aRows[i].setRowBindingContext(aContexts[i], sModelName, oBinding);
-			}
-		}
-
-		if (aRows.length < iNumberOfRows) {
-			// clone rows and set binding context for them
-			for (i = aRows.length; i < iNumberOfRows; i++) {
-				// add new rows and set their binding contexts in the same run in order to avoid unnecessary context
-				// propagations.
-				var oClone = this._getRowClone(i);
-				if (bUpdateUI) {
-					oClone.setRowBindingContext(aContexts[i], sModelName, oBinding);
-				}
-				this.addAggregation("rows", oClone, true);
-				this._bRowAggregationInvalid = false;
-				if (bUpdateUI) {
-					// As long the clone is not yet in the aggregation setRowBindingContext will not process the following,
-					// therefore call it manually here.
-					oClone._updateTableCells(aContexts[i]);
-				}
-			}
-		}
-		this._ignoreInvalidateOfChildControls = false;
-
-		var bFireRowsUpdated = bUpdateUI && aContexts.length > 0;
-		return this._renderRows(sReason, bFireRowsUpdated);
 	};
 
 	/**
-	 * Renders the rows and their containers and writes the HTML to the DOM.
+	 * Gets the default row height in. This number is a pixel value.
 	 *
-	 * @param {sap.ui.table.TableUtils.RowsUpdateReason|undefined} [sReason=undefined] The reason why the rows need to be rendered.
-	 * @param {boolean} [bFireRowsUpdated=false] Whether the <code>_rowsUpdated</code> event should be fired after the HTML has been written.
-	 * @returns {boolean} Returns <code>true</code>, if rendering and writing to the DOM was performed.
-	 * @private
-	 */
-	Table.prototype._renderRows = function(sReason, bFireRowsUpdated) {
-		var bReturn = false;
-
-		bFireRowsUpdated = bFireRowsUpdated === true;
-
-		if (!this._bInvalid) {
-			var oTBody = this.getDomRef("tableCCnt");
-
-			if (this.getRows().length === 0 || !oTBody) {
-				return false;
-			}
-
-			this._detachEvents();
-
-			if (this.getVisibleRowCountMode() === VisibleRowCountMode.Auto) {
-				var oDomRef = this.getDomRef();
-				if (oDomRef) {
-					oDomRef.style.height = "0px";
-				}
-			}
-
-			// make sure to call rendering event delegates even in case of DOM patching
-			var oEvent = jQuery.Event("BeforeRendering");
-			oEvent.setMarked("renderRows");
-			oEvent.srcControl = this;
-			this._handleEvent(oEvent);
-
-			var oRM = new sap.ui.getCore().createRenderManager(),
-				oRenderer = this.getRenderer();
-
-			oRenderer.renderTableCCnt(oRM, this);
-			oRM.flush(oTBody, false, false);
-			oRM.destroy();
-
-			// make sure to call rendering event delegates even in case of DOM patching
-			oEvent = jQuery.Event("AfterRendering");
-			oEvent.setMarked("renderRows");
-			oEvent.srcControl = this;
-			this._handleEvent(oEvent);
-			bReturn = true;
-		}
-
-		if (bFireRowsUpdated && !this._bInvalid && this.getBinding("rows")) {
-			var that = this;
-			if (this._mTimeouts._rowsUpdated) {
-				window.clearTimeout(this._mTimeouts._rowsUpdated);
-			}
-			this._mTimeouts._rowsUpdated = window.setTimeout(function() {
-				that._fireRowsUpdated(sReason);
-			}, 0);
-		}
-
-		return bReturn;
-	};
-
-	/**
-	 * Determines the default row height.
+	 * @returns {int} The default row height.
 	 * @private
 	 */
 	Table.prototype._getDefaultRowHeight = function() {
-		var iRowContentHeight = this.getRowHeight();
-
-		if (iRowContentHeight > 0) {
-			return iRowContentHeight + TableUtils.ROW_HORIZONTAL_FRAME_SIZE;
-		} else {
-			var sContentDensity = TableUtils.getContentDensity(this);
-			return TableUtils.DEFAULT_ROW_HEIGHT[sContentDensity];
-		}
+		var sContentDensity = TableUtils.getContentDensity(this);
+		return TableUtils.DefaultRowHeight[sContentDensity];
 	};
 
 	/**
-	 * Determines and sets the height of tableCtrlCnt based upon the VisibleRowCountMode and other conditions.
-	 * @param {int} iHeight
+	 * Gets the default row content height. This number is a pixel value.
+	 *
+	 * @returns {int} The default row content height.
 	 * @private
 	 */
-	Table.prototype._setRowContentHeight = function(iHeight) {
-		iHeight = iHeight || 0;
-		var sVisibleRowCountMode = this.getVisibleRowCountMode();
-		var iVisibleRowCount = this.getVisibleRowCount();
-		var iDefaultRowHeight = this._getDefaultRowHeight();
-		var iMinVisibleRowCount = this.getMinAutoRowCount();
-		var iMinHeight;
-
-
-		if (sVisibleRowCountMode == VisibleRowCountMode.Interactive || sVisibleRowCountMode == VisibleRowCountMode.Fixed) {
-			if (this._iTableRowContentHeight && sVisibleRowCountMode == VisibleRowCountMode.Interactive) {
-				iMinHeight = iMinVisibleRowCount * iDefaultRowHeight;
-				if (!iHeight) {
-					iHeight = this._iTableRowContentHeight;
-				}
-			} else {
-				// Fixed or Interactive without RowContentHeight (Height was not yet adjusted by user)
-				iMinHeight = iVisibleRowCount * iDefaultRowHeight;
-				iHeight = iMinHeight;
-			}
-		} else if (sVisibleRowCountMode == VisibleRowCountMode.Auto) {
-			iMinHeight = iMinVisibleRowCount * iDefaultRowHeight;
-		}
-
-		var iRowContentHeight = Math.max(iHeight, iMinHeight);
-		if ((sVisibleRowCountMode == VisibleRowCountMode.Fixed && this.getRows().length == 0) || sVisibleRowCountMode != VisibleRowCountMode.Fixed) {
-			// when visibleRowCountMode is fixed, the content height is only required to be set if there are no rows. If rows are already created, the height
-			// is implicitly controlled by the total of row heights
-			this._iTableRowContentHeight = Math.floor(iRowContentHeight / iDefaultRowHeight) * iDefaultRowHeight;
-		} else {
-			this._iTableRowContentHeight = undefined;
-		}
-
-		if (TableUtils.isVariableRowHeightEnabled(this)) {
-			jQuery(this.getDomRef("tableCCnt")).css("height", iDefaultRowHeight * iVisibleRowCount + "px");
-		} else {
-			if ((sVisibleRowCountMode == VisibleRowCountMode.Fixed || sVisibleRowCountMode == VisibleRowCountMode.Interactive) && this.getRows().length > 0) {
-				jQuery(this.getDomRef("tableCtrlCnt")).css("height", "auto");
-			} else {
-				jQuery(this.getDomRef("tableCtrlCnt")).css("height", this._iTableRowContentHeight + "px");
-			}
-		}
-	};
-
-	/**
-	 * Determines the minimal row count for rowCountMode "auto".
-	 * @private
-	 */
-	Table.prototype._determineMinAutoRowCount = function() {
-		var iMinRowCount = this.getMinAutoRowCount();
-		if (this.getVisibleRowCountMode() == VisibleRowCountMode.Interactive && !this.bOutput) {
-			iMinRowCount = this.getVisibleRowCount() || iMinRowCount;
-		}
-		return iMinRowCount;
-	};
-
-	/**
-	 * Calculates the maximum rows to display within the table.
-	 * @private
-	 */
-	Table.prototype._calculateRowsToDisplay = function(iTableRowContentHeight) {
-		// Remember the last used value for the case when this function is called with undefined iTableRowContentHeight
-		// _iTableRowContentHeight is not updated during resize and can be used as a last resort only
-		this._iRowsToDisplayHeight = iTableRowContentHeight || this._iRowsToDisplayHeight || this._iTableRowContentHeight;
-		iTableRowContentHeight = this._iRowsToDisplayHeight;
-		var sVisibleRowCountMode = this.getVisibleRowCountMode();
-		var iCalculatedRowsToDisplay = 0;
-		if (sVisibleRowCountMode == VisibleRowCountMode.Fixed) {
-			// at least one row must be rendered in a table
-			iCalculatedRowsToDisplay = this.getVisibleRowCount() || 0;
-		} else if (sVisibleRowCountMode == VisibleRowCountMode.Interactive || sVisibleRowCountMode == VisibleRowCountMode.Auto) {
-			var iMinAutoRowCount = this._determineMinAutoRowCount();
-			var iDefaultRowHeight = this._getDefaultRowHeight();
-			if (!iDefaultRowHeight || !iTableRowContentHeight) {
-				iCalculatedRowsToDisplay = iMinAutoRowCount;
-			} else {
-				// Make sure that table does not grow to infinity
-				// Maximum height of the table is the height of the window minus two row height, reserved for header and footer.
-				var iAvailableSpace = Math.min(iTableRowContentHeight, 50000);
-				// the last content row height is iRowHeight - 1, therefore + 1 in the formula below:
-				// to avoid issues with having more fixed rows than visible row count, the number of visible rows must be
-				// adjusted.
-				var iRowCount = Math.floor(iAvailableSpace / iDefaultRowHeight);
-				iCalculatedRowsToDisplay = Math.max((this.getFixedRowCount() + this.getFixedBottomRowCount() + 1), Math.max(iMinAutoRowCount, iRowCount));
-			}
-		}
-
-		return Math.max(iCalculatedRowsToDisplay, 0);
+	Table.prototype._getDefaultRowContentHeight = function() {
+		var sContentDensity = TableUtils.getContentDensity(this);
+		return TableUtils.BaseSize[sContentDensity];
 	};
 
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.setShowNoData = function(bShowNoData) {
-		this.setProperty('showNoData', bShowNoData, true);
+		var bSuppressInvalidate = true;
+
+		if (this.getShowNoData() && bShowNoData === false && this.getRows().length === 0) {
+			// If the NoData text is disabled, but there is no data, the table needs to be invalidated to make sure that empty rows are rendered.
+			bSuppressInvalidate = false;
+		}
+
+		this.setProperty("showNoData", bShowNoData, bSuppressInvalidate);
 		this._updateNoData();
+
 		return this;
 	};
 
@@ -3695,15 +3799,20 @@ sap.ui.define([
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.setNoData = function(vNoData) {
-		var sNoDataText_Old = TableUtils.getNoDataText(this);
+		var sOldNoDataText = TableUtils.getNoDataText(this);
 		this.setAggregation("noData", vNoData, true);
-		var sNoDataText_New = TableUtils.getNoDataText(this);
-		// Avoid full table rerendering when only the text is changed
-		if (sNoDataText_Old != null && sNoDataText_New != null && sNoDataText_Old != sNoDataText_New) {
-			this.$("noDataMsg").text(sNoDataText_New);
+		var sNewNoDataText = TableUtils.getNoDataText(this);
+
+		// Avoid table re-rendering if only the text is changed. If the NoData text was, or will be a control, the table must be re-rendered.
+		if (sOldNoDataText != null && sNewNoDataText != null) {
+			// Old and new NoData texts are plain strings, therefore we are able to directly update the DOM in case of a text change.
+			if (sOldNoDataText !== sNewNoDataText) {
+				this.$("noDataMsg").text(sNewNoDataText);
+			}
 		} else {
 			this.invalidate();
 		}
+
 		return this;
 	};
 
@@ -3711,11 +3820,11 @@ sap.ui.define([
 	 * Creates a new {@link sap.ui.core.util.Export} object and fills row/column information from the table if not provided. For the cell content,
 	 * the column's "sortProperty" will be used (experimental!)
 	 *
-	 * <p><b>Please note: This method uses synchronous requests. Support and functioning ends with the support for synchronous requests in browsers.</b></p>
+	 * <p><b>Please note: This method uses synchronous requests. Support and functioning ends with the support for synchronous requests in
+	 * browsers.</b></p>
 	 *
 	 * @param {object} [mSettings] settings for the new Export, see {@link sap.ui.core.util.Export} <code>constructor</code>
 	 * @returns {sap.ui.core.util.Export} Export object
-	 *
 	 * @experimental Experimental because the property for the column/cell definitions (sortProperty) could change in future.
 	 * @deprecated As of 1.56, replaced by the <code>sap.ui.export</code> library.
 	 * @public
@@ -3726,7 +3835,7 @@ sap.ui.define([
 		mSettings = mSettings || {};
 
 		if (!mSettings.rows) {
-			var oBinding = this.getBinding("rows"),
+			var oBinding = this.getBinding(),
 				oBindingInfo = this.getBindingInfo("rows");
 
 			var aFilters = oBinding.aFilters.concat(oBinding.aApplicationFilters);
@@ -3798,12 +3907,11 @@ sap.ui.define([
 			}
 		}
 
-		var oBinding = this.getBinding("rows");
+		var oBinding = this.getBinding();
 		if (oBinding) {
 			if (aSorters.length > 0) {
 				oBinding.sort(aSorters);
 			}
-			this.refreshRows();
 		}
 	};
 
@@ -3812,37 +3920,28 @@ sap.ui.define([
 	 * @private
 	 */
 	Table.prototype._toggleSelectAll = function() {
-		if (!TableUtils.hasData(this)) {
+		if (!TableUtils.hasData(this) || this.getSelectionMode() !== SelectionMode.MultiToggle) {
 			return;
 		}
+
+		var oSelectionPlugin = this._getSelectionPlugin();
 
 		// in order to fire the rowSelectionChanged event, the SourceRowIndex mus be set to -1
 		// to indicate that the selection was changed by user interaction
 		if (TableUtils.areAllRowsSelected(this)) {
 			this._iSourceRowIndex = -1;
-			this.clearSelection();
+			oSelectionPlugin.clearSelection();
 		} else {
 			this._iSourceRowIndex = 0;
-			this.selectAll();
+			oSelectionPlugin.selectAll();
 		}
 		this._iSourceRowIndex = undefined;
 	};
 
-	/**
-	 *
-	 * @private
-	 */
-	Table.prototype._restoreAppDefaultsColumnHeaderSortFilter = function () {
-		var aColumns = this.getColumns();
-		jQuery.each(aColumns, function(iIndex, oColumn){
-			oColumn._restoreAppDefaults();
-		});
-	};
-
-	Table.prototype.setBusy = function (bBusy, sBusySection) {
+	Table.prototype.setBusy = function(bBusy, sBusySection) {
 		var bBusyChanged = this.getBusy() != bBusy;
 
-		sBusySection = "sapUiTableCnt";
+		sBusySection = "sapUiTableGridCnt";
 		var vReturn = Control.prototype.setBusy.call(this, bBusy, sBusySection);
 		if (bBusyChanged) {
 			this.fireBusyStateChanged({busy: bBusy});
@@ -3855,19 +3954,20 @@ sap.ui.define([
 	 * Avoids the request delays.
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
-	Table.prototype.setEnableBusyIndicator = function (bValue) {
+	Table.prototype.setEnableBusyIndicator = function(bValue) {
 		this.setProperty("enableBusyIndicator", bValue, true);
 		if (!bValue) {
 			this.setBusy(false);
 		}
+		return this;
 	};
 
 	/**
 	 *
 	 * @private
 	 */
-	Table.prototype._onBindingDataRequested = function (oEvent) {
-		if (oEvent.getSource() != this.getBinding("rows") || oEvent.getParameter("__simulateAsyncAnalyticalBinding")) {
+	Table.prototype._onBindingDataRequested = function(oEvent) {
+		if (oEvent.getSource() != this.getBinding() || oEvent.getParameter("__simulateAsyncAnalyticalBinding")) {
 			return;
 		}
 
@@ -3882,18 +3982,16 @@ sap.ui.define([
 			this.setBusy(true);
 		}
 
-		if (this._dataReceivedHandlerId != null) {
-			jQuery.sap.clearDelayedCall(this._dataReceivedHandlerId);
-			delete this._dataReceivedHandlerId;
-		}
+		clearTimeout(this._dataReceivedHandlerId);
+		delete this._dataReceivedHandlerId;
 	};
 
 	/**
 	 *
 	 * @private
 	 */
-	Table.prototype._onBindingDataReceived = function (oEvent) {
-		if (oEvent.getSource() != this.getBinding("rows") || oEvent.getParameter("__simulateAsyncAnalyticalBinding")) {
+	Table.prototype._onBindingDataReceived = function(oEvent) {
+		if (oEvent.getSource() != this.getBinding() || oEvent.getParameter("__simulateAsyncAnalyticalBinding")) {
 			return;
 		}
 
@@ -3901,20 +3999,21 @@ sap.ui.define([
 		this._bPendingRequest = false;
 
 		// The AnalyticalBinding updates the length after it fires dataReceived, therefore the total row count will not change here. Later,
-		// when the contexts are retrieved in Table#_getRowContexts, the AnalyticalBinding updates the length and Table#_updateTotalRowCount
+		// when the contexts are retrieved in Table#_getRowContexts, the AnalyticalBinding updates the length and Table#_adjustToTotalRowCount
 		// will be called again and actually perform the update.
-		this._updateTotalRowCount(true);
+		this._adjustToTotalRowCount();
 
 		if (!TableUtils.hasPendingRequests(this)) {
 			// This timer should avoid flickering of the busy indicator and unnecessary updates of NoData in case a request will be sent
 			// (dataRequested) immediately after the last response was received (dataReceived).
-			this._dataReceivedHandlerId = jQuery.sap.delayedCall(0, this, function() {
+			clearTimeout(this._dataReceivedHandlerId);
+			this._dataReceivedHandlerId = setTimeout(function() {
 				if (this.getEnableBusyIndicator()) {
 					this.setBusy(false);
 				}
 				this._updateNoData();
 				delete this._dataReceivedHandlerId;
-			});
+			}.bind(this), 0);
 		}
 	};
 
@@ -3930,29 +4029,11 @@ sap.ui.define([
 		this._bLargeDataScrolling = !!bLargeDataScrolling;
 	};
 
-	/**
-	 * Retrieves the number of selected entries.
-	 * @private
-	 */
-	Table.prototype._getSelectedIndicesCount = function () {
-		return this.getSelectedIndices().length;
-	};
-
-	Table.prototype._updateTableContent = function() {
-		TableUtils.Grouping.updateGroups(this);
-	};
-
 	/*
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.setRowActionTemplate = function(oTemplate) {
 		this.setAggregation("rowActionTemplate", oTemplate);
-
-		oTemplate = this.getRowActionTemplate();
-		if (oTemplate) {
-			oTemplate._setCount(this.getRowActionCount());
-		}
-
 		this.invalidateRowsAggregation();
 		return this;
 	};
@@ -3961,21 +4042,11 @@ sap.ui.define([
 	 * @see JSDoc generated by SAPUI5 control API generator
 	 */
 	Table.prototype.setRowActionCount = function(iCount) {
-		this.setProperty("rowActionCount", iCount);
+		if (typeof iCount === "number") {
+			iCount = Math.max(0, Math.min(iCount, 2));
+		}
 
-		iCount = this.getRowActionCount();
-		var oRowAction = this.getRowActionTemplate();
-		if (oRowAction) {
-			oRowAction._setCount(iCount);
-		}
-		var aRows = this.getRows();
-		for (var i = 0; i < aRows.length; i++) {
-			oRowAction = aRows[i].getAggregation("_rowAction");
-			if (oRowAction) {
-				oRowAction._setCount(iCount);
-			}
-		}
-		return this;
+		return this.setProperty("rowActionCount", iCount);
 	};
 
 	/*
@@ -3987,45 +4058,248 @@ sap.ui.define([
 		return this;
 	};
 
-	Table.prototype._validateRow = function(oRow) {
-		return oRow && oRow instanceof Row && oRow.getParent() === this;
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.addPlugin = function(oPlugin) {
+		this.addAggregation("plugins", oPlugin);
+
+		if (TableUtils.isA(oPlugin, "sap.ui.table.plugins.SelectionPlugin")) {
+			this._initSelectionPlugin();
+		}
+
+		return this;
+	};
+
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.insertPlugin = function(oPlugin, iIndex) {
+		this.insertAggregation("plugins", oPlugin, iIndex);
+
+		if (TableUtils.isA(oPlugin, "sap.ui.table.plugins.SelectionPlugin")) {
+			this._initSelectionPlugin();
+		}
+
+		return this;
+	};
+
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.removePlugin = function(oPlugin) {
+		var oRemovedPlugin = this.removeAggregation("plugins", oPlugin);
+
+		if (TableUtils.isA(oRemovedPlugin, "sap.ui.table.plugins.SelectionPlugin")) {
+			this._initSelectionPlugin();
+		}
+
+		return oRemovedPlugin;
+	};
+
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.removeAllPlugins = function() {
+		var aPlugins = this.removeAllAggregation("plugins");
+		this._initSelectionPlugin();
+		return aPlugins;
+	};
+
+	/*
+	 * @see JSDoc generated by SAPUI5 control API generator
+	 */
+	Table.prototype.destroyPlugins = function() {
+		this.destroyAggregation('plugins');
+		this._initSelectionPlugin();
+		return this;
 	};
 
 	/**
-	 * Returns the row to which the given cell belongs or <code>null</code>
-	 * if the given control is no direct child of a row of the table.
+	 * Gets the first plugin of a certain type.
 	 *
-	 * @param {sap.ui.core.Control} oCell The cell control
-	 * @returns {sap.ui.table.Row} The row to which the given cell belongs
+	 * @param {string} sType The type of the plugin.
+	 * @returns {sap.ui.table.plugins.SelectionPlugin|null} The first plugin of a certain type, or <code>null</code> if no plugin of this type exists.
 	 * @private
 	 */
-	Table.prototype.getRowForCell = function(oCell) { //TBD: Make it public if needed
-		if (oCell) {
-			var oRow = oCell.getParent();
-			if (this._validateRow(oRow)) {
-				return oRow;
+	Table.prototype.getPlugin = function(sType) {
+		if (typeof sType !== "string") {
+			return null;
+		}
+
+		var aPlugins = this.getPlugins();
+
+		for (var i = 0; i < aPlugins.length; i++) {
+			if (aPlugins[i].isA(sType)) {
+				return aPlugins[i];
 			}
 		}
+
 		return null;
 	};
 
 	/**
-	 * Returns the column to which the given cell belongs or <code>null</code>
-	 * if the given control is not connected with a visible column of the table.
+	 * Gets the selection plugin. If no selection plugin is applied to the table, a legacy selection plugin is returned.
 	 *
-	 * @param {sap.ui.core.Control} oCell The cell control
-	 * @returns {sap.ui.table.Column} The column to which the given cell belongs
+	 * @return {sap.ui.table.plugins.SelectionPlugin} The selection plugin.
 	 * @private
 	 */
-	Table.prototype.getColumnForCell = function(oCell) { //TBD: Make it public if needed
-		if (this.getRowForCell(oCell)) { // Ensures cell is part of some row of this table
-			var iIndex = oCell.data("sap-ui-colindex");
-			var aColumns = this.getColumns();
-			if (iIndex >= 0 && iIndex < aColumns.length) {
-				return aColumns[iIndex];
-			}
+	Table.prototype._getSelectionPlugin = function() {
+		var oSelectionPlugin = this._oSelectionPlugin || this._oLegacySelectionPlugin;
+
+		if (!oSelectionPlugin) {
+			// To avoid null checks everywhere if the selection plugin is accessed after destroying the table.
+			this._initLegacySelectionPlugin();
+			oSelectionPlugin = this._oLegacySelectionPlugin;
 		}
-		return null;
+
+		// Temporary fix for the Support Assistant hacks. Support Assistant should implement a selection plugin.
+		// TODO: Before we recommend to implement a selection plugin -> Complete BLI CPOUIFTEAMB-1464
+		if (typeof this._getSelectedIndicesCount === "function" && oSelectionPlugin.getSelectedCount !== this._getSelectedIndicesCount) {
+			oSelectionPlugin.getSelectedCount = this._getSelectedIndicesCount;
+			["isIndexSelected", "setSelectedIndex", "getSelectedIndex", "getSelectedIndices", "setSelectionInterval", "addSelectionInterval",
+			 "removeSelectionInterval", "selectAll", "clearSelection"].forEach(function(sMethodName) {
+				oSelectionPlugin[sMethodName] = this[sMethodName];
+			}.bind(this));
+		}
+
+		return oSelectionPlugin;
+	};
+
+	/**
+	 * Checks whether a selection plugin is applied to the table. Returns <code>false</code> if no selection plugin is applied to the table and a
+	 * legacy selection plugin is used.
+	 *
+	 * @return {boolean} Whether a selection plugin is applied.
+	 * @private
+	 */
+	Table.prototype._hasSelectionPlugin = function() {
+		return this._oSelectionPlugin != null;
+	};
+
+	/**
+	 * Initializes the selection plugin used by the table. Attaches event listeners and forwards binding information to the plugin.
+	 * The first plugin of type <code>sap.ui.table.plugins.SelectionPlugin</code> in the <code>plugins</code> aggregation is used by the table. If no
+	 * selection plugin is applied, a legacy selection plugin is created.
+	 *
+	 * @private
+	 */
+	Table.prototype._initSelectionPlugin = function() {
+		var oSelectionPlugin = this.getPlugin("sap.ui.table.plugins.SelectionPlugin");
+
+		if (oSelectionPlugin) {
+			this._destroyLegacySelectionPlugin();
+
+			if (oSelectionPlugin !== this._oSelectionPlugin) {
+				detachSelectionPlugin(this, this._oSelectionPlugin);
+				attachSelectionPlugin(this, oSelectionPlugin);
+				this._oSelectionPlugin = oSelectionPlugin;
+			}
+		} else {
+			this._initLegacySelectionPlugin();
+			detachSelectionPlugin(this, this._oSelectionPlugin);
+			delete this._oSelectionPlugin;
+		}
+	};
+
+	/**
+	 * Initializes a legacy selection plugin, if no selection plugin is set in the <code>plugins</code> aggregation.
+	 *
+	 * @private
+	 */
+	Table.prototype._initLegacySelectionPlugin = function() {
+		if (this._oLegacySelectionPlugin || this.getPlugin("sap.ui.table.plugins.SelectionPlugin")) {
+			// No legacy selection plugin needs to be created if it already exists, or if a selection plugin is set.
+			return;
+		}
+
+		this._oLegacySelectionPlugin = this._createLegacySelectionPlugin();
+		this.addAggregation("_hiddenDependents", this._oLegacySelectionPlugin);
+		attachSelectionPlugin(this, this._oLegacySelectionPlugin);
+	};
+
+	Table.prototype._destroyLegacySelectionPlugin = function() {
+		if (this._oLegacySelectionPlugin) {
+			this._oLegacySelectionPlugin.destroy();
+			delete this._oLegacySelectionPlugin;
+		}
+	};
+
+	Table.prototype._createLegacySelectionPlugin = function() {
+		return new SelectionModelSelectionPlugin();
+	};
+
+	function attachSelectionPlugin(oTable, oSelectionPlugin) {
+		if (oSelectionPlugin && oSelectionPlugin.getMetadata().hasEvent("selectionChange")) {
+			oSelectionPlugin.attachSelectionChange(oTable._onSelectionChanged, oTable);
+		}
+	}
+
+	function detachSelectionPlugin(oTable, oSelectionPlugin) {
+		if (oSelectionPlugin && oSelectionPlugin.getMetadata().hasEvent("selectionChange")) {
+			oSelectionPlugin.detachSelectionChange(oTable._onSelectionChanged, oTable);
+		}
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	Table.prototype.insertAggregation = function(sAggregationName, oObject, iIndex, bSuppressInvalidate) {
+		if (sAggregationName === "_hiddenDependents") {
+			return Control.prototype.insertAggregation.call(this, sAggregationName, oObject, iIndex, true);
+		}
+		return Control.prototype.insertAggregation.apply(this, arguments);
+	};
+
+	/**
+	 * @inheritDoc
+	 */
+	Table.prototype.addAggregation = function(sAggregationName, oObject, bSuppressInvalidate) {
+		if (sAggregationName === "_hiddenDependents") {
+			return Control.prototype.addAggregation.call(this, sAggregationName, oObject, true);
+		}
+		return Control.prototype.addAggregation.apply(this, arguments);
+	};
+
+	/**
+	 * @inheritDoc
+	 */
+	Table.prototype.removeAggregation = function(sAggregationName, vObject, bSuppressInvalidate) {
+		if (sAggregationName === "_hiddenDependents") {
+			return Control.prototype.removeAggregation.call(this, sAggregationName, vObject, true);
+		}
+		return Control.prototype.removeAggregation.apply(this, arguments);
+	};
+
+	/**
+	 * @inheritDoc
+	 */
+	Table.prototype.removeAllAggregation = function(sAggregationName, bSuppressInvalidate) {
+		if (sAggregationName === "_hiddenDependents") {
+			return Control.prototype.removeAllAggregation.call(this, sAggregationName, true);
+		}
+		return Control.prototype.removeAllAggregation.apply(this, arguments);
+	};
+
+	/**
+	 * @inheritDoc
+	 */
+	Table.prototype.destroyAggregation = function(sAggregationName, bSuppressInvalidate) {
+		if (sAggregationName === "_hiddenDependents") {
+			return Control.prototype.destroyAggregation.call(this, sAggregationName, true);
+		}
+
+		Control.prototype.destroyAggregation.apply(this, arguments);
+
+		if (sAggregationName === "rows") {
+			// Rows that are not in the aggregation must be destroyed manually.
+			this._aRowClones.forEach(function(oRowClone) {
+				oRowClone.destroy();
+			});
+			this._aRowClones = [];
+		}
+
+		return this;
 	};
 
 	/**
@@ -4033,13 +4307,16 @@ sap.ui.define([
 	 * and column index (in the <code>columns</code> aggregation or in the list of visible columns only, depending on
 	 * parameter <code>bVisibleColumnIndex</code>).
 	 *
+	 * The use of this method outside the sap.ui.table library is only allowed for test purposes!
+	 *
 	 * @param {int} iRowIndex Index of row in the table's <code>rows</code> aggregation
 	 * @param {int} iColumnIndex Index of column in the list of visible columns or in the <code>columns</code> aggregation, as indicated with
-	 *     <code>bVisibleColumnIndex</code>
+	 *                           <code>bVisibleColumnIndex</code>
 	 * @param {boolean} bVisibleColumnIndex If set to <code>true</code>, the given column index is interpreted as index in the list of visible
-	 *     columns, otherwise as index in the <code>columns</code> aggregation
+	 *                                      columns, otherwise as index in the <code>columns</code> aggregation
 	 * @returns {sap.ui.core.Control} Control inside the cell with the given row and column index or <code>null</code> if no such control exists
-	 * @protected
+	 * @private
+	 * @ui5-restricted
 	 */
 	Table.prototype.getCellControl = function(iRowIndex, iColumnIndex, bVisibleColumnIndex) {
 		var oInfo = TableUtils.getRowColCell(this, iRowIndex, iColumnIndex, !bVisibleColumnIndex);
@@ -4047,29 +4324,150 @@ sap.ui.define([
 	};
 
 	/**
-	 * Fires the <code>_rowsUpdated</code> event.
+	 * Fires the <code>rowsUpdated</code> event asynchronously.
 	 *
-	 * @param {sap.ui.table.TableUtils.RowsUpdateReason} [sReason=sap.ui.table.TableUtils.RowsUpdateReason.Unknown]
+	 * @param {sap.ui.table.utils.TableUtils.RowsUpdateReason} [sReason=sap.ui.table.utils.TableUtils.RowsUpdateReason.Unknown]
 	 * The reason why the rows have been updated.
-	 * @fires Table#_rowsUpdated
+	 * @fires Table#rowsUpdated
 	 * @private
 	 */
 	Table.prototype._fireRowsUpdated = function(sReason) {
-		if (sReason == null) {
-			sReason = TableUtils.RowsUpdateReason.Unknown;
+		var mParameters = {
+			reason: sReason || TableUtils.RowsUpdateReason.Unknown
+		};
+
+		this.onRowsUpdated(mParameters);
+
+		clearTimeout(this._mTimeouts.fireRowsUpdated);
+		this._mTimeouts.fireRowsUpdated = setTimeout(function() {
+			// If the rows are updated by setting new binding contexts, the cell contents are updated asynchronously (re-rendering).
+			// This has to be waited for before the update process of the rows can be completed.
+			this.onRowsContentUpdated(mParameters);
+
+			/**
+			 * This event is fired after the rows have been updated.
+			 *
+			 * @event Table#_rowsUpdated
+			 * @type {Object}
+			 * @property {sap.ui.table.utils.TableUtils.RowsUpdateReason} reason - The reason why the rows have been updated.
+			 * @private
+			 */
+			this.fireEvent("_rowsUpdated", mParameters);
+			this.fireRowsUpdated();
+		}.bind(this), 0);
+	};
+
+	Table.prototype.onRowsUpdated = function(mParameters) {
+		TableUtils.Grouping.updateGroups(this);
+		this._getAccExtension()._updateAriaRowIndices();
+		this._updateSelection();
+
+		// TODO: Move somewhere else. Row or GroupingUtils
+		this.getRows().forEach(function(oRow) {
+			oRow.getCells().forEach(function(oCell) {
+				var oColumn = Column.ofCell(oCell);
+				var oCellContentVisibilitySettings = oColumn._getCellContentVisibilitySettings();
+				var $Cell = oRow.getDomRefs(true).row.find("td[data-sap-ui-colid=\"" + oColumn.getId() + "\"]");
+				var bShowCellContent = true;
+
+				if (!$Cell) {
+					return;
+				}
+
+				if (oRow.isGroupHeader()) {
+					if (!oRow.isExpandable()) {
+						bShowCellContent = oCellContentVisibilitySettings.groupHeader.nonExpandable;
+					} else if (oRow.isExpanded()) {
+						bShowCellContent = oCellContentVisibilitySettings.groupHeader.expanded;
+					} else {
+						bShowCellContent = oCellContentVisibilitySettings.groupHeader.collapsed;
+					}
+				} else if (oRow.isTotalSummary()) {
+					bShowCellContent = oCellContentVisibilitySettings.summary.total;
+				} else if (oRow.isGroupSummary()) {
+					bShowCellContent = oCellContentVisibilitySettings.summary.group;
+				} else {
+					bShowCellContent = oCellContentVisibilitySettings.standard;
+				}
+
+				$Cell.toggleClass("sapUiTableCellHidden", !bShowCellContent);
+			});
+		});
+	};
+
+	Table.prototype.onRowsContentUpdated = function(mParameters) {
+		if (this.getRows().length > 0) {
+			this._resetRowHeights();
+			this._aRowHeights = this._collectRowHeights(false);
+			this._updateRowHeights(this._aRowHeights, false);
+			this._getAccExtension().updateAccForCurrentCell(mParameters.reason);
+		}
+	};
+
+	/**
+	 * Enriches the table with synchronization capabilities exposed through an interface of the SyncExtension applied to the table.
+	 * <b>Do not call this method more than once on the same table!</b>
+	 *
+	 * @see sap.ui.table.extensions.Synchronization#getInterface
+	 * @returns {Promise} Returns a promise that resolves with the synchronization interface, and rejects with an error object.
+	 * @private
+	 * @ui5-restricted sap.gantt
+	 */
+	Table.prototype._enableSynchronization = function() {
+		var that = this;
+		return new Promise(function(resolve, reject) {
+			sap.ui.require(["sap/ui/table/extensions/Synchronization"], function(SyncExtension) {
+				resolve(ExtensionBase.enrich(that, SyncExtension).getInterface());
+			}, function(oError) {
+				reject(oError);
+			});
+		});
+	};
+
+	/**
+	 * Enables the legacy multi selection behavior for mouse interaction.
+	 *
+	 * @throws {Error} If a selection plugin is applied
+	 * @private
+	 * @ui5-restricted sap.watt.hanaplugins.editor.plugin.hdbcalculationview
+	 */
+	Table.prototype._enableLegacyMultiSelection = function() {
+		if (this._hasSelectionPlugin()) {
+			throw new Error("Unsupported operation: sap.ui.table.Table#_enableLegacyMultiSelection must not be called"
+							+ " if a selection plugin is applied.");
 		}
 
-		/**
-		 * This event is fired after the rows have been updated.
-		 *
-		 * @event Table#_rowsUpdated
-		 * @type {Object}
-		 * @property {sap.ui.table.TableUtils.RowsUpdateReason} reason - The reason why the rows have been updated.
-		 * @protected
-		 */
-		this.fireEvent("_rowsUpdated", {
-			reason: sReason
-		});
+		this._legacyMultiSelection = function(iIndex, oEvent) {
+			if (this._hasSelectionPlugin()) {
+				throw new Error("Unsupported operation: The legacy multi selection is not supported if a selection plugin is applied");
+			}
+
+			var bAdd = !!(oEvent.metaKey || oEvent.ctrlKey);
+
+			if (!this.isIndexSelected(iIndex)) {
+				if (bAdd) {
+					this.addSelectionInterval(iIndex, iIndex);
+				} else {
+					this.setSelectedIndex(iIndex);
+				}
+			} else if (bAdd || this._getSelectionPlugin().getSelectedCount() === 1) {
+				this.removeSelectionInterval(iIndex, iIndex);
+			} else {
+				this.setSelectedIndex(iIndex);
+			}
+		}.bind(this);
+	};
+
+	/**
+	 * Sets constraints on the row counts of the table. May impact the result of the row count computation in the row modes.
+	 * The setter for the hidden property may only be used indirectly by plugins and may not be used otherwise.
+	 *
+	 * @see sap.ui.table.plugins.PluginBase#setRowCountConstraints
+	 * @param {object} mConstraints Row count constraints
+	 * @private
+	 */
+	Table.prototype._setRowCountConstraints = function(mConstraints) {
+		this.setProperty("rowCountConstraints", mConstraints);
 	};
 
 	return Table;

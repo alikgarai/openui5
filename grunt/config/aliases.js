@@ -5,6 +5,9 @@ var async = require('async');
 var path = require('path');
 var cldr = require('../../lib/cldr-openui5/lib/index.js');
 
+// CLDR version to be downloaded and generated
+var CLDR_VERSION = "35.1.0";
+
 module.exports = function(grunt, config) {
 
 	return {
@@ -268,7 +271,7 @@ module.exports = function(grunt, config) {
 			var sapUiBuildtime = config.buildtime;
 			var version = config.package && config.package.version;
 			var useDefaultTemplate = grunt.option('default-template');
-			
+
 			if (!useDefaultTemplate) {
 				var sapUiVersionJson = {
 					name: "openui5",
@@ -296,6 +299,7 @@ module.exports = function(grunt, config) {
 					return;
 				}
 				aTasks.push('jsdoc:library-' + library.name);
+				aTasks.push('copy:faq-target-' + library.name);
 				if (!useDefaultTemplate) {
 					aTasks.push('ui5docs-preprocess:library-' + library.name);
 				}
@@ -312,23 +316,42 @@ module.exports = function(grunt, config) {
 		    'cldr-download',
 		    'cldr-generate'
 		],
-		'cldr-download': [
-		    'npm-install:cldr-core@32.0.0',
-		    'npm-install:cldr-numbers-modern@32.0.0',
-		    'npm-install:cldr-dates-modern@32.0.0',
-		    'npm-install:cldr-misc-modern@32.0.0',
-		    'npm-install:cldr-units-modern@32.0.0',
-		    'npm-install:cldr-localenames-modern@32.0.0',
-		    'npm-install:cldr-cal-islamic-modern@32.0.0',
-		    'npm-install:cldr-cal-japanese-modern@32.0.0',
-		    'npm-install:cldr-cal-persian-modern@32.0.0'
-		],
+		'cldr-download': function() {
+			var aPakets = [
+					'cldr-core',
+					'cldr-numbers-modern',
+					'cldr-dates-modern',
+					'cldr-misc-modern',
+					'cldr-units-modern',
+					'cldr-localenames-modern',
+					'cldr-cal-islamic-modern',
+					'cldr-cal-japanese-modern',
+					'cldr-cal-persian-modern',
+					'cldr-cal-buddhist-modern'
+				],
+				baseFolder = path.join(__dirname, "../../"),
+				downloadFolder = path.join(baseFolder, "tmp/cldr"),
+				pacote = require('pacote'),
+				done = this.async();
+
+			Promise.all(aPakets.map(function(sName) {
+				return pacote.extract(sName + "@" + CLDR_VERSION, path.join(downloadFolder, sName));
+
+			})).then(function() {
+				grunt.log.ok("DONE", "Files downloaded and extracted to", downloadFolder);
+				done();
+			}, function(err) {
+				grunt.log.error(err);
+				done(false);
+			});
+		},
 		'cldr-generate': function() {
 			var done = this.async();
 
 			var baseFolder = path.join(__dirname, "../../");
 
 			var outputFolder = grunt.option("output"),
+				sourceFolder = path.join(baseFolder, "tmp/cldr"),
 				prettyPrint = grunt.option("prettyPrint");
 
 			if (typeof prettyPrint !== "boolean") {
@@ -341,8 +364,10 @@ module.exports = function(grunt, config) {
 
 			if (outputFolder) {
 				cldr({
+					source: sourceFolder,
 					output: outputFolder,
-					prettyPrint: prettyPrint
+					prettyPrint: prettyPrint,
+					version: CLDR_VERSION
 				}).on("generated", function() {
 					grunt.log.ok("DONE", "Files saved to", outputFolder);
 				}).on("error", function(err) {

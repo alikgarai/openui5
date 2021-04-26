@@ -4,7 +4,6 @@
 
 // Provides control sap.m.MenuButton.
 sap.ui.define([
-	'jquery.sap.global',
 	'./library',
 	'sap/ui/core/Control',
 	'./Button',
@@ -13,10 +12,10 @@ sap.ui.define([
 	'sap/ui/core/EnabledPropagator',
 	'sap/ui/core/library',
 	'sap/ui/core/Popup',
-	'sap/m/Menu',
-	"./MenuButtonRenderer"
+	'sap/ui/core/LabelEnablement',
+	"./MenuButtonRenderer",
+	"sap/ui/events/KeyCodes"
 ], function(
-	jQuery,
 	library,
 	Control,
 	Button,
@@ -25,9 +24,10 @@ sap.ui.define([
 	EnabledPropagator,
 	coreLibrary,
 	Popup,
-	Menu,
-	MenuButtonRenderer
-	) {
+	LabelEnablement,
+	MenuButtonRenderer,
+	KeyCodes
+) {
 		"use strict";
 
 		// shortcut for sap.m.MenuButtonMode
@@ -77,6 +77,9 @@ sap.ui.define([
 
 				/**
 				 * Defines the type of the <code>MenuButton</code> (for example, Default, Accept, Reject, Back, etc.)
+				 *
+				 * <b>Note:</b> Not all existing types are valid for the control. See {@link sap.m.ButtonType}
+				 * documentation.
 				 */
 				type : {type : "sap.m.ButtonType", group : "Appearance", defaultValue : ButtonType.Default},
 
@@ -153,6 +156,18 @@ sap.ui.define([
 				 */
 				_button: { type: "sap.ui.core.Control", multiple: false, visibility: "hidden" }
 			},
+			associations : {
+
+				/**
+				 * Association to controls / ids which describe this control (see WAI-ARIA attribute aria-describedby).
+				 */
+				ariaDescribedBy: {type: "sap.ui.core.Control", multiple: true, singularName: "ariaDescribedBy"},
+
+				/**
+				 * Association to controls / ids which label this control (see WAI-ARIA attribute aria-labelledby).
+				 */
+				ariaLabelledBy: {type: "sap.ui.core.Control", multiple: true, singularName: "ariaLabelledBy"}
+			},
 			events: {
 				/**
 				 * Fired when the <code>buttonMode</code> is set to <code>Split</code> and the user presses the main button
@@ -162,7 +177,8 @@ sap.ui.define([
 				defaultAction: {}
 			},
 			defaultAggregation : "menu",
-			designtime: "sap/m/designtime/MenuButton.designtime"
+			designtime: "sap/m/designtime/MenuButton.designtime",
+			dnd: { draggable: true, droppable: false }
 		}});
 
 		EnabledPropagator.call(MenuButton.prototype);
@@ -186,8 +202,8 @@ sap.ui.define([
 			if (this._sDefaultIcon) {
 				this._sDefaultIcon = null;
 			}
-			if (this._iInitialWidth) {
-				this._iInitialWidth = null;
+			if (this._iInitialTextBtnContentWidth) {
+				this._iInitialTextBtnContentWidth = null;
 			}
 			if (this._lastActionItemId) {
 				this._lastActionItemId = null;
@@ -211,41 +227,50 @@ sap.ui.define([
 
 		};
 
-		MenuButton.prototype.onAfterRendering = function() {
-			// call the function with delay to assure that the
-			// inner buttons are rendered with correct width before setting the initial width
-			jQuery.sap.delayedCall(0, this, "_setInitialBtnWidth");
-
-			this._setAriaHasPopup();
+		MenuButton.prototype._needsWidth = function() {
+			return this._isSplitButton() && this.getWidth() === "";
 		};
-
 
 		/**
-		 * Sets the initial width of the control.
+		 * Gets the text button control DOM Element.
+		 * @returns {Element} The Element's DOM Element
 		 * @private
 		 */
-		MenuButton.prototype._setInitialBtnWidth = function() {
-			var iInitialWidth;
-			if (this._isSplitButton() && !this._iInitialWidth) {
-				iInitialWidth = this.$().outerWidth();
-				if (iInitialWidth) {
-					this._iInitialWidth = iInitialWidth + 1; //for IE
-				}
+		MenuButton.prototype._getTextBtnContentDomRef = function() {
+			return this._getButtonControl()._getTextButton().getDomRef("content");
+		};
+
+		MenuButton.prototype.onAfterRendering = function() {
+			if (this._needsWidth() && sap.ui.getCore().isThemeApplied() && this._getTextBtnContentDomRef() && this._getInitialTextBtnWidth() > 0) {
+				this._getTextBtnContentDomRef().style.width = this._getInitialTextBtnWidth() + 'px';
 			}
 		};
 
-		MenuButton.prototype._setAriaHasPopup = function() {
-			if (this._isSplitButton()) {
-				this._getButtonControl()._getArrowButton().$().attr("aria-haspopup", "true");
-			} else {
-				this._getButtonControl().$().attr("aria-haspopup", "true");
+		MenuButton.prototype.onThemeChanged = function(oEvent) {
+			//remember the initial width of the text button and hardcode it in the dom
+			if (this._needsWidth() && this.getDomRef() && !this._iInitialTextBtnContentWidth && this._getTextBtnContentDomRef() && this._getInitialTextBtnWidth() > 0) {
+				this._getTextBtnContentDomRef().style.width = this._getInitialTextBtnWidth() + 'px';
 			}
+		};
+
+		/**
+		 * Gets the initial width of the text button control. To be used for 'split' mode only.
+		 * @returns {int} The width after the text button control was rendered for the first time and theme applied
+		 * @private
+		 */
+		MenuButton.prototype._getInitialTextBtnWidth = function() {
+			if (!this._iInitialTextBtnContentWidth) {
+				//round the width upward in order to prevent content overflow (ellipses)
+				this._iInitialTextBtnContentWidth = Math.ceil(this._getTextBtnContentDomRef().getBoundingClientRect().width);
+			}
+
+			return this._iInitialTextBtnContentWidth;
 		};
 
 		/**
 		 * Sets the <code>buttonMode</code> of the control.
 		 * @param {sap.m.MenuButtonMode} sMode The new button mode
-		 * @returns {sap.m.MenuButton} This instance
+		 * @returns {this} This instance
 		 * @public
 		 */
 		MenuButton.prototype.setButtonMode = function(sMode) {
@@ -291,7 +316,8 @@ sap.ui.define([
 		 */
 		MenuButton.prototype._initButton = function() {
 			var oBtn = new Button(this.getId() + "-internalBtn", {
-				width: "100%"
+				width: "100%",
+				ariaHasPopup: coreLibrary.aria.HasPopup.Menu
 			});
 			oBtn.attachPress(this._handleButtonPress, this);
 			return oBtn;
@@ -358,6 +384,13 @@ sap.ui.define([
 				return;
 			}
 
+			if (this._bPopupOpen) {
+				this.getMenu().close();
+				this._bPopupOpen = false;
+				return;
+			}
+
+
 			if (!oMenu.getTitle()) {
 				oMenu.setTitle(this.getText());
 			}
@@ -410,7 +443,12 @@ sap.ui.define([
 					aParam.push(Dock.BeginTop, Dock.BeginBottom, oOffset.minus2_right);
 					break;
 			}
-			Menu.prototype.openBy.apply(oMenu, aParam);
+
+			oMenu.openBy.apply(oMenu, aParam);
+
+			if (this.getMenu()) {
+				this._bPopupOpen = true;
+			}
 
 			this._writeAriaAttributes();
 
@@ -431,15 +469,24 @@ sap.ui.define([
 		};
 
 		MenuButton.prototype._menuClosed = function() {
+			var oButtonControl = this._getButtonControl(),
+				bOpeningMenuButton = oButtonControl;
+
+			this._bPopupOpen = false;
+
 			if (this._isSplitButton()) {
-				this._getButtonControl().setArrowState(false);
+				oButtonControl.setArrowState(false);
+				bOpeningMenuButton = oButtonControl._getArrowButton();
 			}
+
+			bOpeningMenuButton.$().removeAttr("aria-controls");
 		};
 
 		MenuButton.prototype._menuItemSelected = function(oEvent) {
 			var oMenuItem = oEvent.getParameter("item");
 
 			this.fireEvent("_menuItemSelected", { item: oMenuItem }); // needed for controls that listen to interaction events from within the control (e.g. for sap.m.OverflowToolbar)
+			this._bPopupOpen = false;
 
 			if (
 				!this._isSplitButton() ||
@@ -503,6 +550,7 @@ sap.ui.define([
 				case 'activeIcon':
 				case 'iconDensityAware':
 				case 'textDirection':
+				case 'visible':
 				case 'enabled':
 					this._getButtonControl().setProperty(sPropertyName, vValue);
 					break;
@@ -527,10 +575,10 @@ sap.ui.define([
 		 * Override setter because the parent control has placed custom logic in it and all changes need to be propagated
 		 * to the internal button aggregation.
 		 * @param {string} sValue The text of the sap.m.MenuButton
-		 * @return {sap.m.MenuButton} This instance for chaining
+		 * @return {this} This instance for chaining
 		 */
 		MenuButton.prototype.setText = function (sValue) {
-			Button.prototype.setProperty.call(this, 'text', sValue);
+			Control.prototype.setProperty.call(this, 'text', sValue);
 			this._getButtonControl().setText(sValue);
 			return this;
 		};
@@ -539,10 +587,10 @@ sap.ui.define([
 		 * Override setter because the parent control has placed custom logic in it and all changes need to be propagated
 		 * to the internal button aggregation.
 		 * @param {string} sValue`
-		 * @return {sap.m.MenuButton} This instance for chaining
+		 * @return {this} This instance for chaining
 		 */
 		MenuButton.prototype.setType = function (sValue) {
-			Button.prototype.setProperty.call(this, 'type', sValue);
+			Control.prototype.setProperty.call(this, 'type', sValue);
 			this._getButtonControl().setType(sValue);
 			return this;
 		};
@@ -551,12 +599,83 @@ sap.ui.define([
 		 * Override setter because the parent control has placed custom logic in it and all changes need to be propagated
 		 * to the internal button aggregation.
 		 * @param {string} vValue
-		 * @return {sap.m.MenuButton} This instance for chaining
+		 * @return {this} This instance for chaining
 		 */
 		MenuButton.prototype.setIcon = function (vValue) {
-			Button.prototype.setProperty.call(this, 'icon', vValue);
+			Control.prototype.setProperty.call(this, 'icon', vValue);
 			this._getButtonControl().setIcon(vValue);
 			return this;
+		};
+
+		/*
+		 * Overrides the setter in order to propagate the value to the inner button instance.
+		 *
+		 * @param {string} sAriaLabelledBy the passed value
+		 * @override
+		 * @return {this} This instance for chaining
+		 */
+		MenuButton.prototype.addAriaLabelledBy = function(sAriaLabelledBy) {
+			this.getAggregation("_button").addAssociation("ariaLabelledBy", sAriaLabelledBy);
+			return Control.prototype.addAssociation.call(this, "ariaLabelledBy", sAriaLabelledBy);
+		};
+
+		/*
+		 * Overrides the setter in order to propagate the value to the inner button instance.
+		 *
+		 * @param {string} sAriaDescribedBy the passed value
+		 * @override
+		 * @return {this} This instance for chaining
+		 */
+		MenuButton.prototype.addAriaDescribedBy = function(sAriaDescribedBy) {
+			this.getAggregation("_button").addAssociation("ariaDescribedBy", sAriaDescribedBy);
+			return Control.prototype.addAssociation.call(this, "ariaDescribedBy", sAriaDescribedBy);
+		};
+
+		/*
+		 * Overrides the setter in order to propagate the value to the inner button instance.
+		 *
+		 * @param {string} sAriaLabelledBy the passed value
+		 * @override
+		 * @returns {string|null} ID of the removed control
+		 */
+		MenuButton.prototype.removeAriaLabelledBy = function(sAriaLabelledBy) {
+			this.getAggregation("_button").removeAssociation("ariaLabelledBy", sAriaLabelledBy);
+			return Control.prototype.removeAssociation.call(this, "ariaLabelledBy", sAriaLabelledBy);
+		};
+
+		/*
+		 * Overrides the setter in order to propagate the value to the inner button instance.
+		 *
+		 * @param {string} sAriaDescribedBy the passed value to be removed
+		 * @override
+		 * @returns {string|null} ID of the removed control
+		 */
+		MenuButton.prototype.removeAriaDescribedBy = function(sAriaDescribedBy) {
+			this.getAggregation("_button").removeAssociation("ariaDescribedBy", sAriaDescribedBy);
+			return Control.prototype.removeAssociation.call(this, "ariaDescribedBy", sAriaDescribedBy);
+		};
+
+		/*
+		 * Overrides the setter in order to propagate the value to the inner button instance.
+		 *
+		 * @param {string} sAriaLabelledBy the passed value to be removed
+		 * @override
+		 * @returns {string[]} IDs of the removed controls
+		 */
+		MenuButton.prototype.removeAllAriaLabelledBy = function(sAriaLabelledBy) {
+			this.getAggregation("_button").removeAllAssociation("ariaLabelledBy");
+			return Control.prototype.removeAllAssociation.call(this, "ariaLabelledBy");
+		};
+
+		/*
+		 * Overrides the setter in order to propagate the value to the inner button instance.
+		 *
+		 * @override
+		 * @returns {string[]} IDs of the removed controls
+		 */
+		MenuButton.prototype.removeAllAriaDescribedBy = function() {
+			this.getAggregation("_button").removeAllAssociation("ariaDescribedBy");
+			return Control.prototype.removeAllAssociation.call(this, "ariaDescribedBy");
 		};
 
 		MenuButton.prototype.getFocusDomRef = function() {
@@ -565,24 +684,42 @@ sap.ui.define([
 
 		MenuButton.prototype.onsapup = function(oEvent) {
 			this.openMenuByKeyboard();
+			// If there is a different behavior defined in the parent container for the same event,
+			// then use only the defined behavior in the MenuButton.
+			// The same applies for 'sapdown', 'sapupmodifiers' and 'sapdownmodifiers' events as well.
+			oEvent.stopPropagation();
 		};
 
 		MenuButton.prototype.onsapdown = function(oEvent) {
 			this.openMenuByKeyboard();
+			oEvent.stopPropagation();
 		};
 
 		MenuButton.prototype.onsapupmodifiers = function(oEvent) {
 			this.openMenuByKeyboard();
+			oEvent.stopPropagation();
 		};
 
 		MenuButton.prototype.onsapdownmodifiers = function(oEvent) {
 			this.openMenuByKeyboard();
+			oEvent.stopPropagation();
 		};
 
 		//F4
 		MenuButton.prototype.onsapshow = function(oEvent) {
 			this.openMenuByKeyboard();
 			!!oEvent && oEvent.preventDefault();
+		};
+
+		MenuButton.prototype.ontouchstart = function() {
+			this._bPopupOpen = this.getMenu() && this.getMenu()._getMenu() && this.getMenu()._getMenu().getPopup().isOpen();
+		};
+
+		MenuButton.prototype.onkeydown = function(oEvent) {
+			if ((oEvent.keyCode === KeyCodes.ENTER || oEvent.keyCode === KeyCodes.TAB) && this._bPopupOpen) {
+				this.getMenu().close();
+				this._bPopupOpen = false;
+			}
 		};
 
 		MenuButton.prototype.openMenuByKeyboard = function() {
@@ -592,9 +729,46 @@ sap.ui.define([
 		};
 
 		MenuButton.prototype._writeAriaAttributes = function() {
-			if (this.getMenu()) {
-				this.$().attr("aria-controls", this.getMenu().getDomRefId());
+			var oButtonControl = this._getButtonControl(),
+				oOpeningMenuButton = this._isSplitButton() ? oButtonControl._getArrowButton() : oButtonControl,
+				oMenu = this.getMenu();
+
+			if (oMenu) {
+				oOpeningMenuButton.$().attr("aria-controls", oMenu.getDomRefId());
 			}
+		};
+
+		/**
+		 * Returns the DOMNode Id to be used for the "labelFor" attribute of the label.
+		 *
+		 * By default, this is the Id of the control itself.
+		 *
+		 * @return {string} Id to be used for the <code>labelFor</code>
+		 * @public
+		 */
+		MenuButton.prototype.getIdForLabel = function () {
+			return this.getId() + "-internalBtn";
+		};
+
+		/**
+		 * Ensures that MenuButton's internal button will have a reference back to the labels, by which
+		 * the MenuButton is labelled
+		 *
+		 * @returns {this} For chaining
+		 * @private
+		 */
+		MenuButton.prototype._ensureBackwardsReference = function () {
+			var oInternalButton = this._getButtonControl(),
+				aInternalButtonAriaLabelledBy = oInternalButton.getAriaLabelledBy(),
+				aReferencingLabels = LabelEnablement.getReferencingLabels(this);
+
+			aReferencingLabels.forEach(function (sLabelId) {
+				if (aInternalButtonAriaLabelledBy && aInternalButtonAriaLabelledBy.indexOf(sLabelId) === -1) {
+					oInternalButton.addAriaLabelledBy(sLabelId);
+				}
+			});
+
+			return this;
 		};
 
 		return MenuButton;

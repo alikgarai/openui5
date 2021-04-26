@@ -6,7 +6,10 @@
 		<script src="shared-config.js"></script>
 		<script id='sap-ui-bootstrap'
 				src='../../../../resources/sap-ui-core.js'
-				data-sap-ui-libs='sap.ui.layout, sap.m, sap.ui.table'>
+				data-sap-ui-libs='sap.ui.layout, sap.m, sap.ui.table'
+				data-sap-ui-resourceroots='{
+					"qunit.internal.acc": "../../../../test-resources/sap/ui/core/qunit/internal/acc"
+				}'>
 
 		</script>
 		<script>
@@ -34,11 +37,11 @@
 					height:'800px',
 
 					pages: [new sap.m.Image({
-						src: "../../../../test-resources/sap/ui/demokit/explored/img/HT-6100-large.jpg",
+						src: "../../../../test-resources/sap/ui/documentation/sdk/images/HT-6100-large.jpg",
 						alt: "HT-6100",
 						tooltip: "HT-6100"
 					}), new sap.m.Image({
-						src: "../../../../test-resources/sap/ui/demokit/explored/img/HT-1112.jpg",
+						src: "../../../../test-resources/sap/ui/documentation/sdk/images/HT-1112.jpg",
 						alt: "HT-1112",
 						tooltip: "HT-1112"
 					})]
@@ -77,11 +80,11 @@
 					width: '800px',
 
 					pages: [new sap.m.Image({
-						src: "../../../../test-resources/sap/ui/demokit/explored/img/HT-6100-large.jpg",
+						src: "../../../../test-resources/sap/ui/documentation/sdk/images/HT-6100-large.jpg",
 						alt: "HT-6100",
 						tooltip: "HT-6100"
 					}), new sap.m.Image({
-						src: "../../../../test-resources/sap/ui/demokit/explored/img/HT-1112.jpg",
+						src: "../../../../test-resources/sap/ui/documentation/sdk/images/HT-1112.jpg",
 						alt: "HT-1112",
 						tooltip: "HT-1112"
 					})]
@@ -365,7 +368,7 @@
 			}).setVerticalScrolling(true).setHorizontalScrolling(true);
 
 			var page7 = new sap.m.Page('page7', {
-				title: 'FixFlex horizontal with ITB',
+				title: 'FixFlex in a Dialog',
 				enableScrolling: false,
 				content: new sap.m.Button({
 					text: "Open Dialog",

@@ -8,8 +8,9 @@
 		width="100%">
 		<l:content>
 			<Link
-				text="Click me"
-				press="handleLinkPress" />
+				text="Open message box"
+				press="handleLinkPress"
+				ariaHasPopup="Dialog" />
 			<Link
 				text="Disabled link"
 				enabled="false" />

@@ -1,19 +1,27 @@
+/*global QUnit, sinon */
 sap.ui.define([
+	'sap/base/Log',
+	'sap/base/i18n/ResourceBundle',
 	'sap/ui/core/library',
 	'sap/ui/core/mvc/View',
 	'sap/ui/core/mvc/XMLView',
 	'sap/ui/core/RenderManager',
 	'sap/ui/model/json/JSONModel',
+	'sap/ui/model/resource/ResourceModel',
 	'sap/ui/layout/VerticalLayout',
-	'sap/ui/commons/Button',
-	'sap/ui/commons/Panel',
+	'sap/m/Button',
+	'sap/m/Panel',
 	'./AnyView.qunit',
 	'jquery.sap.sjax'
-], function(coreLibrary, View, XMLView, RenderManager, JSONModel, VerticalLayout, Button, Panel, testsuite) {
+], function(Log, ResourceBundle, coreLibrary, View, XMLView, RenderManager, JSONModel, ResourceModel, VerticalLayout, Button, Panel, testsuite) {
+	"use strict";
+
+	// shortcut for sap.ui.core.mvc.ViewType
+	var ViewType = coreLibrary.mvc.ViewType;
 
 	// shortcut
 	function isPreserved(oDomRef) {
-		return RenderManager.isPreservedContent(oDomRef)
+		return RenderManager.isPreservedContent(oDomRef);
 	}
 
 	function isInPreservedArea(oDomRef) {
@@ -22,11 +30,11 @@ sap.ui.define([
 	}
 
 	function dummyPlaceholder(oControl) {
-		return jQuery.sap.byId(RenderManager.RenderPrefixes.Dummy + oControl.getId())[0];
+		return document.getElementById(RenderManager.RenderPrefixes.Dummy + oControl.getId());
 	}
 
 	function invisiblePlaceholder(oControl) {
-		return jQuery.sap.byId(RenderManager.RenderPrefixes.Invisible + oControl.getId())[0];
+		return document.getElementById(RenderManager.RenderPrefixes.Invisible + oControl.getId());
 	}
 
 	var oConfig = {
@@ -42,7 +50,7 @@ sap.ui.define([
 	// run the full testset for a view created from a string
 	testsuite(oConfig, "XMLView creation via XML string", function() {
 		// load the XML without parsing
-		var xml = jQuery.sap.syncGetText(sap.ui.require.toUrl("example/mvc/test.view.xml"), null, undefined); // '<core:View controllerName="example.mvc.test" xmlns:phx="sap.ui.commons" xmlns:mvc="sap.ui.core.mvc" xmlns:core="sap.ui.core" xmlns="http://www.w3.org/1999/xhtml">	<table id="localTableId" border="5">		<tr><td>Hello</td><td>Hello</td><td>Hello</td></tr>		<tr><td>Hello</td><td>Hello</td><td><phx:Button id="Button1" text="HEY!" press="doIt"></phx:Button></td></tr>	</table>	plain text node as direct child of view	<phx:Panel>		<phx:Button id="Button2" text="HEY default aggregation!" tooltip="hello tooltip" press="doIt"></phx:Button>		<div style="border:1px solid red;background-color:yellow;width:200px;height:10px;">text node in nested HTML in default aggregation</div>		<phx:content>			<div style="border:1px solid red;background-color:blue;width:200px;height:10px;">text node in HTML in named aggregation</div>			<phx:Button id="Button3" text="HEY named aggregation!" press="doIt"></phx:Button>			<mvc:JSONView id="MyJSONView" viewName="example.mvc.test2"></mvc:JSONView>			<mvc:JSView id="MyJSView" viewName="example.mvc.test2"></mvc:JSView>		</phx:content>	</phx:Panel></core:View>';
+		var xml = jQuery.sap.syncGetText(sap.ui.require.toUrl("example/mvc/test.view.xml"), null, undefined);
 		// let the XMLView parse it
 		return sap.ui.xmlview({viewContent:xml});
 	});
@@ -50,7 +58,7 @@ sap.ui.define([
 	// run the full testset for a view created from a XML document
 	testsuite(oConfig, "XMLView creation via XML document", function() {
 		// load the XML without parsing
-		var xml = jQuery.sap.syncGetText(sap.ui.require.toUrl("example/mvc/test.view.xml"), null, undefined); // '<core:View controllerName="example.mvc.test" xmlns:phx="sap.ui.commons" xmlns:mvc="sap.ui.core.mvc" xmlns:core="sap.ui.core" xmlns="http://www.w3.org/1999/xhtml">	<table id="localTableId" border="5">		<tr><td>Hello</td><td>Hello</td><td>Hello</td></tr>		<tr><td>Hello</td><td>Hello</td><td><phx:Button id="Button1" text="HEY!" press="doIt"></phx:Button></td></tr>	</table>	plain text node as direct child of view	<phx:Panel>		<phx:Button id="Button2" text="HEY default aggregation!" tooltip="hello tooltip" press="doIt"></phx:Button>		<div style="border:1px solid red;background-color:yellow;width:200px;height:10px;">text node in nested HTML in default aggregation</div>		<phx:content>			<div style="border:1px solid red;background-color:blue;width:200px;height:10px;">text node in HTML in named aggregation</div>			<phx:Button id="Button3" text="HEY named aggregation!" press="doIt"></phx:Button>			<mvc:JSONView id="MyJSONView" viewName="example.mvc.test2"></mvc:JSONView>			<mvc:JSView id="MyJSView" viewName="example.mvc.test2"></mvc:JSView>		</phx:content>	</phx:Panel></core:View>';
+		var xml = jQuery.sap.syncGetText(sap.ui.require.toUrl("example/mvc/test.view.xml"), null, undefined);
 		// parse it and pass the XML document
 		return sap.ui.xmlview({
 			viewContent: jQuery.sap.parseXML(xml)
@@ -60,7 +68,7 @@ sap.ui.define([
 	// run the full testset for a view created from a XML document
 	testsuite(oConfig, "XMLView creation via XML node", function() {
 		// load the XML without parsing
-		var xml = jQuery.sap.syncGetText(sap.ui.require.toUrl("example/mvc/test.view.xml"), null, undefined); // '<core:View controllerName="example.mvc.test" xmlns:phx="sap.ui.commons" xmlns:mvc="sap.ui.core.mvc" xmlns:core="sap.ui.core" xmlns="http://www.w3.org/1999/xhtml">	<table id="localTableId" border="5">		<tr><td>Hello</td><td>Hello</td><td>Hello</td></tr>		<tr><td>Hello</td><td>Hello</td><td><phx:Button id="Button1" text="HEY!" press="doIt"></phx:Button></td></tr>	</table>	plain text node as direct child of view	<phx:Panel>		<phx:Button id="Button2" text="HEY default aggregation!" tooltip="hello tooltip" press="doIt"></phx:Button>		<div style="border:1px solid red;background-color:yellow;width:200px;height:10px;">text node in nested HTML in default aggregation</div>		<phx:content>			<div style="border:1px solid red;background-color:blue;width:200px;height:10px;">text node in HTML in named aggregation</div>			<phx:Button id="Button3" text="HEY named aggregation!" press="doIt"></phx:Button>			<mvc:JSONView id="MyJSONView" viewName="example.mvc.test2"></mvc:JSONView>			<mvc:JSView id="MyJSView" viewName="example.mvc.test2"></mvc:JSView>		</phx:content>	</phx:Panel></core:View>';
+		var xml = jQuery.sap.syncGetText(sap.ui.require.toUrl("example/mvc/test.view.xml"), null, undefined);
 		// parse it and pass the XML document
 		return sap.ui.xmlview({
 			xmlNode: jQuery.sap.parseXML(xml).documentElement
@@ -69,14 +77,24 @@ sap.ui.define([
 
 	// run the full testset for a view created via the generic factory method
 	testsuite(oConfig, "XMLView creation using generic view factory", function() {
-		return sap.ui.view({type:sap.ui.core.mvc.ViewType.XML,viewName:"example.mvc.test",viewData:{test:"testdata"}});
+		return sap.ui.view({type:ViewType.XML,viewName:"example.mvc.test",viewData:{test:"testdata"}});
 	}, true);
 
 
-	QUnit.module("Apply settings");
+	var sDefaultLanguage = sap.ui.getCore().getConfiguration().getLanguage();
+
+	QUnit.module("Apply settings", {
+		beforeEach : function () {
+			sap.ui.getCore().getConfiguration().setLanguage("en-US");
+		},
+		afterEach : function () {
+			sap.ui.getCore().getConfiguration().setLanguage(sDefaultLanguage);
+		}
+	});
+
 	// Settings can be provided at the constructor call or in the according view source. View source wins.
 
-	QUnit.test("sync loading", function() {
+	QUnit.test("sync loading", function(assert) {
 		// although settings are provided here, the resulting view should have the setting stated in the view source
 		var oView = sap.ui.xmlview({
 			viewName: 'example.mvc.test',
@@ -86,7 +104,7 @@ sap.ui.define([
 		oView.destroy();
 	});
 
-	QUnit.test("async loading", function() {
+	QUnit.test("async loading", function(assert) {
 		var oView = sap.ui.xmlview({
 			viewName: 'example.mvc.test',
 			async: true,
@@ -96,6 +114,316 @@ sap.ui.define([
 		return oView.loaded().then(function() {
 			assert.equal(oView.getDisplayBlock(), true, "DisplayBlock should be true for the resolved async view");
 			oView.destroy();
+		});
+	});
+
+	QUnit.test("async loading new Factory with resource bundle", function(assert) {
+		var oResourceBundleCreateSpy = sinon.spy(ResourceBundle, "create");
+		var oViewPromise = XMLView.create({definition: "" +
+				"<mvc:View resourceBundleName=\"testdata.mvc.text\"\n" +
+				"\t\t   resourceBundleAlias=\"i18n\"\n" +
+				"\t\t   xmlns:mvc=\"sap.ui.core.mvc\" xmlns=\"sap.m\" xmlns:html=\"http://www.w3.org/1999/xhtml\">\n" +
+				"\t<Panel id=\"aPanel\">\n" +
+				"\t\t<Button id=\"Button1\" text=\"{i18n>TEXT_CLOSE}\" press=\"doIt\"></Button>\n" +
+				"\t</Panel>\n" +
+				"</mvc:View>" +
+				""});
+
+		return oViewPromise.then(function(oView) {
+			var oCreateCall = oResourceBundleCreateSpy.getCall(0);
+			assert.ok(oCreateCall.args[0].async, "async call");
+			oResourceBundleCreateSpy.restore();
+			assert.ok(oView.getModel("i18n") instanceof ResourceModel, "has model with the expected alias");
+			oView.destroy();
+		});
+	});
+
+	QUnit.module("Error handling", {
+		before: function() {
+			this.logSpyError = sinon.spy(Log, "error");
+			this.logSpyWarning = sinon.spy(Log, "warning");
+		},
+		afterEach: function() {
+			this.logSpyError.reset();
+			this.logSpyWarning.reset();
+		},
+		after: function() {
+			this.logSpyError.restore();
+			this.logSpyWarning.restore();
+		}
+	});
+
+	QUnit.test("[XMLView.create] broken binding string", function(assert) {
+		var oViewPromise = XMLView.create({
+			id: "asyncView1",
+			definition:
+			"<mvc:View xmlns:mvc='sap.ui.core.mvc' xmlns:m='sap.m' xmlns:core='sap.ui.core'>" +
+			"    <m:Panel id='aPanel'>" +
+			"       <m:Button id=\"Button1\" text=\"{This should cause a parse error\"></m:Button>" +
+			"    </m:Panel>" +
+			"</mvc:View>"
+		});
+
+		return oViewPromise.then(function(oView) {
+			assert.ok(false, "should not succeed");
+		}, function(err) {
+			assert.strictEqual(
+				err.message,
+				"Error found in View (id: 'asyncView1').\n" +
+				"XML node: '<m:Button xmlns:m=\"sap.m\" id=\"Button1\" text=\"{This should cause a parse error\"/>':\n" +
+				"SyntaxError: no closing braces found in '{This should cause a parse error' after pos:0",
+				"SyntaxError is thrown during parsing of binding string."
+			);
+		});
+	});
+
+	QUnit.test("[XMLView.create] broken binding string, error in nested Fragment", function(assert) {
+		var oViewPromise = XMLView.create({
+			id: "asyncView2",
+			definition:
+			"<mvc:View xmlns:mvc='sap.ui.core.mvc' xmlns:m='sap.m' xmlns:core='sap.ui.core'>" +
+			"    <m:Panel id='aPanel'>" +
+			"       <core:Fragment id='innerFragment' fragmentName='testdata.fragments.XMLFragmentWithSyntaxErrors' type='XML'/>" +
+			"    </m:Panel>" +
+			"</mvc:View>"
+		});
+
+		return oViewPromise.then(function(oView) {
+			assert.ok(false, "should not succeed");
+		}, function(err) {
+			assert.strictEqual(
+				err.message,
+				"Error found in Fragment (id: 'asyncView2--innerFragment').\n" +
+				"XML node: '<m:Button xmlns:m=\"sap.m\" id=\"brokenButton\" text=\"{This should cause a parse error\"/>':\n" +
+				"SyntaxError: no closing braces found in '{This should cause a parse error' after pos:0",
+				"SyntaxError is thrown during parsing of binding string."
+			);
+		});
+	});
+
+	QUnit.test("[XMLView.create] error caused by missing function reference (property-type 'function')", function(assert) {
+		var oViewPromise = XMLView.create({
+			id: "asyncView3",
+			definition:
+			'<mvc:View xmlns="sap.m" xmlns:mvc=\"sap.ui.core.mvc\" xmlns:html=\"http://www.w3.org/1999/xhtml\">' +
+			'<Dialog id="dialog" title="XML Fragment Dialog" escapeHandler="closeDialog">' +
+			'   <Text text="title" />                         ' +
+			'   <Text text="nope" />                         ' +
+			'   <buttons>                                              ' +
+			'      <Button text="action!" press="doSomething" /> ' +
+			'      <Button text="stuff" /> ' +
+			'   </buttons>                                             ' +
+			'</Dialog>                                                 ' +
+			'</mvc:View>'
+		});
+
+		return oViewPromise.then(function(oView) {
+			assert.ok(false, "should not succeed");
+		}, function(err) {
+			assert.strictEqual(
+				err.message,
+				"Error found in View (id: 'asyncView3').\n" +
+				"XML node: '<Dialog xmlns=\"sap.m\" id=\"dialog\" title=\"XML Fragment Dialog\" escapeHandler=\"closeDialog\"/>':\n" +
+				"TypeError: The string 'closeDialog' couldn't be resolved to a function",
+				"TypeError is thrown for missing function reference on Dialog."
+			);
+		});
+	});
+
+	QUnit.test("[sap.ui.xmlview] broken binding string, error on top-level", function(assert) {
+		var oView = sap.ui.xmlview({
+			id: "syncView1",
+			viewContent:
+			"<mvc:View xmlns:mvc='sap.ui.core.mvc' xmlns:m='sap.m' xmlns:core='sap.ui.core'>" +
+			"    <m:Panel>" +
+			"       <m:Button id=\"brokenButtonInline\" text=\"{This should cause a parse error\"></m:Button>" +
+			"    </m:Panel>" +
+			"</mvc:View>"
+		});
+
+		// check for error log
+		assert.ok(this.logSpyError.calledOnce);
+		assert.strictEqual(
+			this.logSpyError.getCall(0).args[0].message,
+			"Error found in View (id: 'syncView1').\n" +
+			"XML node: '<m:Button xmlns:m=\"sap.m\" id=\"brokenButtonInline\" text=\"{This should cause a parse error\"/>':\n" +
+			"SyntaxError: no closing braces found in '{This should cause a parse error' after pos:0",
+			"Correct SyntaxError is logged"
+		);
+
+		// even "broken" controls should still be available (for compatibility)
+		assert.ok(oView.byId("brokenButtonInline"), "Button with broken binding is still created.");
+
+		// sync cases can be cleaned up
+		oView.destroy();
+	});
+
+	QUnit.test("[sap.ui.xmlview] broken binding string, error in nested Fragment", function(assert) {
+		var oView = sap.ui.xmlview({
+			id: "syncView2",
+			viewContent:
+			"<mvc:View xmlns:mvc='sap.ui.core.mvc' xmlns:m='sap.m' xmlns:core='sap.ui.core'>" +
+			"    <m:Panel>" +
+			"       <core:Fragment id='innerFragment' fragmentName='testdata.fragments.XMLFragmentWithSyntaxErrors' type='XML'/>" +
+			"    </m:Panel>" +
+			"</mvc:View>"
+		});
+
+		// check for error log
+		assert.ok(this.logSpyError.calledOnce);
+		assert.deepEqual(
+			this.logSpyError.getCall(0).args[0].message,
+			"Error found in Fragment (id: 'syncView2--innerFragment').\n" +
+			"XML node: '<m:Button xmlns:m=\"sap.m\" id=\"brokenButton\" text=\"{This should cause a parse error\"/>':\n" +
+			"SyntaxError: no closing braces found in '{This should cause a parse error' after pos:0",
+			"Correct SyntaxError is logged"
+		);
+
+		// controls inside Fragment should still be available (for compatibility)
+		assert.ok(oView.byId("innerFragment--brokenButton"), "Button with broken binding is still created.");
+
+		// sync cases can be cleaned up
+		oView.destroy();
+	});
+
+	QUnit.test("[sap.ui.xmlview] error caused by missing function reference (property-type 'function')", function(assert) {
+		var oView = sap.ui.xmlview({
+			id: "syncView3",
+			viewContent:
+			'<mvc:View xmlns="sap.m" xmlns:mvc=\"sap.ui.core.mvc\" xmlns:html=\"http://www.w3.org/1999/xhtml\">' +
+			'<Dialog id="dialog" title="XML Fragment Dialog" escapeHandler="closeDialog">' +
+			'   <Text text="title" />                         ' +
+			'   <buttons>                                              ' +
+			'      <Button text="action!" press="doSomething" /> ' +
+			'      <Button text="stuff" /> ' +
+			'   </buttons>                                             ' +
+			'</Dialog>                                                 ' +
+			'</mvc:View>'
+		});
+
+		// check error log
+		assert.ok(this.logSpyError.calledOnce);
+		assert.deepEqual(
+			this.logSpyError.getCall(0).args[0].message,
+			"Error found in View (id: 'syncView3').\n" +
+			"XML node: '<Dialog xmlns=\"sap.m\" id=\"dialog\" title=\"XML Fragment Dialog\" escapeHandler=\"closeDialog\"/>':\n" +
+			"TypeError: The string 'closeDialog' couldn't be resolved to a function",
+			"Correct TypeError is logged"
+		);
+
+		// check warning log
+		assert.ok(
+			this.logSpyWarning.calledWithExactly("Event handler name 'doSomething' could not be resolved to an event handler function"),
+			"Correct warning for missing event-handler was logged"
+		);
+
+		// controls inside Fragment should still be available (for compatibility)
+		assert.equal(oView.byId("dialog").getButtons().length, 2, "Inner Controls are created.");
+
+		// sync cases can be cleaned up
+		oView.destroy();
+	});
+
+	QUnit.test("[sap.ui.xmlview=async] broken binding string, error on top-level", function(assert) {
+		return sap.ui.xmlview({
+			id: "syncView1",
+			async: true,
+			viewContent:
+			"<mvc:View xmlns:mvc='sap.ui.core.mvc' xmlns:m='sap.m' xmlns:core='sap.ui.core'>" +
+			"    <m:Panel>" +
+			"       <m:Button id=\"brokenButtonInline\" text=\"{This should cause a parse error\"></m:Button>" +
+			"    </m:Panel>" +
+			"</mvc:View>"
+		}).loaded().then(function(oView){
+			// check for error log
+			assert.ok(this.logSpyError.calledOnce);
+			assert.strictEqual(
+				this.logSpyError.getCall(0).args[0].message,
+				"Error found in View (id: 'syncView1').\n" +
+				"XML node: '<m:Button xmlns:m=\"sap.m\" id=\"brokenButtonInline\" text=\"{This should cause a parse error\"/>':\n" +
+				"SyntaxError: no closing braces found in '{This should cause a parse error' after pos:0",
+				"Correct SyntaxError is logged"
+			);
+
+			// even "broken" controls should still be available (for compatibility)
+			assert.ok(oView.byId("brokenButtonInline"), "Button with broken binding is still created.");
+
+			// sync cases can be cleaned up
+			oView.destroy();
+		}.bind(this)).catch(function(){
+			assert.ok(false, "The error shouldn't be thrown, only logged.");
+		});
+	});
+
+	QUnit.test("[sap.ui.xmlview=async] broken binding string, error in nested Fragment", function(assert) {
+		return sap.ui.xmlview({
+			id: "syncView2",
+			async: true,
+			viewContent:
+			"<mvc:View xmlns:mvc='sap.ui.core.mvc' xmlns:m='sap.m' xmlns:core='sap.ui.core'>" +
+			"    <m:Panel>" +
+			"       <core:Fragment id='innerFragment' fragmentName='testdata.fragments.XMLFragmentWithSyntaxErrors' type='XML'/>" +
+			"    </m:Panel>" +
+			"</mvc:View>"
+		}).loaded().then(function(oView){
+			// check for error log
+			assert.ok(this.logSpyError.calledOnce);
+			assert.deepEqual(
+				this.logSpyError.getCall(0).args[0].message,
+				"Error found in Fragment (id: 'syncView2--innerFragment').\n" +
+				"XML node: '<m:Button xmlns:m=\"sap.m\" id=\"brokenButton\" text=\"{This should cause a parse error\"/>':\n" +
+				"SyntaxError: no closing braces found in '{This should cause a parse error' after pos:0",
+				"Correct SyntaxError is logged"
+			);
+
+			// controls inside Fragment should still be available (for compatibility)
+			assert.ok(oView.byId("innerFragment--brokenButton"), "Button with broken binding is still created.");
+
+			// sync cases can be cleaned up
+			oView.destroy();
+		}.bind(this)).catch(function(){
+			assert.ok(false, "The error shouldn't be thrown, only logged.");
+		});
+	});
+
+	QUnit.test("[sap.ui.xmlview=async] error caused by missing function reference (property-type 'function')", function(assert) {
+		return sap.ui.xmlview({
+			id: "syncView3",
+			async: true,
+			viewContent:
+			'<mvc:View xmlns="sap.m" xmlns:mvc=\"sap.ui.core.mvc\" xmlns:html=\"http://www.w3.org/1999/xhtml\">' +
+			'<Dialog id="dialog" title="XML Fragment Dialog" escapeHandler="closeDialog">' +
+			'   <Text text="title" />                         ' +
+			'   <buttons>                                              ' +
+			'      <Button text="action!" press="doSomething" /> ' +
+			'      <Button text="stuff" /> ' +
+			'   </buttons>                                             ' +
+			'</Dialog>                                                 ' +
+			'</mvc:View>'
+		}).loaded().then(function(oView){
+			// check error log
+			assert.ok(this.logSpyError.calledOnce);
+			assert.deepEqual(
+				this.logSpyError.getCall(0).args[0].message,
+				"Error found in View (id: 'syncView3').\n" +
+				"XML node: '<Dialog xmlns=\"sap.m\" id=\"dialog\" title=\"XML Fragment Dialog\" escapeHandler=\"closeDialog\"/>':\n" +
+				"TypeError: The string 'closeDialog' couldn't be resolved to a function",
+				"Correct TypeError is logged"
+			);
+
+			// check warning log
+			assert.ok(
+				this.logSpyWarning.calledWithExactly("Event handler name 'doSomething' could not be resolved to an event handler function"),
+				"Correct warning for missing event-handler was logged"
+			);
+
+			// controls inside Fragment should still be available (for compatibility)
+			assert.equal(oView.byId("dialog").getButtons().length, 2, "Inner Controls are created.");
+
+			// sync cases can be cleaned up
+			oView.destroy();
+		}.bind(this)).catch(function(){
+			assert.ok(false, "The error shouldn't be thrown, only logged.");
 		});
 	});
 
@@ -109,7 +437,7 @@ sap.ui.define([
 
 		// check that DOM exists
 		var oElemPanel1 = oView.byId("myPanel").getDomRef();
-		var oElemTable1 = jQuery.sap.domById(oView.createId("localTableId"));
+		var oElemTable1 = document.getElementById(oView.createId("localTableId"));
 		assert.ok(oElemPanel1, "DOM for myPanel should exist");
 		assert.ok(oElemTable1, "DOM for localTableId should exist");
 
@@ -119,7 +447,7 @@ sap.ui.define([
 
 		// check that DOM has been preserved
 		var oElemPanel2 = oView.byId("myPanel").getDomRef();
-		var oElemTable2 = jQuery.sap.domById(oView.createId("localTableId"));
+		var oElemTable2 = document.getElementById(oView.createId("localTableId"));
 		assert.ok(oElemPanel2, "DOM for myPanel should exist after rerendering");
 		assert.ok(oElemTable2, "DOM for localTableId should exist after rerendering");
 		assert.ok(oElemPanel1 !== oElemPanel2, "DOM for panel should differ"); // Note: this will fail if DOM patching becomes the default
@@ -157,7 +485,7 @@ sap.ui.define([
 
 			// check DOM of controls
 			var oElemPanel1 = oView.byId("myPanel").getDomRef();
-			var oElemTable1 = jQuery.sap.domById(oView.createId("localTableId"));
+			var oElemTable1 = document.getElementById(oView.createId("localTableId"));
 			assert.ok(oElemPanel1, "DOM for myPanel should exist");
 			assert.ok(oElemTable1, "DOM for localTableId should exist");
 
@@ -167,7 +495,7 @@ sap.ui.define([
 
 			// check that DOM has been preserved
 			var oElemPanel2 = oView.byId("myPanel").getDomRef();
-			var oElemTable2 = jQuery.sap.domById(oView.createId("localTableId"));
+			var oElemTable2 = document.getElementById(oView.createId("localTableId"));
 			assert.ok(oElemPanel2, "DOM for myPanel should exist after rerendering");
 			assert.ok(oElemTable2, "DOM for localTableId should exist after rerendering");
 			assert.ok(oElemPanel1 !== oElemPanel2, "DOM for panel should differ"); // Note: this will fail if DOM patching becomes the default
@@ -197,7 +525,7 @@ sap.ui.define([
 		assert.ok(oElemViewBefore, "DOM for view should exist");
 
 		// simulate a rendering with a custom RenderManager
-		var oPanelContent = oPanel.getDomRef("cont");
+		var oPanelContent = oPanel.getDomRef("content");
 		var rm = sap.ui.getCore().createRenderManager();
 		rm.renderControl(oView);
 		rm.flush(oPanelContent);
@@ -216,13 +544,13 @@ sap.ui.define([
 		var xmlview;
 
 		function check(bVisible, sMsgSuffix) {
-			var vLayoutNode = jQuery.sap.domById('vLayout');
-			var btnBeforeNode = jQuery.sap.domById('btnBefore');
-			var xmlviewNode = jQuery.sap.domById('xmlview');
-			var xmlviewPlaceholderNode = jQuery.sap.domById('sap-ui-invisible-xmlview');
-			var btnAfterNode = jQuery.sap.domById('btnAfter');
+			var vLayoutNode = document.getElementById('vLayout');
+			var btnBeforeNode = document.getElementById('btnBefore');
+			var xmlviewNode = document.getElementById('xmlview');
+			var xmlviewPlaceholderNode = document.getElementById('sap-ui-invisible-xmlview');
+			var btnAfterNode = document.getElementById('btnAfter');
 
-			assert.ok(vLayout, "vLayout be rendered");
+			assert.ok(vLayoutNode, "vLayout be rendered");
 			assert.ok(btnBeforeNode, "btnBefore should be rendered");
 			assert.ok(btnAfterNode, "btnBefore should be rendered");
 			assert.ok(xmlviewNode, "xmlview should be rendered");
@@ -234,19 +562,19 @@ sap.ui.define([
 			}
 
 			if ( bVisible ) {
-				assert.ok(vLayout.compareDocumentPosition(xmlviewNode) & Node.DOCUMENT_POSITION_CONTAINED_BY, "xmlview should be a descendant of vLayout" + sMsgSuffix);
+				assert.ok(vLayoutNode.compareDocumentPosition(xmlviewNode) & Node.DOCUMENT_POSITION_CONTAINED_BY, "xmlview should be a descendant of vLayout" + sMsgSuffix);
 				assert.ok(btnBeforeNode.compareDocumentPosition(xmlviewNode) & Node.DOCUMENT_POSITION_FOLLOWING, "xmlview should follow the btnBeforeNode" + sMsgSuffix);
 				assert.ok(btnAfterNode.compareDocumentPosition(xmlviewNode) & Node.DOCUMENT_POSITION_PRECEDING, "xmlview should preced the btnAfterNode" + sMsgSuffix);
 			} else {
-				assert.ok(!(vLayout.compareDocumentPosition(xmlviewNode) & Node.DOCUMENT_POSITION_CONTAINED_BY), "xmlview should not be a descendant of vLayout" + sMsgSuffix);
-				assert.ok(vLayout.compareDocumentPosition(xmlviewPlaceholderNode) & Node.DOCUMENT_POSITION_CONTAINED_BY, "xmlview placeholder should be a descendant of vLayout" + sMsgSuffix);
+				assert.ok(!(vLayoutNode.compareDocumentPosition(xmlviewNode) & Node.DOCUMENT_POSITION_CONTAINED_BY), "xmlview should not be a descendant of vLayout" + sMsgSuffix);
+				assert.ok(vLayoutNode.compareDocumentPosition(xmlviewPlaceholderNode) & Node.DOCUMENT_POSITION_CONTAINED_BY, "xmlview placeholder should be a descendant of vLayout" + sMsgSuffix);
 				assert.ok(btnBeforeNode.compareDocumentPosition(xmlviewPlaceholderNode) & Node.DOCUMENT_POSITION_FOLLOWING, "xmlview placeholder should follow the btnBeforeNode" + sMsgSuffix);
 				assert.ok(btnAfterNode.compareDocumentPosition(xmlviewPlaceholderNode) & Node.DOCUMENT_POSITION_PRECEDING, "xmlview placeholder should preced the btnAfterNode" + sMsgSuffix);
 			}
 
 			// check children of xmlview
-			var xmlviewChildHTMLNode = jQuery.sap.domById(xmlview.createId('localTableId'));
-			var xmlviewChildButton3Node = jQuery.sap.domById(xmlview.createId('Button3'));
+			var xmlviewChildHTMLNode = document.getElementById(xmlview.createId('localTableId'));
+			var xmlviewChildButton3Node = document.getElementById(xmlview.createId('Button3'));
 			assert.ok(xmlviewChildHTMLNode, "xmlview child DOM should be rendered");
 			assert.ok(xmlviewChildButton3Node, "xmlview child control should be rendered");
 			assert.ok(xmlviewNode.compareDocumentPosition(xmlviewChildHTMLNode) & Node.DOCUMENT_POSITION_CONTAINED_BY, "xmlview DOM should contain child DOM" + sMsgSuffix);
@@ -385,23 +713,107 @@ sap.ui.define([
 		assert.ok(!RenderManager.getPreserveAreaRef().hasChildNodes(), "Nothing got preserved");
 
 		// Cleanup
-		var oDomRef = oView.getDomRef();
+		oDomRef = oView.getDomRef();
 		oDomRef.parentElement.removeChild(oDomRef);
 	});
+
+	QUnit.test("Directly Nested XMLViews", function(assert) {
+		sap.ui.require.preload({
+			"nested/views/outer.view.xml":
+				"<View xmlns=\"sap.ui.core.mvc\">" +
+					"<Text id=\"before\" text=\"another control before the nested view\" xmlns=\"sap.m\" />" +
+					"<XMLView viewName=\"nested.views.middle\" id=\"middle\" />" +
+					"<Text id=\"after\" text=\"another control after the nested view\" xmlns=\"sap.m\" />" +
+				"</View>",
+			"nested/views/middle.view.xml":
+				"<View xmlns=\"sap.ui.core.mvc\">" +
+					"<Text id=\"before\" text=\"another control before the nested view\" xmlns=\"sap.m\" />" +
+					"<VBox id=\"vbox\" xmlns=\"sap.m\">" +
+						"<XMLView viewName=\"nested.views.inner\" id=\"indirect-inner\" xmlns=\"sap.ui.core.mvc\" />" +
+					"</VBox>" +
+					"<XMLView viewName=\"nested.views.inner\" id=\"direct-inner\" xmlns=\"sap.ui.core.mvc\" />" +
+					"<Text id=\"after\" text=\"another control before the nested view\" xmlns=\"sap.m\" />" +
+				"</View>",
+			"nested/views/inner.view.xml":
+				"<View xmlns=\"sap.ui.core.mvc\">" +
+					"<Text id=\"inside\" text=\"another control inside the view\" xmlns=\"sap.m\" />" +
+				"</View>"
+		});
+		var expectedControls = [
+			"outer",
+				"outer--before",
+				"outer--middle",
+					"outer--middle--before",
+					"outer--middle--vbox",
+						"outer--middle--indirect-inner",
+							"outer--middle--indirect-inner--inside",
+					"outer--middle--direct-inner",
+						"outer--middle--direct-inner--inside",
+					"outer--middle--after",
+				"outer--after"
+		];
+
+		// load and place view, force rendering
+		var oView = sap.ui.xmlview("outer", { viewName: "nested.views.outer"}).placeAt('content');
+		sap.ui.getCore().applyChanges();
+
+		expectedControls.forEach(function(sId) {
+			var oControl = sap.ui.getCore().byId(sId);
+			assert.ok(oControl, "control with id '" + sId + "' should exist");
+			assert.ok(oControl.getDomRef(), "control with id '" + sId + "' should have DOM");
+		});
+
+		// install delegates on each control to assert later that all have been rendered
+		var count = 0;
+		expectedControls.forEach(function(sId) {
+			var oControl = sap.ui.getCore().byId(sId);
+			oControl.addDelegate({
+				onBeforeRendering: function() {
+					count += 100;
+				},
+				onAfterRendering: function() {
+					count += 1;
+				}
+			});
+		});
+
+		// Act: force a re-rerendering of the outer view
+		oView.invalidate();
+		sap.ui.getCore().applyChanges();
+
+		// Assert: everythging has been rendered again
+		assert.equal(count, 101 * expectedControls.length, "all controls should have participated in the rendering");
+		expectedControls.forEach(function(sId) {
+			var oControl = sap.ui.getCore().byId(sId);
+			assert.ok(oControl, "control with id '" + sId + "' should exist");
+			assert.ok(oControl.getDomRef(), "control with id '" + sId + "' should have DOM");
+			assert.notOk(document.getElementById(RenderManager.RenderPrefixes.Dummy + sId), "there should be no more Dummy-Element for id '" + sId + "'");
+			assert.notOk(document.getElementById(RenderManager.RenderPrefixes.Temporary + sId), "there should be no more Temporary-Element for id '" + sId + "'");
+		});
+
+		oView.destroy();
+		expectedControls.forEach(function(sId) {
+			var oControl = sap.ui.getCore().byId(sId);
+			assert.notOk(oControl, "control with id '" + sId + "' should no longer exist");
+			assert.notOk(document.getElementById(sId), "there should be no more DOM with id '" + sId + "'");
+		});
+
+	});
+
+
 
 	QUnit.module("Additional tests:");
 
 	// error
 	QUnit.test("Error in template - no default aggregation defined", function(assert) {
 		var sXml = [
-				'<core:View xmlns:core="sap.ui.core" xmlns:test="sap.ui.testlib" xmlns="http://www.w3.org/1999/xhtml">',
+				'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns:test="sap.ui.testlib" xmlns="http://www.w3.org/1999/xhtml">',
 				'	<test:TestButton>',
 				'		<test:Error/>',
 				'	</test:TestButton>',
-				'</core:View>'
+				'</mvc:View>'
 			].join(''),
-			sError = "Cannot add direct child without default aggregation defined for control sap.ui.testlib.TestButton",
-			view;
+			sError = "Cannot add direct child without default aggregation defined for control sap.ui.testlib.TestButton";
 
 		assert.throws(function() {
 			sap.ui.xmlview("erroneous_view_1", {viewContent:sXml});
@@ -410,26 +822,25 @@ sap.ui.define([
 
 	QUnit.test("Error in template - text in aggregation", function(assert) {
 		var sXml = [
-				'<core:View xmlns:core="sap.ui.core" xmlns:test="sap.ui.testlib" xmlns="http://www.w3.org/1999/xhtml">',
+				'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns:test="sap.ui.testlib" xmlns="http://www.w3.org/1999/xhtml">',
 				'	<test:TestButton>',
 				'		Error',
 				'	</test:TestButton>',
-				'</core:View>'
+				'</mvc:View>'
 			].join(''),
-			sError = "Cannot add text nodes as direct child of an aggregation. For adding text to an aggregation, a surrounding html tag is needed: Error",
-			view;
+			sError = "Cannot add text nodes as direct child of an aggregation. For adding text to an aggregation, a surrounding html tag is needed: Error";
 
 		assert.throws(function() {
 			sap.ui.xmlview("erroneous_view_2", {viewContent:sXml});
 		}, Error(sError), "Must throw an error");
 	});
 
-	QUnit.test("Error in controller", function() {
+	QUnit.test("Error in controller", function(assert) {
 		var sXml = [
-				'<core:View controllerName="example.mvc.test.error" xmlns:core="sap.ui.core">',
-				'</core:View>'
-			].join(''),
-			view;
+				'<mvc:View controllerName="example.mvc.test.error" xmlns:mvc="sap.ui.core.mvc">',
+				'</mvc:View>'
+			].join('');
+
 		// define erroneous controller
 		sap.ui.controller("example.mvc.test.error", {
 			onInit: function() {
@@ -445,14 +856,14 @@ sap.ui.define([
 	QUnit.test("Encoding", function(assert) {
 
 		var xmlWithHTMLFragment = [
-			'<core:View xmlns:core="sap.ui.core" xmlns="http://www.w3.org/1999/xhtml">',
+			'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="http://www.w3.org/1999/xhtml">',
 			'  <div title="&quot;&gt;&lt;span id=&quot;broken1&quot;&gt;broken1&lt;/span&gt;&lt;x y=&quot;">',
 			'    <span id="valid1"></span>',
 			'    <span id="valid2">',
 			'      &lt;span id=&quot;broken2&quot;&gt;broken2&lt;/span&gt;',
 			'    </span>',
 			'  </div>',
-			'</core:View>'
+			'</mvc:View>'
 		].join('');
 
 		var view = sap.ui.xmlview("view", {viewContent:xmlWithHTMLFragment});
@@ -473,9 +884,9 @@ sap.ui.define([
 			integerValue: 8015,
 			stringValue : 'Text1',
 			data: {
-				booleanValue : true,
-				integerValue: 8015,
-				stringValue : 'Text1'
+				booleanValue: false,
+				integerValue: 4242,
+				stringValue: 'Text2'
 			}
 		});
 		var oModel2 = new JSONModel({
@@ -485,30 +896,30 @@ sap.ui.define([
 		});
 
 		var xmlWithBindings = [
-			'<core:View xmlns:core="sap.ui.core" xmlns:test="sap.ui.testlib">',
+			'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns:test="sap.ui.testlib">',
 			'  <test:TestButton id="btn" enabled="{/booleanValue}" text="{/stringValue}" width="{/integerValue}" />',
-			'</core:View>'
+			'</mvc:View>'
 		].join('');
 
 		var xmlWithNamedBindings = [
-			'<core:View xmlns:core="sap.ui.core" xmlns:test="sap.ui.testlib">',
+			'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns:test="sap.ui.testlib">',
 			'  <test:TestButton id="btn" enabled="{model2>/booleanValue}" text="{model1>/stringValue}" width="{/integerValue}" />',
-			'</core:View>'
+			'</mvc:View>'
 		].join('');
 
 		var xmlWithElementBinding = [
-			'<core:View xmlns:core="sap.ui.core" xmlns:test="sap.ui.testlib">',
-			'  <test:TestButton id="btn" binding="{data}" enabled="{booleanValue}" text="{stringValue}" width="{integerValue}" />',
-			'</core:View>'
+			'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns:test="sap.ui.testlib">',
+			'  <test:TestButton id="btn" binding="{/data}" enabled="{booleanValue}" text="{stringValue}" width="{integerValue}" />',
+			'</mvc:View>'
 		].join('');
 
 		var xmlWithoutBindings = [
-			'<core:View xmlns:core="sap.ui.core" xmlns:test="sap.ui.testlib">',
+			'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns:test="sap.ui.testlib">',
 			'  <test:TestButton id="btn1" enabled="true" text="The following set is empty: \\{\\}" width="67" />',
 			'  <test:TestButton id="btn2" enabled="false" text="\\{\\} is an empty set" width="42" />',
 			'  <test:TestButton id="btn3" enabled="true" text="The following array is empty: []" width="67" />',
 			'  <test:TestButton id="btn4" enabled="false" text="[] is an empty array" width="42" />',
-			'</core:View>'
+			'</mvc:View>'
 		].join('');
 
 		var oViewWithBindings1 = sap.ui.xmlview({viewContent:xmlWithBindings});
@@ -524,17 +935,18 @@ sap.ui.define([
 		assert.equal(oViewWithBindings2.byId("btn").getWidth(), oModel2.getData().integerValue, "Check 'width' property of button 'btn'");
 
 		var oViewWithNamedBindings = sap.ui.xmlview({viewContent:xmlWithNamedBindings});
+		oViewWithNamedBindings.setModel(oModel2);
 		oViewWithNamedBindings.setModel(oModel1, "model1");
 		oViewWithNamedBindings.setModel(oModel2, "model2");
 		assert.equal(oViewWithNamedBindings.byId("btn").getEnabled(), oModel2.getData().booleanValue, "Check 'enabled' property of button 'btn'");
 		assert.equal(oViewWithNamedBindings.byId("btn").getText(), oModel1.getData().stringValue, "Check 'text' property of button 'btn'");
-		assert.equal(oViewWithBindings2.byId("btn").getWidth(), oModel2.getData().integerValue, "Check 'width' property of button 'btn'");
+		assert.equal(oViewWithNamedBindings.byId("btn").getWidth(), oModel2.getData().integerValue, "Check 'width' property of button 'btn'");
 
 		var oViewWithElementBinding = sap.ui.xmlview({viewContent:xmlWithElementBinding});
-		oViewWithBindings1.setModel(oModel1);
-		assert.equal(oViewWithBindings1.byId("btn").getEnabled(), oModel1.getData().data.booleanValue, "Check 'enabled' property of button 'btn'");
-		assert.equal(oViewWithBindings1.byId("btn").getText(), oModel1.getData().data.stringValue, "Check 'text' property of button 'btn'");
-		assert.equal(oViewWithBindings1.byId("btn").getWidth(), oModel1.getData().data.integerValue, "Check 'width' property of button 'btn'");
+		oViewWithElementBinding.setModel(oModel1);
+		assert.equal(oViewWithElementBinding.byId("btn").getEnabled(), oModel1.getData().data.booleanValue, "Check 'enabled' property of button 'btn'");
+		assert.equal(oViewWithElementBinding.byId("btn").getText(), oModel1.getData().data.stringValue, "Check 'text' property of button 'btn'");
+		assert.equal(oViewWithElementBinding.byId("btn").getWidth(), oModel1.getData().data.integerValue, "Check 'width' property of button 'btn'");
 
 		var oViewWithoutBindings = sap.ui.xmlview({viewContent:xmlWithoutBindings});
 		oViewWithoutBindings.setModel(oModel1);
@@ -553,9 +965,9 @@ sap.ui.define([
 		});
 
 		var xmlWithBindings = [
-			'<core:View controllerName="example.mvc.test" xmlns:core="sap.ui.core" xmlns:test="sap.ui.testlib" xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">',
+			'<mvc:View controllerName="example.mvc.test" xmlns:mvc="sap.ui.core.mvc" xmlns:test="sap.ui.testlib" xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">',
 			'  <test:TestButton id="btn" app:myKey1="myValue1" app:myKey2="{/value}" app:myKey3="{path: \'/value\', formatter:\'.valueFormatter\'}" />',
-			'</core:View>'
+			'</mvc:View>'
 		].join('');
 
 		var oView = sap.ui.xmlview({viewContent:xmlWithBindings});
@@ -591,7 +1003,7 @@ sap.ui.define([
 					preprocessors: {
 						xml:preprocessor,
 						viewxml: preprocessor
-					},
+					}
 				});
 			}.bind(this);
 		},
@@ -604,6 +1016,8 @@ sap.ui.define([
 	});
 
 	QUnit.test("registration", function(assert) {
+		var logSpyError = this.spy(Log, "error");
+
 		XMLView.registerPreprocessor(XMLView.PreprocessorType.XML, jQuery.noop, false);
 		XMLView.registerPreprocessor(XMLView.PreprocessorType.VIEWXML, jQuery.noop, false);
 		XMLView.registerPreprocessor(XMLView.PreprocessorType.CONTROLS, jQuery.noop, false);
@@ -611,21 +1025,44 @@ sap.ui.define([
 		assert.strictEqual(View._mPreprocessors["XML"]["xml"][1].preprocessor, jQuery.noop, "Registration for xml successful");
 		assert.strictEqual(View._mPreprocessors["XML"]["viewxml"][0].preprocessor, jQuery.noop, "Registration for viewxml successful");
 		assert.strictEqual(View._mPreprocessors["XML"]["controls"][0].preprocessor, jQuery.noop, "Registration for content successful");
-		assert.throws(XMLView.registerPreprocessor("unknown", jQuery.noop, false, {type: "unknown"}), "Error thrown when registering invalid type");
-		assert.throws(XMLView.registerPreprocessor(XMLView.PreprocessorType.XML, jQuery.noop, false, true), "Error thrown when registering more than one ondemand pp");
+
+		logSpyError.resetHistory();
+		XMLView.registerPreprocessor("unknown", jQuery.noop, false, {type: "unknown"});
+		assert.ok(
+			logSpyError.calledWith(sinon.match(/could not be registered due to unknown/)),
+			"Error logged when registering invalid type");
 		assert.strictEqual(View._mPreprocessors["XML"]["unknown"], undefined, "Registration for invalid type refused");
+
+		logSpyError.resetHistory();
+		XMLView.registerPreprocessor(XMLView.PreprocessorType.XML, jQuery.noop, false, true);
+		assert.ok(
+			logSpyError.calledWith(sinon.match(/only one on-demand-preprocessor allowed/)),
+			"Error logged when registering more than one ondemand pp");
+		assert.strictEqual(View._mPreprocessors["XML"]["unknown"], undefined, "Registration for invalid type refused");
+
+		// explicitly providing view type "XML" does not fail
+		var fnUniquePP = function() {};
+		XMLView.registerPreprocessor(XMLView.PreprocessorType.XML, fnUniquePP, "XML", false);
+		assert.ok(Array.isArray(View._mPreprocessors["XML"]["xml"]) &&
+			View._mPreprocessors["XML"]["xml"].some(function(entry) {
+				return entry.preprocessor === fnUniquePP;
+			}), "Preprocessor call passed through to View");
+
+		// explicitly providing an unsupported type fails
+		assert.throws(function() {
+			XMLView.registerPreprocessor(XMLView.PreprocessorType.XML, fnUniquePP, "YAML", false);
+		}, TypeError, "TypeError thrown when registering for a view type other than XML");
 	});
 
 	QUnit.test("sync / no execution", function(assert) {
 		assert.expect(1);
-		var bCalled,
-			preprocessorSpy = sinon.spy();
+		var preprocessorSpy = sinon.spy();
 
 		sap.ui.xmlview({
 			viewContent: this.sViewContent,
 			preprocessors: {
 				xml: this.fnGetConfig(preprocessorSpy)
-			},
+			}
 		});
 
 		sinon.assert.notCalled(preprocessorSpy);
@@ -673,7 +1110,7 @@ sap.ui.define([
 			oPreprocessors[sType] = this.fnGetConfig(preprocessorSpy, true);
 		} else {
 			oPreprocessors[sType] = [];
-			for(var i = 0; i < iCount; i++) {
+			for (var i = 0; i < iCount; i++) {
 				oPreprocessors[sType][i] = this.fnGetConfig(preprocessorSpy, true);
 			}
 		}
@@ -695,7 +1132,7 @@ sap.ui.define([
 			}),
 			fnAssert = function(e) {
 				assert.strictEqual(e, oError, "error was processed");
-			}.bind(this);
+			};
 
 		assert.expect(1);
 

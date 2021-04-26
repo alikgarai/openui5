@@ -3,6 +3,8 @@
 /* Base theme                            */
 /* ===================================== */
 
+@_sap_m_table_SelectionControlWidth: 3rem;
+
 .sapMListTblRow.sapMListTblRowTop > td {
 	vertical-align: top;
 }
@@ -29,23 +31,32 @@
 /* adding alternating rows background color */
 /* alternating rows color for Table without popin */
 .sapMListTblAlternateRowColors > :nth-child(even),
+/* alternating rows color for Table with popins (main row "sapMListTblRow") */
+.sapMListTblAlternateRowColorsPopin > :nth-child(4n-1),
+/* alternating rows color for popin rows (popin row "sapMListTblSubRow") */
+.sapMListTblAlternateRowColorsPopin > :nth-child(4n),
 .sapMListTblAlternateRowColorsGrouped > .sapMListTblRowAlternate,
 .sapMListTblAlternateRowColorsGrouped > .sapMListTblRowAlternate + .sapMListTblSubRow {
-	background-color: darken(@sapUiListBackground, 2);
+	background-color: @sapUiListAlternatingBackground;
+	&.sapMLIBHoverable:hover {
+		background : @sapUiListHoverBackground;
+	}
+	&.sapMLIBSelected {
+		background: @sapUiListSelectionBackgroundColor;
+		&.sapMLIBHoverable:hover {
+			background: @sapUiListHoverSelectionBackground;
+		}
+	}
 }
 
-/* alternating rows color for Table with popins (main row "sapMListTblRow") */
-.sapMListTblAlternateRowColorsPopin > :nth-child(4n-1) {
-	background-color: darken(@sapUiListBackground, 2);
-}
-
-/* alternating rows color for popin rows (popin row "sapMListTblSubRow") */
-.sapMListTblAlternateRowColorsPopin > :nth-child(4n) {
-	background-color: darken(@sapUiListBackground, 2);
-}
-
-.sapMLIBHoverable:hover + .sapMListTblSubRow {
+.sapMLIBHoverable:not(.sapMLIBSelected):hover + .sapMListTblSubRow,
+.sapMLIBHoverable:not(.sapMLIBSelected) + .sapMListTblSubRow:hover,
+.sapMLIBHoverable:not(.sapMLIBSelected).sapMPopinHovered {
 	background : @sapUiListHoverBackground;
+}
+
+.sapMLIBHoverable + .sapMListTblSubRow:hover {
+	cursor: pointer;
 }
 
 .sapMLIBSelected + .sapMListTblSubRow,
@@ -58,7 +69,9 @@
 	background: @sapUiListActiveBackground;
 }
 
-.sapMLIBHoverable.sapMLIBSelected:hover + .sapMListTblSubRow {
+.sapMLIBHoverable.sapMLIBSelected:hover + .sapMListTblSubRow,
+.sapMLIBHoverable.sapMLIBSelected + .sapMListTblSubRow:hover,
+.sapMLIBHoverable.sapMLIBSelected.sapMPopinHovered {
 	background : @sapUiListSelectionHoverBackground;
 }
 
@@ -72,8 +85,15 @@
 	box-sizing: border-box;
 }
 
+/* selectionControl width + cell padding */
+.sapMListModeMultiSelect .sapMListTblSubCnt,
+.sapMListModeSingleSelectLeft .sapMListTblSubCnt {
+	padding-left: calc(@_sap_m_table_SelectionControlWidth + 0.5rem);
+}
+
 .sapMListTblSubCntRow{
 	padding-bottom: 0;
+	padding-top: 1px;
 }
 
 .sapMListTblSubCntSpr {
@@ -91,6 +111,7 @@
 
 .sapMListTblSubCntValInline{
 	display: inline-block;
+	max-width: 100%;
 }
 
 .sapMListTblSubCntRow > .sapMListTblSubCntSpr,
@@ -120,13 +141,13 @@
 	border-color: transparent;
 }
 
-.sapMListShowSeparatorsAll .sapMListTblSubRow:last-child > td,
-.sapMListShowSeparatorsAll .sapMLIBShowSeparator:last-child > td {
+.sapMListShowSeparatorsAll .sapMListTblSubRow:last-child > td:not(.sapMListTblDummyCell),
+.sapMListShowSeparatorsAll .sapMLIBShowSeparator:last-child > td:not(.sapMListTblDummyCell) {
 	border-bottom: 1px solid @sapUiListBorderColor;
 }
 
-.sapMListShowSeparatorsAll .sapMLIBShowSeparator:last-child > td,
-.sapMListShowSeparatorsAll .sapMListTblSubRow:last-child > td{
+.sapMListShowSeparatorsAll .sapMLIBShowSeparator:last-child > td:not(.sapMListTblDummyCell),
+.sapMListShowSeparatorsAll .sapMListTblSubRow:last-child > td:not(.sapMListTblDummyCell) {
 	border-bottom: 1px solid @sapUiListTableFooterBorder;
 }
 
@@ -138,6 +159,14 @@
 .sapMListShowSeparatorsNone .sapMListTblFooter > td{
 	border-top-width: 2px;
 }
+
+.sapMTableRowCustomFocus {
+	.sapMLIBIconDet,
+	.sapMLIBIconDel {
+		margin-left: 0;
+	}
+}
+
 
 /********** COMPACT DESIGN ************/
 

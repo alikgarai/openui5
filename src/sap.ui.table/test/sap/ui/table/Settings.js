@@ -9,7 +9,7 @@
 
 	window.TABLESETTINGS.listTestData = [
 		{lastName: "Dente", name: "Alfred", checked: true, linkText: "www.sap.com", href: "http://www.sap.com", src: "images/Person.png", gender: "male", rating: 4, money: 5.67, birthday: "1968-05-06", currency: "EUR", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Success", highlightState: "Success"},
-		{lastName: "Friese", name: "Andrew", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/JobPosition.png", gender: "male", rating: 2, money: 10.45, birthday: "1975-01-01", currency: "EUR", objStatusText: "Name partly OK Text", objStatusTitle: "Name partly OK Title", objStatusState: "Warning", highlightState: "Warning"},
+		{lastName: "Friese", name: "Andrew", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/JobPosition.png", gender: "male", rating: 2, money: 10.45, birthday: "1975-01-01", currency: "EUR", objStatusText: "Name partly OK Text", objStatusTitle: "Name partly OK Title", objStatusState: "Warning", highlightState: "Warning", navigatedState: true},
 		{lastName: "Mann", name: "Sarah", checked: false, linkText: "www.kicker.de", href: "http://www.kicker.de", src: "images/Person.png", gender: "female", rating: 3, money: 1345.212, birthday: "1987-04-01", currency: "EUR", objStatusText: "Name not OK Text", objStatusTitle: "Name not OK Title", objStatusState: "Error", highlightState: "Error"},
 		{lastName: "Berry", name: "Doris", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/Person.png", gender: "female", rating: 4, money: 1.1, birthday: "2001-05-09", currency: "USD", objStatusText: "Status unknown Text", objStatusTitle: "Status unknown Title", objStatusState: "None", highlightState: "Information"},
 		{lastName: "Open", name: "Jenny", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/Person.png", gender: "female", rating: 2, money: 55663.1, birthday: "1953-03-03", currency: "USD", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "None", highlightState: "None"},
@@ -25,7 +25,7 @@
 		{lastName: "Ander", name: "Corey", checked: false, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/Person.png", gender: "male", rating: 5, money: 563.2, birthday: "1968-04-01", currency: "JPY", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Success", highlightState: "Success"},
 		{lastName: "Early", name: "Boris", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/Person.png", gender: "male", rating: 3, money: 8564.4, birthday: "1968-07-07", currency: "EUR", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Success", highlightState: "None"},
 		{lastName: "Noring", name: "Cory", checked: true, linkText: "www.sap.com", href: "http://www.sap.com", src: "images/Person.png", gender: "female", rating: 4, money: 3563, birthday: "1968-01-01", currency: "USD", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Success", highlightState: "None"},
-		{lastName: "O'Lantern", name: "Jacob", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/Person.png", gender: "male", rating: 2, money: 5.67, birthday: "1968-06-09", currency: "EUR", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Success", highlightState: "None"},
+		{lastName: "O'Lantern", name: "Jacob", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/Person.png", gender: "male", rating: 2, money: 5.67, birthday: "1968-06-09", currency: "EUR", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Error", highlightState: "Indication01"},
 		{lastName: "Tress", name: "Matthew", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/JobPosition.png", gender: "male", rating: 4, money: 5.67, birthday: "1968-01-01", currency: "EUR", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Success", highlightState: "None"},
 		{lastName: "Summer", name: "Paige", checked: true, linkText: "www.spiegel.de", href: "http://www.spiegel.de", src: "images/Person.png", gender: "female", rating: 3, money: 5.67, birthday: "1968-01-01", currency: "EUR", objStatusText: "Name OK Text", objStatusTitle: "Name OK Title", objStatusState: "Success", highlightState: "Information"}
 	];
@@ -267,6 +267,156 @@
 				}
 			}
 		},
+		ROWMODES: {
+			text: "Row mode",
+			group: {
+				ROWMODE: {
+					text: "Mode",
+					selectedKey: "NONE",
+					value: function() {
+						return TABLESETTINGS.actions.ROWMODES.group.ROWMODE.selectedKey;
+					},
+					choice: {
+						NONE: {
+							text: "None",
+							action: function(oTable) {
+								if (oTable.getRowMode()) {
+									oTable.getRowMode().destroy();
+								}
+
+								TABLESETTINGS.actions.ROWMODES.group.ROWMODE.selectedKey = "NONE";
+
+								for (var sKey in TABLESETTINGS.actions.ROWMODES.group) {
+									if (sKey.startsWith("SETTING")) {
+										TABLESETTINGS.actions.ROWMODES.group[sKey].hidden = true;
+									}
+								}
+
+								oSettingsMenu.removeAllContent();
+								oSettingsMenu.addContent(initForm(TABLESETTINGS.actions));
+							}
+						},
+						FIXED: {
+							text: "Fixed",
+							action: function(oTable) {
+								if (oTable.getRowMode()) {
+									oTable.getRowMode().destroy();
+								}
+
+								sap.ui.require(["sap/ui/table/rowmodes/FixedRowMode"], function(FixedRowMode) {
+									oTable.setRowMode(new FixedRowMode());
+
+									TABLESETTINGS.actions.ROWMODES.group.ROWMODE.selectedKey = "FIXED";
+
+									for (var sKey in TABLESETTINGS.actions.ROWMODES.group) {
+										if (sKey.startsWith("SETTING")) {
+											TABLESETTINGS.actions.ROWMODES.group[sKey].hidden = true;
+										}
+										if (sKey.startsWith("SETTING_FIXED")) {
+											TABLESETTINGS.actions.ROWMODES.group[sKey].hidden = false;
+										}
+									}
+
+									oSettingsMenu.removeAllContent();
+									oSettingsMenu.addContent(initForm(TABLESETTINGS.actions));
+								});
+							}
+						},
+						INTERACTIVE: {
+							text: "Interactive",
+							action: function(oTable) {
+								if (oTable.getRowMode()) {
+									oTable.getRowMode().destroy();
+								}
+
+								sap.ui.require(["sap/ui/table/rowmodes/InteractiveRowMode"], function(InteractiveRowMode) {
+									oTable.setRowMode(new InteractiveRowMode());
+
+									TABLESETTINGS.actions.ROWMODES.group.ROWMODE.selectedKey = "INTERACTIVE";
+
+									for (var sKey in TABLESETTINGS.actions.ROWMODES.group) {
+										if (sKey.startsWith("SETTING")) {
+											TABLESETTINGS.actions.ROWMODES.group[sKey].hidden = true;
+										}
+										if (sKey.startsWith("SETTING_INTERACTIVE")) {
+											TABLESETTINGS.actions.ROWMODES.group[sKey].hidden = false;
+										}
+									}
+
+									oSettingsMenu.removeAllContent();
+									oSettingsMenu.addContent(initForm(TABLESETTINGS.actions));
+								});
+							}
+						},
+						AUTO: {
+							text: "Auto",
+							action: function(oTable) {
+								if (oTable.getRowMode()) {
+									oTable.getRowMode().destroy();
+								}
+
+								sap.ui.require(["sap/ui/table/rowmodes/AutoRowMode"], function(AutoRowMode) {
+									oTable.setRowMode(new AutoRowMode());
+
+									TABLESETTINGS.actions.ROWMODES.group.ROWMODE.selectedKey = "AUTO";
+
+									for (var sKey in TABLESETTINGS.actions.ROWMODES.group) {
+										if (sKey.startsWith("SETTING")) {
+											TABLESETTINGS.actions.ROWMODES.group[sKey].hidden = true;
+										}
+										if (sKey.startsWith("SETTING_AUTO")) {
+											TABLESETTINGS.actions.ROWMODES.group[sKey].hidden = false;
+										}
+									}
+
+									oSettingsMenu.removeAllContent();
+									oSettingsMenu.addContent(initForm(TABLESETTINGS.actions));
+								});
+							}
+						}
+					}
+				},
+				SETTING_FIXED_ROWCOUNT: {
+					hidden: true,
+					text: "Row count",
+					input: true,
+					value: function(oTable) {
+						if (sap.ui.table.utils.TableUtils.isA(oTable.getRowMode(), "sap.ui.table.rowmodes.FixedRowMode")) {
+							return oTable.getRowMode().getRowCount();
+						}
+					},
+					action: function(oTable, sValue) {
+						oTable.getRowMode().setRowCount(parseInt(sValue) || 0);
+					}
+				},
+				SETTING_FIXED_HIDEEMPTYROWS: {
+					hidden: true,
+					text: "Hide empty rows",
+					input: "boolean",
+					value: function(oTable) {
+						if (sap.ui.table.utils.TableUtils.isA(oTable.getRowMode(), "sap.ui.table.rowmodes.FixedRowMode")) {
+							return oTable.getRowMode().getHideEmptyRows();
+						}
+					},
+					action: function(oTable, bValue) {
+						oTable.getRowMode().setHideEmptyRows(bValue);
+					}
+				},
+				SETTING_AUTO_HIDEEMPTYROWS: {
+					hidden: true,
+					text: "Hide empty rows",
+					input: "boolean",
+					value: function(oTable) {
+						if (sap.ui.table.utils.TableUtils.isA(oTable.getRowMode(), "sap.ui.table.rowmodes.AutoRowMode")) {
+							return oTable.getRowMode().getHideEmptyRows();
+						}
+					},
+					action: function(oTable, bValue) {
+						oTable.getRowMode().setHideEmptyRows(bValue);
+					}
+				}
+			}
+		},
 		SELECTION: {
 			text: "Selection",
 			group: {
@@ -279,19 +429,31 @@
 						NONE: {
 							text: "None",
 							action: function(oTable) {
-								oTable.setSelectionMode("None");
+								if (oTable._hasSelectionPlugin()) {
+									oTable._getSelectionPlugin().setSelectionMode("None");
+								} else {
+									oTable.setSelectionMode("None");
+								}
 							}
 						},
 						SINGLE: {
 							text: "Single",
 							action: function(oTable) {
-								oTable.setSelectionMode("Single");
+								if (oTable._hasSelectionPlugin()) {
+									oTable._getSelectionPlugin().setSelectionMode("Single");
+								} else {
+									oTable.setSelectionMode("Single");
+								}
 							}
 						},
 						MULTITOGGLE: {
 							text: "MultiToggle",
 							action: function(oTable) {
-								oTable.setSelectionMode("MultiToggle");
+								if (oTable._hasSelectionPlugin()) {
+									oTable._getSelectionPlugin().setSelectionMode("MultiToggle");
+								} else {
+									oTable.setSelectionMode("MultiToggle");
+								}
 							}
 						}
 					}
@@ -321,6 +483,32 @@
 							}
 						}
 					}
+				},
+				SELECTIONPLUGIN: {
+					text: "Selection Plugin",
+					value: function(oTable) {
+						return (oTable._getSelectionPlugin().isA("sap.ui.table.plugins.MultiSelectionPlugin") ? "MULTISELECTION" : "NONE");
+					},
+					choice: {
+						NONE: {
+							text: "None",
+							action: function(oTable) {
+								oTable.removeAllPlugins();
+							}
+						},
+						MULTISELECTION: {
+							text: "MultiSelection",
+							action: function(oTable) {
+								var MultiSelectionPlugin = sap.ui.requireSync("sap/ui/table/plugins/MultiSelectionPlugin");
+								var oPlugin = new MultiSelectionPlugin({
+									limit: 20,
+									enableNotification: true
+								});
+								oTable.addPlugin(oPlugin);
+								sap.ui.getCore().byId("__select5").setSelectedKey(oPlugin.getSelectionMode().toUpperCase());
+							}
+						}
+					}
 				}
 			}
 		},
@@ -330,7 +518,7 @@
 				DENSITY: {
 					text: "Density",
 					value: function(oTable) {
-						var sDensity = sap.ui.table.TableUtils.getContentDensity(oTable);
+						var sDensity = sap.ui.table.utils.TableUtils.getContentDensity(oTable);
 						if (!sDensity || sDensity.indexOf("sapUiSize") === -1) {
 							return null;
 						}
@@ -390,7 +578,7 @@
 						return oTable.getVisibleRowCount();
 					},
 					action: function(oTable, sValue) {
-						oTable.setVisibleRowCount(parseInt(sValue, 10) || 0);
+						oTable.setVisibleRowCount(parseInt(sValue) || 0);
 					}
 				}
 			}
@@ -474,7 +662,7 @@
 						return oColumn.getMinWidth();
 					},
 					action: function(oColumn, vValue) {
-						oColumn.setMinWidth(parseInt(vValue, 10) || 0);
+						oColumn.setMinWidth(parseInt(vValue) || 0);
 					}
 				}
 			}
@@ -565,35 +753,35 @@
 						}
 					},
 					value: function() {
-						return DEFAULTACTIONS.AREAS.group.NODATA.selectedKey;
+						return TABLESETTINGS.actions.AREAS.group.NODATA.selectedKey;
 					},
 					selectedKey: "SHOWDATA",
 					choice: {
 						SHOWDATA: {
 							text: "Show Data",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.NODATA.selectedKey = "SHOWDATA";
+								TABLESETTINGS.actions.AREAS.group.NODATA.selectedKey = "SHOWDATA";
 								switchNoData(oTable, "SHOWDATA");
 							}
 						},
 						TEXT: {
 							text: "Text Message",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.NODATA.selectedKey = "TEXT";
+								TABLESETTINGS.actions.AREAS.group.NODATA.selectedKey = "TEXT";
 								switchNoData(oTable, "TEXT");
 							}
 						},
 						CUSTOM: {
 							text: "Custom Control Message",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.NODATA.selectedKey = "CUSTOM";
+								TABLESETTINGS.actions.AREAS.group.NODATA.selectedKey = "CUSTOM";
 								switchNoData(oTable, "CUSTOM");
 							}
 						},
 						EMPTYCELLS: {
 							text: "Show Empty Cells",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.NODATA.selectedKey = "EMPTYCELLS";
+								TABLESETTINGS.actions.AREAS.group.NODATA.selectedKey = "EMPTYCELLS";
 								switchNoData(oTable, "EMPTYCELLS");
 							}
 						}
@@ -606,7 +794,7 @@
 						return oTable.getFixedColumnCount();
 					},
 					action: function(oTable, sValue) {
-						oTable.setFixedColumnCount(parseInt(sValue, 10) || 0);
+						oTable.setFixedColumnCount(parseInt(sValue) || 0);
 					}
 				},
 				FIXEDROWS: {
@@ -616,7 +804,7 @@
 						return oTable.getFixedRowCount();
 					},
 					action: function(oTable, sValue) {
-						oTable.setFixedRowCount(parseInt(sValue, 10) || 0);
+						oTable.setFixedRowCount(parseInt(sValue) || 0);
 					}
 				},
 				FIXEDBOTTOMROWS: {
@@ -626,20 +814,20 @@
 						return oTable.getFixedBottomRowCount();
 					},
 					action: function(oTable, sValue) {
-						oTable.setFixedBottomRowCount(parseInt(sValue, 10) || 0);
+						oTable.setFixedBottomRowCount(parseInt(sValue) || 0);
 					}
 				},
 				ROWACTIONS: {
 					text: "Row Actions",
 					value: function() {
-						return DEFAULTACTIONS.AREAS.group.ROWACTIONS.selectedKey;
+						return TABLESETTINGS.actions.AREAS.group.ROWACTIONS.selectedKey;
 					},
 					selectedKey: "NONE",
 					choice: {
 						NAVIGATION : {
 							text: "Navigation",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.ROWACTIONS.selectedKey = "NAVIGATION";
+								TABLESETTINGS.actions.AREAS.group.ROWACTIONS.selectedKey = "NAVIGATION";
 								var oTemplate = new sap.ui.table.RowAction({items: [
 									new sap.ui.table.RowActionItem({
 										type: "Navigation",
@@ -661,7 +849,7 @@
 						NAVIGATIONDELETE : {
 							text: "Navigation & Delete",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.ROWACTIONS.selectedKey = "NAVIGATIONDELETE";
+								TABLESETTINGS.actions.AREAS.group.ROWACTIONS.selectedKey = "NAVIGATIONDELETE";
 								var oTemplate = new sap.ui.table.RowAction({items: [
 									new sap.ui.table.RowActionItem({
 										type: "Navigation",
@@ -684,7 +872,7 @@
 						NAVIGATIONCUSTOM : {
 							text: "Navigation & Custom",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.ROWACTIONS.selectedKey = "NAVIGATIONCUSTOM";
+								TABLESETTINGS.actions.AREAS.group.ROWACTIONS.selectedKey = "NAVIGATIONCUSTOM";
 								var oTemplate = new sap.ui.table.RowAction({items: [
 									new sap.ui.table.RowActionItem({
 										type: "Navigation",
@@ -707,7 +895,7 @@
 						MULTI : {
 							text: "Multiple Actions",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.ROWACTIONS.selectedKey = "MULTI";
+								TABLESETTINGS.actions.AREAS.group.ROWACTIONS.selectedKey = "MULTI";
 								var oTemplate = new sap.ui.table.RowAction({items: [
 									new sap.ui.table.RowActionItem({icon: "sap-icon://attachment", text: "Attachment", press: fnRowActionPress}),
 									new sap.ui.table.RowActionItem({icon: "sap-icon://search", text: "Search", press: fnRowActionPress}),
@@ -720,7 +908,7 @@
 						MULTI_ONE : {
 							text: "Multiple Actions (1 Column)",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.ROWACTIONS.selectedKey = "MULTI_ONE";
+								TABLESETTINGS.actions.AREAS.group.ROWACTIONS.selectedKey = "MULTI_ONE";
 								var oTemplate = new sap.ui.table.RowAction({items: [
 									new sap.ui.table.RowActionItem({icon: "sap-icon://attachment", text: "Attachment", press: fnRowActionPress}),
 									new sap.ui.table.RowActionItem({icon: "sap-icon://search", text: "Search", press: fnRowActionPress}),
@@ -733,9 +921,44 @@
 						NONE : {
 							text: "No Actions",
 							action: function(oTable) {
-								DEFAULTACTIONS.AREAS.group.ROWACTIONS.selectedKey = "NONE";
+								TABLESETTINGS.actions.AREAS.group.ROWACTIONS.selectedKey = "NONE";
 								switchRowActions(oTable, 0, null);
 							}
+						}
+					}
+				},
+				CREATIONROW: {
+					text: "Creation Row",
+					value: function(oTable) {
+						return oTable.getCreationRow() != null;
+					},
+					input: "boolean",
+					action: function(oTable, bValue) {
+						if (bValue) {
+							sap.ui.require(["sap/ui/table/CreationRow"], function(CreationRow) {
+								var oBinding = oTable.getBinding();
+								var oModel = oBinding ? oBinding.getModel() : null;
+								var oCreationContext = oModel ? oModel.createBindingContext("/new") : null;
+
+								if (oModel) {
+									oModel.setProperty("", {}, oCreationContext);
+								}
+
+								oTable.setCreationRow(new CreationRow({
+									bindingContexts: {
+										undefined: oCreationContext
+									},
+									apply: function(oEvent) {
+										var oData = oModel.getObject(oBinding.getPath());
+
+										oData.push(oCreationContext.getObject());
+										oModel.setProperty("", {}, oCreationContext);
+										oTable.setFirstVisibleRow(oTable._getMaxFirstVisibleRowIndex());
+									}
+								}));
+							});
+						} else {
+							oTable.getCreationRow().destroy();
 						}
 					}
 				}
@@ -747,19 +970,27 @@
 				HIGHLIGHTS: {
 					text: "Highlights",
 					value: function(oTable) {
-						return sap.ui.table.TableUtils.hasRowHighlights(oTable);
+						return sap.ui.table.utils.TableUtils.hasRowHighlights(oTable);
 					},
 					input: "boolean",
 					action: function(oTable, bValue) {
-						if (bValue) {
-							oTable.setRowSettingsTemplate(new sap.ui.table.RowSettings({
-								highlight: "{highlightState}"
-							}));
-						} else {
-							oTable.setRowSettingsTemplate(new sap.ui.table.RowSettings({
-								highlight: sap.ui.core.MessageType.None
-							}));
-						}
+						oTable.setRowSettingsTemplate(new sap.ui.table.RowSettings({
+							highlight: bValue ? "{highlightState}" : sap.ui.core.MessageType.None,
+							navigated: sap.ui.table.utils.TableUtils.hasRowNavigationIndicators(oTable) ? "{navigatedState}" : false
+						}));
+					}
+				},
+				NAVINDICATORS: {
+					text: "Navigation Indicators",
+					value: function(oTable) {
+						return sap.ui.table.utils.TableUtils.hasRowNavigationIndicators(oTable);
+					},
+					input: "boolean",
+					action: function(oTable, bValue) {
+						oTable.setRowSettingsTemplate(new sap.ui.table.RowSettings({
+							highlight: sap.ui.table.utils.TableUtils.hasRowHighlights(oTable) ? "{highlightState}" : sap.ui.core.MessageType.None,
+							navigated: bValue ? "{navigatedState}" : false
+						}));
 					}
 				}
 			}
@@ -767,7 +998,7 @@
 		GROUPING: {
 			text: "Grouping",
 			value: function(oTable) {
-				if (sap.ui.table.TableUtils.isInstanceOf(oTable, "sap/ui/table/TreeTable")) {
+				if (oTable.isA("sap.ui.table.TreeTable")) {
 					return oTable.getUseGroupMode();
 				} else {
 					return oTable.getEnableGrouping();
@@ -775,7 +1006,7 @@
 			},
 			input: "boolean",
 			action: function(oTable, bValue) {
-				if (sap.ui.table.TableUtils.isInstanceOf(oTable, "sap/ui/table/TreeTable")) {
+				if (oTable.isA("sap.ui.table.TreeTable")) {
 					oTable.setUseGroupMode(bValue);
 				} else {
 					oTable.setEnableGrouping(bValue);
@@ -821,6 +1052,24 @@
 							oTable.attachCellClick(TABLESETTINGS.actions.EVENTS.group.CELLCLICK._cellClickHandler);
 						} else {
 							oTable.detachCellClick(TABLESETTINGS.actions.EVENTS.group.CELLCLICK._cellClickHandler);
+						}
+					}
+				},
+				PASTE: {
+					text: "Paste",
+					value: function(oTable) {
+						return oTable.hasListeners("paste");
+					},
+					input: "boolean",
+					_pasteHandler: function(oEvent) {
+						jQuery.sap.require("sap.m.MessageToast");
+						sap.m.MessageToast.show("Paste data: " + oEvent.getParameter("data"));
+					},
+					action: function(oTable, bValue) {
+						if (bValue) {
+							oTable.attachPaste(TABLESETTINGS.actions.EVENTS.group.PASTE._pasteHandler);
+						} else {
+							oTable.detachPaste(TABLESETTINGS.actions.EVENTS.group.PASTE._pasteHandler);
 						}
 					}
 				}
@@ -1400,25 +1649,42 @@
 		}
 	};
 
-	TABLESETTINGS.getAnalyticalService = function() {
-		if (!TABLESETTINGS.oStorage) {
-			jQuery.sap.require("jquery.sap.storage");
-			TABLESETTINGS.oStorage = jQuery.sap.storage(jQuery.sap.storage.Type.local);
-		}
-		return {url: TABLESETTINGS.oStorage.get("ANALYTICALSERVICETESTURL"), collection: TABLESETTINGS.oStorage.get("ANALYTICALSERVICETESTCOLLECTION")};
-	};
+	TABLESETTINGS.addServiceSettings = function(oTable, sKey, fnUpdate) {
+		var mServiceSettings = JSON.parse(window.localStorage.getItem(sKey));
 
-	TABLESETTINGS.setAnalyticalService = function(sUrl, sCollection) {
-		if (!TABLESETTINGS.oStorage) {
-			jQuery.sap.require("jquery.sap.storage");
-			TABLESETTINGS.oStorage = jQuery.sap.storage(jQuery.sap.storage.Type.local);
+		oTable.addExtension(new sap.m.Toolbar({
+			content: [
+				new sap.m.Input("TableSettings_ServiceUrl", {
+					value: mServiceSettings ? mServiceSettings.url : undefined,
+					tooltip: "Service Url",
+					placeholder: "Enter Service Url"
+				}),
+				new sap.m.Input("TableSettings_Collection", {
+					value: mServiceSettings ? mServiceSettings.collection : undefined,
+					tooltip: "Service Collection",
+					placeholder: "Enter Service Collection"
+				}),
+				new sap.m.Button({
+					tooltip: "Go",
+					icon: "sap-icon://restart",
+					press: function() {
+						var mNewServiceSettings = {
+							url: sap.ui.getCore().byId("TableSettings_ServiceUrl").getValue(),
+							collection: sap.ui.getCore().byId("TableSettings_Collection").getValue()
+						};
+
+						mNewServiceSettings.defaultProxyUrl = "../../../../proxy/" + mNewServiceSettings.url.replace("://", "/");
+
+						window.localStorage.setItem(sKey, JSON.stringify(mNewServiceSettings));
+						fnUpdate(mNewServiceSettings);
+					}
+				})
+			]
+		}));
+
+		if (mServiceSettings) {
+			fnUpdate(mServiceSettings);
 		}
-		if (sUrl && sCollection) {
-			TABLESETTINGS.oStorage.put("ANALYTICALSERVICETESTURL", sUrl);
-			TABLESETTINGS.oStorage.put("ANALYTICALSERVICETESTCOLLECTION", sCollection);
-			return true;
-		}
-		return false;
 	};
 
 	//*************************
@@ -1489,16 +1755,16 @@
 			contentWidth: "1000px",
 			content: [oSettingsTable],
 			endButton: new sap.m.Button({
-				text: "Cancel", press: function () { oDialog.close(); }
+				text: "Cancel", press: function() { oDialog.close(); }
 			}),
 			beginButton: new sap.m.Button({
 				text: "Ok",
-				press: function () {
+				press: function() {
 					changeSettings();
 					oDialog.close();
 				}
 			}),
-			afterClose: function () { oDialog.destroy(); }
+			afterClose: function() { oDialog.destroy(); }
 		});
 		oDialog.open();
 	}

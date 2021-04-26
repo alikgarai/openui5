@@ -3,12 +3,27 @@
  */
 
 // Provides class sap.ui.core.format.DateFormat
-sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale', 'sap/ui/core/LocaleData', 'sap/ui/core/date/UniversalDate', 'jquery.sap.strings'],
-	function(jQuery, library, Locale, LocaleData, UniversalDate/* , jQuerySapStrings*/) {
+sap.ui.define([
+	'sap/ui/core/CalendarType',
+	'sap/ui/core/Locale',
+	'sap/ui/core/LocaleData',
+	'sap/ui/core/date/UniversalDate',
+	"sap/base/util/deepEqual",
+	"sap/base/strings/formatMessage",
+	"sap/base/Log",
+	"sap/base/util/extend"
+],
+	function(
+		CalendarType,
+		Locale,
+		LocaleData,
+		UniversalDate,
+		deepEqual,
+		formatMessage,
+		Log,
+		extend
+	) {
 	"use strict";
-
-	// shortcut
-	var CalendarType = library.CalendarType;
 
 	/**
 	 * Constructor for DateFormat - must not be used: To get a DateFormat instance, please use getDateInstance, getDateTimeInstance or getTimeInstance.
@@ -56,7 +71,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		},
 		aRelativeScales: ["year", "month", "week", "day"],
 		aRelativeParseScales: ["year", "quarter", "month", "week", "day", "hour", "minute", "second"],
-		aIntervalCompareFields: ["FullYear", "Quarter", "Month", "Week" ,"Date"]
+		aIntervalCompareFields: ["Era", "FullYear", "Quarter", "Month", "Week" ,"Date"]
 	};
 
 	DateFormat.oDateTimeInfo = {
@@ -86,7 +101,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		},
 		aRelativeScales: ["year", "month", "week", "day", "hour", "minute", "second"],
 		aRelativeParseScales: ["year", "quarter", "month", "week", "day", "hour", "minute", "second"],
-		aIntervalCompareFields: ["FullYear", "Quarter", "Month", "Week", "Date", "DayPeriod", "Hours", "Minutes", "Seconds"]
+		aIntervalCompareFields: ["Era", "FullYear", "Quarter", "Month", "Week", "Date", "DayPeriod", "Hours", "Minutes", "Seconds"]
 	};
 
 	DateFormat.oTimeInfo = {
@@ -126,17 +141,18 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	 *
 	 * @param {object} [oFormatOptions] Object which defines the format options
 	 * @param {string} [oFormatOptions.format] @since 1.34.0 contains pattern symbols (e.g. "yMMMd" or "Hms") which will be converted into the pattern in the used locale, which matches the wanted symbols best.
-	 *  The symbols must be in canonical order, that is: Era (G), Year (y/Y), Quarter (q/Q), Month (M/L), Week (w/W), Day-Of-Week (E/e/c), Day (d/D), Hour (h/H/k/K/j/J), Minute (m), Second (s), Timezone (z/Z/v/V/O/X/x)
-	 *  See http://unicode.org/reports/tr35/tr35-dates.html#availableFormats_appendItems
+	 *  The symbols must be in canonical order, that is: Era (G), Year (y/Y), Quarter (q/Q), Month (M/L), Week (w), Day-Of-Week (E/e/c), Day (d), Hour (h/H/k/K/j/J), Minute (m), Second (s), Timezone (z/Z/v/V/O/X/x)
+	 *  See {@link http://unicode.org/reports/tr35/tr35-dates.html#availableFormats_appendItems}
 	 * @param {string} [oFormatOptions.pattern] a data pattern in LDML format. It is not verified whether the pattern represents only a date.
 	 * @param {string} [oFormatOptions.style] can be either 'short, 'medium', 'long' or 'full'. If no pattern is given, a locale dependent default date pattern of that style is used from the LocaleData class.
 	 * @param {boolean} [oFormatOptions.strictParsing] if true, by parsing it is checked if the value is a valid date
 	 * @param {boolean} [oFormatOptions.relative] if true, the date is formatted relatively to todays date if it is within the given day range, e.g. "today", "yesterday", "in 5 days"
-	 * @param {int[]} [oFormatOptions.relativeRange] the day range used for relative formatting. If oFormatOptions.relatvieScale is set to default value 'day', the relativeRange is by default [-6, 6], which means only the last 6 days, today and the next 6 days are formatted relatively. Otherwise when oFormatOptions.relativeScale is set to 'auto', all dates are formatted relatively.
+	 * @param {int[]} [oFormatOptions.relativeRange] the day range used for relative formatting. If <code>oFormatOptions.relativeScale</code> is set to default value 'day', the relativeRange is by default [-6, 6], which means only the last 6 days, today and the next 6 days are formatted relatively. Otherwise when <code>oFormatOptions.relativeScale</code> is set to 'auto', all dates are formatted relatively.
 	 * @param {string} [oFormatOptions.relativeScale="day"] if 'auto' is set, new relative time format is switched on for all Date/Time Instances. The relative scale is chosen depending on the difference between the given date and now.
 	 * @param {string} [oFormatOptions.relativeStyle="wide"] @since 1.32.10, 1.34.4 the style of the relative format. The valid values are "wide", "short", "narrow"
-	 * @param {boolean} [oFormatOptions.interval=false] @since 1.48.0 if true, the [format]{@link sap.ui.core.format.DateFormat#format} method expects an array with two dates as the first argument and formats them as interval. Further interval "Jan 10, 2008 - Jan 12, 2008" will be formatted as "Jan 10-12, 2008" if the 'format' option is set with necessary symbols.
+	 * @param {boolean} [oFormatOptions.interval=false] @since 1.48.0 if true, the {@link sap.ui.core.format.DateFormat#format format} method expects an array with two dates as the first argument and formats them as interval. Further interval "Jan 10, 2008 - Jan 12, 2008" will be formatted as "Jan 10-12, 2008" if the 'format' option is set with necessary symbols.
 	 *   Otherwise the two given dates are formatted separately and concatenated with local dependent pattern.
+	 * @param {boolean} [oFormatOptions.singleIntervalValue=false] Only relevant if oFormatOptions.interval is set to 'true'. This allows to pass an array with only one date object to the {@link sap.ui.core.format.DateFormat#format format} method.
 	 * @param {boolean} [oFormatOptions.UTC] if true, the date is formatted and parsed as UTC instead of the local timezone
 	 * @param {sap.ui.core.CalendarType} [oFormatOptions.calendarType] The calender type which is used to format and parse the date. This value is by default either set in configuration or calculated based on current locale.
 	 * @param {sap.ui.core.Locale} [oLocale] Locale to ask for locale specific texts/settings
@@ -153,17 +169,18 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	 *
 	 * @param {object} [oFormatOptions] Object which defines the format options
 	 * @param {string} [oFormatOptions.format] @since 1.34.0 contains pattern symbols (e.g. "yMMMd" or "Hms") which will be converted into the pattern in the used locale, which matches the wanted symbols best.
-	 *  The symbols must be in canonical order, that is: Era (G), Year (y/Y), Quarter (q/Q), Month (M/L), Week (w/W), Day-Of-Week (E/e/c), Day (d/D), Hour (h/H/k/K/j/J), Minute (m), Second (s), Timezone (z/Z/v/V/O/X/x)
+	 *  The symbols must be in canonical order, that is: Era (G), Year (y/Y), Quarter (q/Q), Month (M/L), Week (w), Day-Of-Week (E/e/c), Day (d), Hour (h/H/k/K/j/J), Minute (m), Second (s), Timezone (z/Z/v/V/O/X/x)
 	 *  See http://unicode.org/reports/tr35/tr35-dates.html#availableFormats_appendItems
 	 * @param {string} [oFormatOptions.pattern] a datetime pattern in LDML format. It is not verified whether the pattern represents a full datetime.
 	 * @param {string} [oFormatOptions.style] can be either 'short, 'medium', 'long' or 'full'. For datetime you can also define mixed styles, separated with a slash, where the first part is the date style and the second part is the time style (e.g. "medium/short"). If no pattern is given, a locale dependent default datetime pattern of that style is used from the LocaleData class.
 	 * @param {boolean} [oFormatOptions.strictParsing] if true, by parsing it is checked if the value is a valid datetime
 	 * @param {boolean} [oFormatOptions.relative] if true, the date is formatted relatively to todays date if it is within the given day range, e.g. "today", "yesterday", "in 5 days"@param {boolean} [oFormatOptions.UTC] if true, the date is formatted and parsed as UTC instead of the local timezone
-	 * @param {int[]} [oFormatOptions.relativeRange] the day range used for relative formatting. If oFormatOptions.relatvieScale is set to default value 'day', the relativeRange is by default [-6, 6], which means only the last 6 days, today and the next 6 days are formatted relatively. Otherwise when oFormatOptions.relativeScale is set to 'auto', all dates are formatted relatively.
+	 * @param {int[]} [oFormatOptions.relativeRange] the day range used for relative formatting. If <code>oFormatOptions.relativeScale</code> is set to default value 'day', the relativeRange is by default [-6, 6], which means only the last 6 days, today and the next 6 days are formatted relatively. Otherwise when <code>oFormatOptions.relativeScale</code> is set to 'auto', all dates are formatted relatively.
 	 * @param {string} [oFormatOptions.relativeScale="day"] if 'auto' is set, new relative time format is switched on for all Date/Time Instances. The relative scale is chosen depending on the difference between the given date and now.
 	 * @param {string} [oFormatOptions.relativeStyle="wide"] @since 1.32.10, 1.34.4 the style of the relative format. The valid values are "wide", "short", "narrow"
-	 * @param {boolean} [oFormatOptions.interval=false] @since 1.48.0 if true, the [format]{@link sap.ui.core.format.DateFormat#format} method expects an array with two dates as the first argument and formats them as interval. Further interval "Jan 10, 2008 - Jan 12, 2008" will be formatted as "Jan 10-12, 2008" if the 'format' option is set with necessary symbols.
+	 * @param {boolean} [oFormatOptions.interval=false] @since 1.48.0 if true, the {@link sap.ui.core.format.DateFormat#format format} method expects an array with two dates as the first argument and formats them as interval. Further interval "Jan 10, 2008 - Jan 12, 2008" will be formatted as "Jan 10-12, 2008" if the 'format' option is set with necessary symbols.
 	 *   Otherwise the two given dates are formatted separately and concatenated with local dependent pattern.
+	 * @param {boolean} [oFormatOptions.singleIntervalValue=false] Only relevant if oFormatOptions.interval is set to 'true'. This allows to pass an array with only one date object to the {@link sap.ui.core.format.DateFormat#format format} method.
 	 * @param {boolean} [oFormatOptions.UTC] if true, the date is formatted and parsed as UTC instead of the local timezone
 	 * @param {sap.ui.core.CalendarType} [oFormatOptions.calendarType] The calender type which is used to format and parse the date. This value is by default either set in configuration or calculated based on current locale.
 	 * @param {sap.ui.core.Locale} [oLocale] Locale to ask for locale specific texts/settings
@@ -180,17 +197,18 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	 *
 	 * @param {object} [oFormatOptions] Object which defines the format options
 	 * @param {string} [oFormatOptions.format] @since 1.34.0 contains pattern symbols (e.g. "yMMMd" or "Hms") which will be converted into the pattern in the used locale, which matches the wanted symbols best.
-	 *  The symbols must be in canonical order, that is: Era (G), Year (y/Y), Quarter (q/Q), Month (M/L), Week (w/W), Day-Of-Week (E/e/c), Day (d/D), Hour (h/H/k/K/j/J), Minute (m), Second (s), Timezone (z/Z/v/V/O/X/x)
+	 *  The symbols must be in canonical order, that is: Era (G), Year (y/Y), Quarter (q/Q), Month (M/L), Week (w), Day-Of-Week (E/e/c), Day (d), Hour (h/H/k/K/j/J), Minute (m), Second (s), Timezone (z/Z/v/V/O/X/x)
 	 *  See http://unicode.org/reports/tr35/tr35-dates.html#availableFormats_appendItems
 	 * @param {string} [oFormatOptions.pattern] a time pattern in LDML format. It is not verified whether the pattern only represents a time.
 	 * @param {string} [oFormatOptions.style] can be either 'short, 'medium', 'long' or 'full'. If no pattern is given, a locale dependent default time pattern of that style is used from the LocaleData class.
 	 * @param {boolean} [oFormatOptions.strictParsing] if true, by parsing it is checked if the value is a valid time
 	 * @param {boolean} [oFormatOptions.relative] if true, the date is formatted relatively to todays date if it is within the given day range, e.g. "today", "yesterday", "in 5 days"
-	 * @param {int[]} [oFormatOptions.relativeRange] the day range used for relative formatting. If oFormatOptions.relatvieScale is set to default value 'day', the relativeRange is by default [-6, 6], which means only the last 6 days, today and the next 6 days are formatted relatively. Otherwise when oFormatOptions.relativeScale is set to 'auto', all dates are formatted relatively.
+	 * @param {int[]} [oFormatOptions.relativeRange] the day range used for relative formatting. If <code>oFormatOptions.relativeScale</code> is set to default value 'day', the relativeRange is by default [-6, 6], which means only the last 6 days, today and the next 6 days are formatted relatively. Otherwise when <code>oFormatOptions.relativeScale</code> is set to 'auto', all dates are formatted relatively.
 	 * @param {string} [oFormatOptions.relativeScale="day"] if 'auto' is set, new relative time format is switched on for all Date/Time Instances. The relative scale is chosen depending on the difference between the given date and now.
 	 * @param {string} [oFormatOptions.relativeStyle="wide"] @since 1.32.10, 1.34.4 the style of the relative format. The valid values are "wide", "short", "narrow"
-	 * @param {boolean} [oFormatOptions.interval=false] @since 1.48.0 if true, the [format]{@link sap.ui.core.format.DateFormat#format} method expects an array with two dates as the first argument and formats them as interval. Further interval "Jan 10, 2008 - Jan 12, 2008" will be formatted as "Jan 10-12, 2008" if the 'format' option is set with necessary symbols.
+	 * @param {boolean} [oFormatOptions.interval=false] @since 1.48.0 if true, the {@link sap.ui.core.format.DateFormat#format format} method expects an array with two dates as the first argument and formats them as interval. Further interval "Jan 10, 2008 - Jan 12, 2008" will be formatted as "Jan 10-12, 2008" if the 'format' option is set with necessary symbols.
 	 *   Otherwise the two given dates are formatted separately and concatenated with local dependent pattern.
+	 * @param {boolean} [oFormatOptions.singleIntervalValue=false] Only relevant if oFormatOptions.interval is set to 'true'. This allows to pass an array with only one date object to the {@link sap.ui.core.format.DateFormat#format format} method.
 	 * @param {boolean} [oFormatOptions.UTC] if true, the time is formatted and parsed as UTC instead of the local timezone
 	 * @param {sap.ui.core.CalendarType} [oFormatOptions.calendarType] The calender type which is used to format and parse the date. This value is by default either set in configuration or calculated based on current locale.
 	 * @param {sap.ui.core.Locale} [oLocale] Locale to ask for locale specific texts/settings
@@ -238,7 +256,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 
 		// Extend the default format options with custom format options and retrieve the pattern
 		// from the LocaleData, in case it is not defined yet
-		oFormat.oFormatOptions = jQuery.extend(false, {}, oInfo.oDefaultFormatOptions, oFormatOptions);
+		oFormat.oFormatOptions = extend({}, oInfo.oDefaultFormatOptions, oFormatOptions);
 
 		if (!oFormat.oFormatOptions.calendarType) {
 			oFormat.oFormatOptions.calendarType = sap.ui.getCore().getConfiguration().getCalendarType();
@@ -299,7 +317,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				sKey = sKey + "-" + "interval";
 			}
 
-			if (!oInfo.oFallbackFormats[sKey]) {
+			var oFallbackFormats = oInfo.oFallbackFormats[sKey] ? Object.assign({}, oInfo.oFallbackFormats[sKey]) : undefined;
+
+			if (!oFallbackFormats) {
 				aFallbackFormatOptions = oInfo.aFallbackFormatOptions;
 				// Add two fallback patterns for locale-dependent short format without delimiters
 				if (oInfo.bShortFallbackFormatOptions) {
@@ -314,10 +334,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 					aFallbackFormatOptions = DateFormat._createFallbackOptionsWithoutDelimiter(oFormat.oFormatOptions.pattern).concat(aFallbackFormatOptions);
 				}
 
-				oInfo.oFallbackFormats[sKey] = DateFormat._createFallbackFormat(aFallbackFormatOptions, sCalendarType, oLocale, oInfo, oFormat.oFormatOptions.interval);
+				oFallbackFormats = DateFormat._createFallbackFormat(aFallbackFormatOptions, sCalendarType, oLocale, oInfo, oFormat.oFormatOptions.interval);
 			}
 
-			oFormat.aFallbackFormats = oInfo.oFallbackFormats[sKey];
+			oFormat.aFallbackFormats = oFallbackFormats;
 		}
 
 		oFormat.oRequiredParts = oInfo.oRequiredParts;
@@ -377,7 +397,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	 * @return {sap.ui.core.DateFormat[]} an array of fallback DateFormat instances
 	 */
 	DateFormat._createFallbackFormat = function(aFallbackFormatOptions, sCalendarType, oLocale, oInfo, bInterval) {
-		return aFallbackFormatOptions.map(function(oFormatOptions) {
+		return aFallbackFormatOptions.map(function(oOptions) {
+			// The format options within the aFallbackFormatOptions array are static
+			// and shouldn't be manipulated. Hence, cloning each format option is required.
+			var oFormatOptions = Object.assign({}, oOptions);
 			if (bInterval) {
 				oFormatOptions.interval = true;
 			}
@@ -457,7 +480,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				value: iFoundIndex === -1 ? null : aList[iFoundIndex]
 			};
 		},
-		parseTZ: function (sValue, bISO) {
+		/**
+		 * Parses a given timezone
+		 *
+		 * @param {string} sValue, e.g. "-0800", "-08:00", "-08"
+		 * @param {boolean} bColonSeparated whether or not the values are colon separated, e.g. "-08:00"
+		 * @returns {{tzDiff: number, length: number}}
+		 */
+		parseTZ: function (sValue, bColonSeparated) {
 			var iLength = 0;
 			var iTZFactor = sValue.charAt(0) == "+" ? -1 : 1;
 			var sPart;
@@ -465,16 +495,19 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			iLength++; //"+" or "-"
 			sPart = this.findNumbers(sValue.substr(iLength), 2);
 
-			var iTZDiffHour = parseInt(sPart, 10);
+			var iTZDiffHour = parseInt(sPart);
 			iLength += 2; //hh: 2 digits for hours
 
-			if (bISO) {
+			if (bColonSeparated) {
 				iLength++; //":"
 			}
 			sPart = this.findNumbers(sValue.substr(iLength), 2);
-			iLength += 2; //mm: 2 digits for minutes
-
-			var iTZDiff = parseInt(sPart, 10);
+			var iTZDiff = 0;
+			// timezone pattern "X": will produce only 2 digits: "-08"
+			if (sPart) {
+				iLength += 2; //mm: 2 digits for minutes
+				iTZDiff = parseInt(sPart);
+			}
 
 			return {
 				length: iLength,
@@ -503,26 +536,32 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var bValid = true;
 				var iValueIndex = 0;
 				var iPatternIndex = 0;
+				// https://www.compart.com/en/unicode/category/Pd
+				var sDelimiter = "\u002d\u007E\u2010\u2011\u2012\u2013\u2014\ufe58\ufe63\uff0d\uFF5E";
 
 				// Compare the letters in oPart.value (the pattern) and sValue (the given string to parse)
 				// one by one.
 				// If the current letter in the pattern is " ", sValue is allowed to have no match, exact match
-				// or mutiple " ". This makes the parsing more tolerant.
+				// or multiple " ". This makes the parsing more tolerant.
 				for (; iPatternIndex < oPart.value.length; iPatternIndex++) {
 					sChar = oPart.value.charAt(iPatternIndex);
 
-					if (sChar !== " ") {
-						// if it's not a space, there must be an exact match
-						if (sValue.charAt(iValueIndex) !== sChar) {
-							bValid = false;
-						}
-
-						iValueIndex++;
-					} else {
+					if (sChar === " ") {
 						// allows to have multiple spaces
 						while (sValue.charAt(iValueIndex) === " ") {
 							iValueIndex++;
 						}
+					} else if (sDelimiter.includes(sChar)) {
+						if (!sDelimiter.includes(sValue.charAt(iValueIndex))) {
+								bValid = false;
+						}
+						iValueIndex++;
+					} else {
+						if (sValue.charAt(iValueIndex) !== sChar) {
+							// if it's not a space, there must be an exact match
+							bValid = false;
+						}
+						iValueIndex++;
 					}
 
 					if (!bValid) {
@@ -591,9 +630,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				// When parsing we assume dates less than 100 to be in the current/last century,
 				// so when formatting we have to make sure they are differentiable by prefixing with zeros
 				if (sCalendarType != CalendarType.Japanese && oField.digits == 1 && iYear < 100) {
-					sYear = jQuery.sap.padLeft(sYear, "0", 4);
+					sYear = sYear.padStart(4, "0");
 				}
-				return jQuery.sap.padLeft(sYear, "0", oField.digits);
+				return sYear.padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var sCalendarType = oFormat.oFormatOptions.calendarType;
@@ -606,8 +645,25 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 					sPart = oParseHelper.findNumbers(sValue, oPart.digits);
 				}
 
-				var iYear = parseInt(sPart, 10);
+				var iYear = parseInt(sPart);
 				// Find the right century for two-digit years
+				// https://tc39.es/ecma262/#sec-date.parse
+				// "The function first attempts to parse the String according to the format
+				// described in Date Time String Format (https://tc39.es/ecma262/#sec-date-time-string-format),
+				// including expanded years.
+				// If the String does not conform to that format the function may fall back to
+				// any implementation-specific heuristics or implementation-specific date formats."
+				//
+				// Since a two-digit year is not format conform, each JS implementations might differ.
+				// Therefore we provide an own implementation:
+
+				// current year: 1978
+				// 1978: 08 = 1908 (diff: -70)
+				// 1978: 07 = 2007 (diff: -71)
+
+				// current year: 2018
+				// 2018: 48 = 1948 (diff: 30)
+				// 2018: 47 = 2047 (diff: 29)
 				if (sCalendarType != CalendarType.Japanese && sPart.length <= 2) {
 					var oCurrentDate = UniversalDate.getInstance(new Date(), sCalendarType),
 						iCurrentYear = oCurrentDate.getFullYear(),
@@ -642,9 +698,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				// When parsing we assume dates less than 100 to be in the current/last century,
 				// so when formatting we have to make sure they are differentiable by prefixing with zeros
 				if (sCalendarType != CalendarType.Japanese && oField.digits == 1 && iWeekYear < 100) {
-					sWeekYear = jQuery.sap.padLeft(sWeekYear, "0", 4);
+					sWeekYear = sWeekYear.padStart(4, "0");
 				}
-				return jQuery.sap.padLeft(sWeekYear, "0", oField.digits);
+				return sWeekYear.padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var sCalendarType = oFormat.oFormatOptions.calendarType;
@@ -656,7 +712,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				} else {
 					sPart = oParseHelper.findNumbers(sValue, oPart.digits);
 				}
-				var iYear = parseInt(sPart, 10);
+				var iYear = parseInt(sPart);
 				var iWeekYear;
 				// Find the right century for two-digit years
 				if (sCalendarType != CalendarType.Japanese && sPart.length <= 2) {
@@ -691,7 +747,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				} else if (oField.digits > 4) {
 					return oFormat.aMonthsNarrow[iMonth];
 				} else {
-					return jQuery.sap.padLeft(String(iMonth + 1), "0", oField.digits);
+					return String(iMonth + 1).padStart(oField.digits, "0");
 				}
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
@@ -703,7 +759,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				if (oPart.digits < 3) {
 					sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
 					bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
-					iMonth = parseInt(sPart, 10) - 1;
+					iMonth = parseInt(sPart) - 1;
 					if (oConfig.strict && (iMonth > 11 || iMonth < 0)) {
 						bValid = false;
 					}
@@ -738,7 +794,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				} else if (oField.digits > 4) {
 					return oFormat.aMonthsNarrowSt[iMonth];
 				} else {
-					return jQuery.sap.padLeft(String(iMonth + 1), "0", oField.digits);
+					return String(iMonth + 1).padStart(oField.digits, "0");
 				}
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
@@ -750,7 +806,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				if (oPart.digits < 3) {
 					sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
 					bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
-					iMonth = parseInt(sPart, 10) - 1;
+					iMonth = parseInt(sPart) - 1;
 					if (oConfig.strict && (iMonth > 11 || iMonth < 0)) {
 						bValid = false;
 					}
@@ -781,9 +837,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var iWeek = oWeek.week;
 				var sWeek = String(iWeek + 1);
 				if (oField.digits < 3) {
-					sWeek = jQuery.sap.padLeft(sWeek, "0", oField.digits);
+					sWeek = sWeek.padStart(oField.digits, "0");
 				} else {
-					sWeek = oFormat.oLocaleData.getCalendarWeek(oField.digits === 3 ? "narrow" : "wide", jQuery.sap.padLeft(sWeek, "0", 2));
+					sWeek = oFormat.oLocaleData.getCalendarWeek(oField.digits === 3 ? "narrow" : "wide", sWeek.padStart(2, "0"));
 				}
 				return sWeek;
 			},
@@ -796,7 +852,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				if (oPart.digits < 3) {
 					sPart = oParseHelper.findNumbers(sValue, 2);
 					iLength = sPart.length;
-					iWeek = parseInt(sPart, 10) - 1;
+					iWeek = parseInt(sPart) - 1;
 					bValid = oParseHelper.checkValid(oPart.type, !sPart, oFormat);
 				} else {
 					sPart = oFormat.oLocaleData.getCalendarWeek(oPart.digits === 3 ? "narrow" : "wide");
@@ -805,7 +861,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 						oResult = rWeekNumber.exec(sValue);
 					if (oResult) {
 						iLength = oResult[0].length;
-						iWeek = parseInt(oResult[0], 10) - 1;
+						iWeek = parseInt(oResult[0]) - 1;
 					} else {
 						bValid = oParseHelper.checkValid(oPart.type, true, oFormat);
 					}
@@ -841,12 +897,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			name: "day",
 			format: function(oField, oDate, bUTC, oFormat) {
 				var iDate = bUTC ? oDate.getUTCDate() : oDate.getDate();
-				return jQuery.sap.padLeft(String(iDate), "0", oField.digits);
+				return String(iDate).padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
 				var bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
-				var iDay = parseInt(sPart, 10);
+				var iDay = parseInt(sPart);
 				if (oConfig.strict && (iDay > 31 || iDay < 1)) {
 					bValid = false;
 				}
@@ -868,7 +924,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				} else if (oField.digits > 4) {
 					return oFormat.aQuartersNarrow[iQuarter];
 				} else {
-					return jQuery.sap.padLeft(String(iQuarter + 1), "0", oField.digits);
+					return String(iQuarter + 1).padStart(oField.digits, "0");
 				}
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
@@ -880,7 +936,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				if (oPart.digits < 3) {
 					sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
 					bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
-					iQuarter = parseInt(sPart, 10) - 1;
+					iQuarter = parseInt(sPart) - 1;
 					if (oConfig.strict && iQuarter > 3) {
 						bValid = false;
 					}
@@ -916,7 +972,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				} else if (oField.digits > 4) {
 					return oFormat.aQuartersNarrowSt[iQuarter];
 				} else {
-					return jQuery.sap.padLeft(String(iQuarter + 1), "0", oField.digits);
+					return String(iQuarter + 1).padStart(oField.digits, "0");
 				}
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
@@ -928,7 +984,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				if (oPart.digits < 3) {
 					sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
 					bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
-					iQuarter = parseInt(sPart, 10) - 1;
+					iQuarter = parseInt(sPart) - 1;
 					if (oConfig.strict && iQuarter > 3) {
 						bValid = false;
 					}
@@ -985,8 +1041,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 					var oFound = oParseHelper.findEntry(sValue, aVariants);
 					if (oFound.index !== -1) {
 						return {
-							// gets translated to dayNumberOfWeek as the day of week is relative to the week
-							dayNumberOfWeek: oFormat._adaptDayOfWeek(oFound.index),
+							// gets translated to dayOfWeek where the day of week is relative to the week
+							dayOfWeek: oFound.index,
 							length: oFound.value.length
 						};
 					}
@@ -1032,7 +1088,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var sPart = oParseHelper.findNumbers(sValue, oPart.digits);
 
 				return {
-					dayNumberOfWeek: parseInt(sPart, 10),
+					dayNumberOfWeek: parseInt(sPart),
 					length: sPart.length
 				};
 			}
@@ -1060,8 +1116,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 
 				if (bVariant) {
 					sValue = aMatch[0].replace(/\./g, "").toLowerCase() + sValue.substring(aMatch[0].length);
-					sAM = sAM.toLowerCase();
-					sPM = sPM.toLowerCase();
+					sAM = sAM.replace(/\./g, "").toLowerCase();
+					sPM = sPM.replace(/\./g, "").toLowerCase();
 				}
 				if (sValue.indexOf(sAM) === 0) {
 					bPM = false;
@@ -1080,12 +1136,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			name: "hour0_23",
 			format: function(oField, oDate, bUTC, oFormat) {
 				var iHours = bUTC ? oDate.getUTCHours() : oDate.getHours();
-				return jQuery.sap.padLeft(String(iHours), "0", oField.digits);
+				return String(iHours).padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var bValid;
 				var sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
-				var iHours = parseInt(sPart, 10);
+				var iHours = parseInt(sPart);
 
 				bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
 
@@ -1106,12 +1162,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var iHours = bUTC ? oDate.getUTCHours() : oDate.getHours();
 				var sHours = (iHours === 0 ? "24" : String(iHours));
 
-				return jQuery.sap.padLeft(sHours, "0", oField.digits);
+				return sHours.padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var bValid;
 				var sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
-				var iHours = parseInt(sPart, 10);
+				var iHours = parseInt(sPart);
 
 				bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
 
@@ -1135,12 +1191,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var iHours = bUTC ? oDate.getUTCHours() : oDate.getHours();
 				var sHours = String(iHours > 11 ? iHours - 12 : iHours);
 
-				return jQuery.sap.padLeft(sHours, "0", oField.digits);
+				return sHours.padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var bValid;
 				var sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
-				var iHours = parseInt(sPart, 10);
+				var iHours = parseInt(sPart);
 
 				bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
 
@@ -1168,12 +1224,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				} else {
 					sHours = String(iHours);
 				}
-				return jQuery.sap.padLeft(sHours, "0", oField.digits);
+				return sHours.padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var bPM = oConfig.dateValue.pm;
 				var sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
-				var iHours = parseInt(sPart, 10);
+				var iHours = parseInt(sPart);
 
 				var bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
 
@@ -1200,12 +1256,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			name: "minute",
 			format: function(oField, oDate, bUTC, oFormat) {
 				var iMinutes = bUTC ? oDate.getUTCMinutes() : oDate.getMinutes();
-				return jQuery.sap.padLeft(String(iMinutes), "0", oField.digits);
+				return String(iMinutes).padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var bValid;
 				var sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
-				var iMinutes = parseInt(sPart, 10);
+				var iMinutes = parseInt(sPart);
 
 				bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
 
@@ -1224,12 +1280,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			name: "second",
 			format: function(oField, oDate, bUTC, oFormat) {
 				var iSeconds = bUTC ? oDate.getUTCSeconds() : oDate.getSeconds();
-				return jQuery.sap.padLeft(String(iSeconds), "0", oField.digits);
+				return String(iSeconds).padStart(oField.digits, "0");
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
 				var bValid;
 				var sPart = oParseHelper.findNumbers(sValue, Math.max(oPart.digits, 2));
-				var iSeconds = parseInt(sPart, 10);
+				var iSeconds = parseInt(sPart);
 
 				bValid = oParseHelper.checkValid(oPart.type, sPart === "", oFormat);
 
@@ -1249,9 +1305,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			format: function(oField, oDate, bUTC, oFormat) {
 				var iMilliseconds = bUTC ? oDate.getUTCMilliseconds() : oDate.getMilliseconds();
 				var sMilliseconds = String(iMilliseconds);
-				var sFractionalseconds = jQuery.sap.padLeft(sMilliseconds, "0", 3);
+				var sFractionalseconds = sMilliseconds.padStart(3, "0");
 				sFractionalseconds = sFractionalseconds.substr(0, oField.digits);
-				sFractionalseconds = jQuery.sap.padRight(sFractionalseconds, "0", oField.digits);
+				sFractionalseconds = sFractionalseconds.padEnd(oField.digits, "0");
 				return sFractionalseconds;
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
@@ -1259,9 +1315,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var iLength = sPart.length;
 
 				sPart = sPart.substr(0, 3);
-				sPart = jQuery.sap.padRight(sPart, "0", 3);
+				sPart = sPart.padEnd(3, "0");
 
-				var iMilliseconds = parseInt(sPart, 10);
+				var iMilliseconds = parseInt(sPart);
 
 				return {
 					length: iLength,
@@ -1274,11 +1330,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			format: function(oField, oDate, bUTC, oFormat) {
 				//TODO getTimezoneLong and getTimezoneShort does not exist on Date object
 				//-> this is a preparation for a future full timezone support (only used by unit test so far)
-				if (oField.digits > 3 && oDate.getTimezoneLong()) {
+				if (oField.digits > 3 && oDate.getTimezoneLong && oDate.getTimezoneLong()) {
 					return oDate.getTimezoneLong();
-				} else if (oDate.getTimezoneShort()) {
+				} else if (oDate.getTimezoneShort && oDate.getTimezoneShort()) {
 					return oDate.getTimezoneShort();
 				}
+
+				// valid for zzzz (fallback to OOOO)
 
 				var sTimeZone = "GMT";
 				var iTZOffset = Math.abs(oDate.getTimezoneOffset());
@@ -1288,9 +1346,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 
 				if (!bUTC && iTZOffset != 0) {
 					sTimeZone += (bPositiveOffset ? "-" : "+");
-					sTimeZone += jQuery.sap.padLeft(String(iHourOffset), "0", 2);
+					sTimeZone += String(iHourOffset).padStart(2, "0");
 					sTimeZone += ":";
-					sTimeZone += jQuery.sap.padLeft(String(iMinuteOffset), "0", 2);
+					sTimeZone += String(iMinuteOffset).padStart(2, "0");
 				} else {
 					sTimeZone += "Z";
 				}
@@ -1306,7 +1364,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 					iLength = 3;
 				} else if (sValue.substring(0, 2) === "UT") {
 					iLength = 2;
-				} else if (sValue.charAt(0) == "Z") {
+				} else if (sValue.charAt(0) === "Z") {
 					iLength = 1;
 					iTZDiff = 0;
 				} else {
@@ -1315,7 +1373,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 					};
 				}
 
-				if (sValue.charAt(0) != "Z") {
+				if (sValue.charAt(0) !== "Z") {
 					var oParsedTZ = oParseHelper.parseTZ(sValue.substr(iLength), true);
 
 					iLength += oParsedTZ.length;
@@ -1337,10 +1395,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var iMinuteOffset = iTZOffset % 60;
 				var sTimeZone = "";
 
-				if (!bUTC && iTZOffset != 0) {
+				// valid for Z-ZZZ
+				// per RFC822 a timezone always has 4 digits
+				// UTC+0: "+0000"
+				// UTC-7: "-0700"
+				// UTC+2: "+0200"
+				// https://tools.ietf.org/html/rfc822 paragraph 5.1
+				if (!bUTC) {
 					sTimeZone += (bPositiveOffset ? "-" : "+");
-					sTimeZone += jQuery.sap.padLeft(String(iHourOffset), "0", 2);
-					sTimeZone += jQuery.sap.padLeft(String(iMinuteOffset), "0", 2);
+					sTimeZone += String(iHourOffset).padStart(2, "0");
+					sTimeZone += String(iMinuteOffset).padStart(2, "0");
 				}
 
 				return sTimeZone;
@@ -1352,6 +1416,35 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		"X": {
 			name: "timezoneISO8601",
 			format: function(oField, oDate, bUTC, oFormat) {
+				/*
+				 * Mountain Standard Time (MST, UTC-7)
+				 * X:           "-07"
+				 * XX, XXXX:    "-0700"
+				 * XXX, XXXXX:  "-07:00"
+				 */
+
+				/*
+				 * Central European Summer Time (CEST, UTC+2)
+				 * X:           "+02"
+				 * XX, XXXX:    "+0200"
+				 * XXX, XXXXX:  "+02:00"
+				 */
+
+				/*
+				 * Indian Standard Time (IST, UTC+5:30)
+				 * X:           "+0530"
+				 * XX, XXXX:    "+0530"
+				 * XXX, XXXXX:  "+05:30"
+				 */
+
+				/*
+				 * Greenwich Mean Time (GMT, UTC+0)
+				 * X:           "Z"
+				 * XX, XXXX:    "Z"
+				 * XXX, XXXXX:  "Z"
+				 */
+
+				// @see http://www.unicode.org/reports/tr35/tr35-dates.html#Time_Zone_Goals
 				var iTZOffset = Math.abs(oDate.getTimezoneOffset());
 				var bPositiveOffset = oDate.getTimezoneOffset() > 0;
 				var iHourOffset = Math.floor(iTZOffset / 60);
@@ -1360,9 +1453,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				var sTimeZone = "";
 				if (!bUTC && iTZOffset != 0) {
 					sTimeZone += (bPositiveOffset ? "-" : "+");
-					sTimeZone += jQuery.sap.padLeft(String(iHourOffset), "0", 2);
-					sTimeZone += ":";
-					sTimeZone += jQuery.sap.padLeft(String(iMinuteOffset), "0", 2);
+					sTimeZone += String(iHourOffset).padStart(2, "0");
+					if (oField.digits > 1 || iMinuteOffset > 0) {
+						if (oField.digits === 3 || oField.digits === 5) {
+							sTimeZone += ":";
+						}
+						sTimeZone += String(iMinuteOffset).padStart(2, "0");
+					}
 				} else {
 					sTimeZone += "Z";
 				}
@@ -1370,13 +1467,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				return sTimeZone;
 			},
 			parse: function(sValue, oPart, oFormat, oConfig) {
-				if (sValue.charAt(0) == "Z") {
+				if (sValue.charAt(0) === "Z") {
 					return {
 						length: 1,
 						tzDiff: 0
 					};
 				} else {
-					return oParseHelper.parseTZ(sValue, true);
+					return oParseHelper.parseTZ(sValue, oPart.digits === 3 || oPart.digits === 5);
 				}
 			}
 		}
@@ -1403,6 +1500,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		}
 
 		sResult = aBuffer.join("");
+
 		if (sap.ui.getCore().getConfiguration().getOriginInfo()) {
 			sResult = new String(sResult);
 			sResult.originInfo = {
@@ -1420,49 +1518,72 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	 * Format a date according to the given format options.
 	 *
 	 * @param {Date|Date[]} vJSDate the value to format
-	 * @param {boolean} bUTC whether to use UTC
+	 * @param {boolean} [bUTC=false] whether to use UTC
 	 * @return {string} the formatted output value. If an invalid date is given, an empty string is returned.
 	 * @public
 	 */
 	DateFormat.prototype.format = function(vJSDate, bUTC) {
+		var sCalendarType = this.oFormatOptions.calendarType,
+			sResult;
+
 		if (bUTC === undefined) {
 			bUTC = this.oFormatOptions.UTC;
 		}
 
 		if (Array.isArray(vJSDate)) {
 			if (!this.oFormatOptions.interval) {
-				jQuery.sap.log.error("Non-interval DateFormat can't format more than one date instance.");
+				Log.error("Non-interval DateFormat can't format more than one date instance.");
 				return "";
 			}
 
 			if (vJSDate.length !== 2) {
-				jQuery.sap.log.error("Interval DateFormat can only format with 2 date instances but " + vJSDate.length + " is given.");
+				Log.error("Interval DateFormat can only format with 2 date instances but " + vJSDate.length + " is given.");
 				return "";
 			}
 
-			var bValid = vJSDate.every(function(oJSDate) {
-				return oJSDate && !isNaN(oJSDate.getTime());
-			});
+			if (this.oFormatOptions.singleIntervalValue) {
+				if (vJSDate[0] === null) {
+					Log.error("First date instance which is passed to the interval DateFormat shouldn't be null.");
+					return "";
+				}
 
-			if (!bValid) {
-				jQuery.sap.log.error("At least one date instance which is passed to the interval DateFormat isn't valid.");
-				return "";
+				if (vJSDate[1] === null) {
+					sResult = this._format(vJSDate[0], bUTC);
+				}
 			}
 
-			return this._formatInterval(vJSDate, bUTC);
+			if (sResult === undefined) {
+				var bValid = vJSDate.every(function(oJSDate) {
+					return oJSDate && !isNaN(oJSDate.getTime());
+				});
+
+				if (!bValid) {
+					Log.error("At least one date instance which is passed to the interval DateFormat isn't valid.");
+					return "";
+				}
+
+				sResult = this._formatInterval(vJSDate, bUTC);
+			}
 		} else {
 			if (!vJSDate || isNaN(vJSDate.getTime())) {
-				jQuery.sap.log.error("The given date instance isn't valid.");
+				Log.error("The given date instance isn't valid.");
 				return "";
 			}
 
 			if (this.oFormatOptions.interval) {
-				jQuery.sap.log.error("Interval DateFormat expects an array with two dates for the first argument but only one date is given.");
+				Log.error("Interval DateFormat expects an array with two dates for the first argument but only one date is given.");
 				return "";
 			}
 
-			return this._format(vJSDate, bUTC);
+			sResult = this._format(vJSDate, bUTC);
 		}
+
+		// Support Japanese Gannen instead of Ichinen for first year of the era
+		if (sCalendarType == CalendarType.Japanese && this.oLocale.getLanguage() === "ja") {
+			sResult = sResult.replace(/(^|[^\d])1年/g, "$1元年");
+		}
+
+		return sResult;
 	};
 
 	DateFormat.prototype._formatInterval = function(aJSDates, bUTC) {
@@ -1474,6 +1595,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		var sSymbol;
 		var aBuffer = [];
 		var sPattern;
+		var aFormatArray = [];
 
 		var oDiffField = this._getGreatestDiffField([oFromDate, oToDate], bUTC);
 
@@ -1489,11 +1611,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			sPattern = this.oLocaleData.getCombinedIntervalPattern(this.oFormatOptions.pattern, sCalendarType);
 		}
 
-		this.aFormatArray = this.parseCldrDatePattern(sPattern);
+		aFormatArray = this.parseCldrDatePattern(sPattern);
 
 		oDate = oFromDate;
-		for (var i = 0; i < this.aFormatArray.length; i++) {
-			oPart = this.aFormatArray[i];
+		for (var i = 0; i < aFormatArray.length; i++) {
+			oPart = aFormatArray[i];
 			sSymbol = oPart.symbol || "";
 
 			if (oPart.repeat) {
@@ -1507,6 +1629,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	};
 
 	var mFieldToGroup = {
+		Era: "Era",
 		FullYear: "Year",
 		Quarter: "Quarter",
 		Month: "Month",
@@ -1529,7 +1652,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				vFromValue = aDates[0][sMethodName].apply(aDates[0]),
 				vToValue = aDates[1][sMethodName].apply(aDates[1]);
 
-			if (!jQuery.sap.equal(vFromValue, vToValue)) {
+			if (!deepEqual(vFromValue, vToValue)) {
 				bDiffFound = true;
 				mDiff[sFieldGroup] = true;
 			}
@@ -1564,7 +1687,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 
 			oResult = this.oSymbols[oPart.symbol || ""].parse(sSubValue, oPart, this, oParseConf) || {} ;
 
-			oDateValue = jQuery.extend(oDateValue, oResult);
+			oDateValue = extend(oDateValue, oResult);
 
 			if (oResult.valid === false) {
 				break;
@@ -1577,6 +1700,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 
 		if (oDateValue.pm) {
 			oDateValue.hour += 12;
+		}
+
+		// use dayOfWeek (E) as dayNumberOfWeek (u) if dayNumberOfWeek (u) is not present
+		if (oDateValue.dayNumberOfWeek === undefined && oDateValue.dayOfWeek !== undefined) {
+			oDateValue.dayNumberOfWeek = this._adaptDayOfWeek(oDateValue.dayOfWeek);
 		}
 
 		if (oDateValue.quarter !== undefined && oDateValue.month === undefined && oDateValue.day === undefined) {
@@ -1592,7 +1720,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			iRepeat,
 			oDateValue;
 
-		// Try out with all possible patterns until succesfully parse has been done or the end of the array is reached
+		// Try out with all possible patterns until successfully parse has been done or the end of the array is reached
 		this.intervalPatterns.some(function(sPattern) {
 			var aFormatArray = this.parseCldrDatePattern(sPattern);
 
@@ -1680,12 +1808,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 						// Set TZDiff after checking for valid day, as it may switch the day as well
 						oDate.setUTCMinutes((oDateValue.minute || 0) + oDateValue.tzDiff);
 					}
-					if (oDateValue.week !== undefined) {
+					if (oDateValue.week !== undefined  && (oDateValue.month === undefined || oDateValue.day === undefined)) {
+						//check that the week is only set if the day/month has not been set, because day/month have higher precedence than week
 						oDate.setUTCWeek({
 							year: oDateValue.weekYear || oDateValue.year,
 							week: oDateValue.week
 						});
 
+						//add the dayNumberOfWeek to the current day
 						if (oDateValue.dayNumberOfWeek !== undefined) {
 							oDate.setUTCDate(oDate.getUTCDate() + oDateValue.dayNumberOfWeek - 1);
 						}
@@ -1705,12 +1835,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 					// check if valid date given - if invalid, day is not the same (31.Apr -> 1.May)
 					oDateValue.valid = false;
 					oDate = undefined;
-				} else if (oDateValue.week !== undefined) {
+				} else if (oDateValue.week !== undefined && (oDateValue.month === undefined || oDateValue.day === undefined)) {
+					//check that the week is only set if the day/month has not been set, because day/month have higher precedence than week
 					oDate.setWeek({
 						year: oDateValue.weekYear || oDateValue.year,
 						week: oDateValue.week
 					});
 
+					//add the dayNumberOfWeek to the current day
 					if (oDateValue.dayNumberOfWeek !== undefined) {
 						oDate.setDate(oDate.getDate() + oDateValue.dayNumberOfWeek - 1);
 					}
@@ -1750,6 +1882,15 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		return oMergedObject;
 	}
 
+	// Checks if the given start date is before the end date.
+	function isValidDateRange(oStartDate, oEndDate) {
+		if (oStartDate.getTime() > oEndDate.getTime()) {
+			return false;
+		}
+
+		return true;
+	}
+
 	/**
 	 * Parse a string which is formatted according to the given format options.
 	 *
@@ -1760,7 +1901,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 	 * @public
 	 */
 	DateFormat.prototype.parse = function(sValue, bUTC, bStrict) {
-		sValue = jQuery.trim(sValue);
+		sValue = sValue == null ? "" : String(sValue).trim();
 
 		var oDateValue;
 		var sCalendarType = this.oFormatOptions.calendarType;
@@ -1771,6 +1912,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 
 		if (bStrict === undefined) {
 			bStrict = this.oFormatOptions.strictParsing;
+		}
+
+		// Support Japanese Gannen instead of Ichinen for first year of the era
+		if (sCalendarType == CalendarType.Japanese && this.oLocale.getLanguage() === "ja") {
+			sValue = sValue.replace(/元年/g, "1年");
 		}
 
 		if (!this.oFormatOptions.interval) {
@@ -1804,6 +1950,20 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				oJSDate2 = fnCreateDate(oDateValue2, sCalendarType, bUTC, bStrict);
 
 				if (oJSDate1 && oJSDate2) {
+
+					if (this.oFormatOptions.singleIntervalValue
+						&& oJSDate1.getTime() === oJSDate2.getTime()) {
+
+						return [oJSDate1, null];
+					}
+
+					var bValid = isValidDateRange(oJSDate1, oJSDate2);
+
+					if (bStrict && !bValid) {
+						Log.error("StrictParsing: Invalid date range. The given end date is before the start date.");
+						return [null, null];
+					}
+
 					return [oJSDate1, oJSDate2];
 				}
 			}
@@ -1812,7 +1972,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		if (!this.bIsFallback) {
 			var vDate;
 
-			jQuery.each(this.aFallbackFormats, function(i, oFallbackFormat) {
+			this.aFallbackFormats.every(function(oFallbackFormat) {
 				vDate = oFallbackFormat.parse(sValue, bUTC, bStrict);
 
 				if (Array.isArray(vDate)) {
@@ -1958,7 +2118,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 				if (oEntry.value !== undefined) {
 					return computeRelativeDate(oEntry.value, oEntry.scale);
 				} else {
-					iValue = parseInt(oResult[1], 10);
+					iValue = parseInt(oResult[1]);
 					return computeRelativeDate(iValue * oEntry.sign, oEntry.scale);
 				}
 			}
@@ -2044,7 +2204,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		}
 
 		sPattern = this.oLocaleData.getRelativePattern(sScale, iDiff, iDiffSeconds > 0, this.oFormatOptions.relativeStyle);
-		return jQuery.sap.formatMessage(sPattern, [Math.abs(iDiff)]);
+		return formatMessage(sPattern, [Math.abs(iDiff)]);
 
 	};
 
@@ -2089,6 +2249,21 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 		return sScale;
 	};
 
+	/**
+	 * Modifies the Date and sets the values with a higher index to <code>0</code>
+	 *
+	 * @param {Date} oDate input date
+	 * @param {number} iStartIndex index of the value to set to <code>0</code>. Higher indices will also be set to <code>0</code>.
+	 * 0: FullYear
+	 * 1: Month
+	 * 2: Date
+	 * 3: Hours
+	 * 4: Minutes
+	 * 5: Seconds
+	 * 6: Milliseconds
+	 * e.g. iStartIndex <code>4</code> will set Minutes, Seconds and Milliseconds to <code>0</code>
+	 * @returns {Date} copy of the date with the modified values
+	 */
 	function cutDateFields(oDate, iStartIndex) {
 		var aFields = [
 			"FullYear",
@@ -2099,11 +2274,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			"Seconds",
 			"Milliseconds"
 		], sMethodName;
+		var oDateCopy = new Date(oDate.getTime());
 
 		for (var i = iStartIndex; i < aFields.length; i++) {
 			sMethodName = "set" + aFields[iStartIndex];
-			oDate[sMethodName].apply(oDate, [0]);
+			oDateCopy[sMethodName].apply(oDateCopy, [0]);
 		}
+		return oDateCopy;
 	}
 
 	var mRelativeDiffs = {
@@ -2117,39 +2294,41 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/library', 'sap/ui/core/Locale',
 			var iFromDay = oFormat._adaptDayOfWeek(oFromDate.getDay());
 			var iToDay = oFormat._adaptDayOfWeek(oToDate.getDay());
 
-			cutDateFields(oFromDate, 3);
-			cutDateFields(oToDate, 3);
+			oFromDate = cutDateFields(oFromDate, 3);
+			oToDate = cutDateFields(oToDate, 3);
 
 			return (oToDate.getTime() - oFromDate.getTime() - (iToDay - iFromDay) * oFormat._mScales.day * 1000) / (oFormat._mScales.week * 1000);
 		},
 		day: function(oFromDate, oToDate, oFormat) {
-			cutDateFields(oFromDate, 3);
-			cutDateFields(oToDate, 3);
+			oFromDate = cutDateFields(oFromDate, 3);
+			oToDate = cutDateFields(oToDate, 3);
 
 			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.day * 1000);
 		},
 		hour: function(oFromDate, oToDate, oFormat) {
-			cutDateFields(oFromDate, 4);
-			cutDateFields(oToDate, 4);
+			oFromDate = cutDateFields(oFromDate, 4);
+			oToDate = cutDateFields(oToDate, 4);
 
 			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.hour * 1000);
 		},
 		minute: function(oFromDate, oToDate, oFormat) {
-			cutDateFields(oFromDate, 5);
-			cutDateFields(oToDate, 5);
+			oFromDate = cutDateFields(oFromDate, 5);
+			oToDate = cutDateFields(oToDate, 5);
 
 			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.minute * 1000);
 		},
 		second: function(oFromDate, oToDate, oFormat) {
-			cutDateFields(oFromDate, 6);
-			cutDateFields(oToDate, 6);
+			oFromDate = cutDateFields(oFromDate, 6);
+			oToDate = cutDateFields(oToDate, 6);
 
 			return (oToDate.getTime() - oFromDate.getTime()) / (oFormat._mScales.second * 1000);
 		}
 	};
 
 	DateFormat.prototype._adaptDayOfWeek = function(iDayOfWeek) {
-		var iFirstDayOfWeek = this.oLocaleData.getFirstDayOfWeek();
+		// day of week depends on the format locale
+		// the DateFormat's locale is independent
+		var iFirstDayOfWeek = LocaleData.getInstance(sap.ui.getCore().getConfiguration().getFormatSettings().getFormatLocale()).getFirstDayOfWeek();
 		var iDayNumberOfWeek = iDayOfWeek - (iFirstDayOfWeek - 1);
 
 		if (iDayNumberOfWeek <= 0) {

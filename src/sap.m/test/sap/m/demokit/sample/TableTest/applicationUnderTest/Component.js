@@ -8,21 +8,8 @@ sap.ui.define(['sap/ui/core/UIComponent','sap/ui/core/mvc/XMLView'],
 			publicMethods : [
 				"getTable"
 			],
-			dependencies : {
-				libs : [
-					"sap.m",
-					"sap.ui.layout"
-				]
-			},
-			config : {
-				sample : {
-					files : [
-						"./view/Table.view.xml",
-						"./view/Table.controller.js",
-						"./view/Formatter.js"
-					]
-				}
-			}
+
+			manifest: "json"
 		},
 
 		getTable : function () {

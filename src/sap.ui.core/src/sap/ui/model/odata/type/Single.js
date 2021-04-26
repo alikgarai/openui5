@@ -2,22 +2,15 @@
  * ${copyright}
  */
 
-sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
-		'sap/ui/model/FormatException', 'sap/ui/model/odata/type/ODataType',
-		'sap/ui/model/ParseException', 'sap/ui/model/ValidateException'],
-	function(jQuery, NumberFormat, FormatException, ODataType, ParseException, ValidateException) {
+sap.ui.define([
+	"sap/base/Log",
+	"sap/ui/core/format/NumberFormat",
+	"sap/ui/model/FormatException",
+	"sap/ui/model/ParseException",
+	"sap/ui/model/ValidateException",
+	"sap/ui/model/odata/type/ODataType"
+], function (Log, NumberFormat, FormatException, ParseException, ValidateException, ODataType) {
 	"use strict";
-
-	// Math.fround polyfill
-	if (!Math.fround) { // sap-ui-cover-browser msie
-		// IE 10+
-		var aArray = new window.Float32Array(1);
-
-		Math.fround = function (fValue) {
-			aArray[0] = fValue;
-			return aArray[0];
-		};
-	}
 
 	/**
 	 * Returns the locale-dependent error message for the type.
@@ -37,10 +30,15 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
 	 *   the formatter
 	 */
 	function getFormatter(oType) {
-		var oFormatOptions;
+		var oFormatOptions, oTypeFormatOptions;
 
 		if (!oType.oFormat) {
-			oFormatOptions = jQuery.extend({groupingEnabled : true}, oType.oFormatOptions);
+			oFormatOptions = {groupingEnabled : true};
+			oTypeFormatOptions = oType.oFormatOptions || {};
+			if (oTypeFormatOptions.style !== "short" && oTypeFormatOptions.style !== "long") {
+				oFormatOptions.preserveDecimals = true;
+			}
+			Object.assign(oFormatOptions, oType.oFormatOptions);
 			oType.oFormat = NumberFormat.getFloatInstance(oFormatOptions);
 		}
 		return oType.oFormat;
@@ -75,7 +73,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
 			if (vNullable === false || vNullable === "false") {
 				oType.oConstraints = {nullable : false};
 			} else if (vNullable !== undefined && vNullable !== true && vNullable !== "true") {
-				jQuery.sap.log.warning("Illegal nullable: " + vNullable, null, oType.getName());
+				Log.warning("Illegal nullable: " + vNullable, null, oType.getName());
 			}
 		}
 
@@ -101,6 +99,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
 	 * @param {object} [oFormatOptions]
 	 *   format options as defined in {@link sap.ui.core.format.NumberFormat}. In contrast to
 	 *   NumberFormat <code>groupingEnabled</code> defaults to <code>true</code>.
+	 * @param {boolean} [oFormatOptions.preserveDecimals=true]
+	 *   by default decimals are preserved, unless <code>oFormatOptions.style</code> is given as
+	 *   "short" or "long"; since 1.89.0
 	 * @param {object} [oConstraints]
 	 *   constraints; {@link #validateValue validateValue} throws an error if any constraint is
 	 *   violated
@@ -135,7 +136,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
 	 *   for this type.
 	 * @public
 	 */
-	Single.prototype.formatValue = function(vValue, sTargetType) {
+	Single.prototype.formatValue = function (vValue, sTargetType) {
 		var fValue;
 
 		if (vValue === null || vValue === undefined) {
@@ -149,18 +150,18 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
 			throw new FormatException("Illegal " + this.getName() + " value: " + vValue);
 		}
 		switch (this.getPrimitiveType(sTargetType)) {
-		case "any":
-			return vValue;
-		case "float":
-			return fValue;
-		case "int":
-			return Math.floor(fValue);
-		case "string":
-			// toPrecision to avoid rounding errors and parseFloat to avoid trailing zeroes
-			return getFormatter(this).format(parseFloat(fValue.toPrecision(7)));
-		default:
-			throw new FormatException("Don't know how to format " + this.getName() + " to "
-				+ sTargetType);
+			case "any":
+				return vValue;
+			case "float":
+				return fValue;
+			case "int":
+				return Math.floor(fValue);
+			case "string":
+				// toPrecision to avoid rounding errors and parseFloat to avoid trailing zeroes
+				return getFormatter(this).format(parseFloat(fValue.toPrecision(7)));
+			default:
+				throw new FormatException("Don't know how to format " + this.getName() + " to "
+					+ sTargetType);
 		}
 	};
 
@@ -185,26 +186,26 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
 	 * @public
 	 * @since 1.29.0
 	 */
-	Single.prototype.parseValue = function(vValue, sSourceType) {
+	Single.prototype.parseValue = function (vValue, sSourceType) {
 		var fResult;
 
 		if (vValue === null || vValue === "") {
 			return null;
 		}
 		switch (this.getPrimitiveType(sSourceType)) {
-		case "string":
-			fResult = getFormatter(this).parse(vValue);
-			if (isNaN(fResult)) {
-				throw new ParseException(getErrorMessage());
-			}
-			break;
-		case "int":
-		case "float":
-			fResult = vValue;
-			break;
-		default:
-			throw new ParseException("Don't know how to parse " + this.getName() + " from "
-				+ sSourceType);
+			case "string":
+				fResult = getFormatter(this).parse(vValue);
+				if (isNaN(fResult)) {
+					throw new ParseException(getErrorMessage());
+				}
+				break;
+			case "int":
+			case "float":
+				fResult = vValue;
+				break;
+			default:
+				throw new ParseException("Don't know how to parse " + this.getName() + " from "
+					+ sSourceType);
 		}
 		return Math.fround(fResult);
 	};
@@ -223,7 +224,6 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/format/NumberFormat',
 	 *
 	 * @param {number} fValue
 	 *   the value to be validated
-	 * @returns {void}
 	 * @throws {sap.ui.model.ValidateException} if the value is not valid
 	 * @public
 	 * @since 1.29.0

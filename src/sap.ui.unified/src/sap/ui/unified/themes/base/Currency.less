@@ -8,7 +8,7 @@
 	width: 100%;
 	overflow: hidden;
 	font-size: @sapMFontMediumSize;
-	font-family: @sapUiFontFamily;
+	font-family: @sapUiContentMonospaceFontFamily;
 	line-height: normal;
 }
 
@@ -27,22 +27,25 @@
 }
 
 .sapUiUfdCurrencyCurrency {
-	text-align: start;
-	margin-left: 0.5rem;
+	text-align: end;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	width: 2rem;
+	width: 3rem;
 }
 
-.sapUiUfdCurrencyNoVal .sapUiUfdCurrencyValue,
-.sapUiUfdCurrencyNoVal .sapUiUfdCurrencyCurrency {
+.sapUiUfdCurrency .sapMEmptyIndicator.sapMEmptyIndicatorAuto {
 	display: none;
 }
 
-.sapUiTableCell .sapUiUfdCurrency {
+.sapMShowEmpty-CTX .sapUiUfdCurrency .sapMEmptyIndicator.sapMEmptyIndicatorAuto {
+	display: inline-block;
+	text-align: end;
+}
+
+.sapUiTableDataCell .sapUiUfdCurrency {
 	vertical-align: middle;
 }
 
-.sapUiAnalyticalTableSum .sapUiTableCell .sapUiUfdCurrency {
+.sapUiAnalyticalTableSum .sapUiTableDataCell .sapUiUfdCurrency {
 	font-weight: bold;
 }

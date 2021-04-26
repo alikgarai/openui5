@@ -9,7 +9,10 @@
 	<script id="sap-ui-bootstrap"
 	data-sap-ui-trace="false"
 	data-sap-ui-libs="sap.ui.layout,sap.m,sap.ui.ux3"
-	src="../../../../resources/sap-ui-core.js">
+	src="../../../../resources/sap-ui-core.js"
+	data-sap-ui-resourceroots='{
+		"qunit.internal.acc": "../../../../test-resources/sap/ui/core/qunit/internal/acc"
+	}'>
 
 	</script>
 
@@ -41,9 +44,9 @@
 		}),
 		requiredParentWidth: 900,
 		demandPane: true
-	})
+	});
 
-	oResponsiveSplitter = new sap.ui.layout.ResponsiveSplitter({
+	var oResponsiveSplitter = new sap.ui.layout.ResponsiveSplitter("responsiveSplitter", {
 		defaultPane: "defaultPane",
 		rootPaneContainer: [
 			new sap.ui.layout.PaneContainer({
@@ -67,7 +70,7 @@
 									headerText: "4",
 									content: new sap.m.Text({text: lorem + lorem})
 								}),
-								requiredParentWidth: 800,
+								requiredParentWidth: 800
 							}),
 							new sap.ui.layout.SplitPane({
 								demandPane: true,
@@ -75,8 +78,8 @@
 									headerText: "1.5",
 									content: new sap.m.Text({text: lorem + lorem})
 								}),
-								requiredParentWidth: 950,
-							}),
+								requiredParentWidth: 950
+							})
 						]
 					}),
 					new sap.ui.layout.SplitPane({
@@ -85,7 +88,7 @@
 							headerText: "7",
 							content: new sap.m.Text({text: lorem + lorem})
 						}),
-						requiredParentWidth: 400,
+						requiredParentWidth: 400
 					}),
 					new sap.ui.layout.SplitPane({
 						demandPane: true,
@@ -124,7 +127,7 @@
 									headerText: "6.5",
 									content: new sap.m.Text({text: lorem + lorem})
 								}),
-								requiredParentWidth: 600,
+								requiredParentWidth: 600
 							}),
 							new sap.ui.layout.SplitPane({
 								demandPane: true,
@@ -133,7 +136,7 @@
 									content: new sap.m.Text({text: lorem + lorem})
 								}),
 								requiredParentWidth: 600
-							}),
+							})
 						]
 					})
 				]
@@ -176,12 +179,12 @@
 	// });
 
 	oResponsiveSplitter.placeAt("content");
-	
+
 	// oResponsiveSplitter1.placeAt("content");
 
 	</script>
 </head>
-<body>
+<body class="sapUiBody">
 	<div id = "content"></div>
 </body>
 </html>

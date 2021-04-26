@@ -3,24 +3,25 @@
  */
 
 // Provides class sap.ui.core.date.UniversalDate
-sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData'],
-	function(BaseObject, LocaleData) {
+sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData', './_Calendars'],
+	function(BaseObject, LocaleData, _Calendars) {
 	"use strict";
 
 
 	/**
-	 * Constructor for UniversalDate
+	 * Constructor for UniversalDate.
 	 *
 	 * @class
-	 * The Date is the base class of calendar date instances. It contains the static methods to create calendar
+	 * The UniversalDate is the base class of calendar date instances. It contains the static methods to create calendar
 	 * specific instances.
 	 *
-	 * The member variable this.oData contains the JS Date object, which is the source value of the date information.
+	 * The member variable <code>this.oDate</code> contains the JS Date object, which is the source value of the date information.
 	 * The prototype is containing getters and setters of the JS Date and is delegating them to the internal date object.
 	 * Implementations for specific calendars may override methods needed for their specific calendar (e.g. getYear
-	 * and getEra for japanese emperor calendar);
+	 * and getEra for Japanese emperor calendar);
 	 *
 	 * @private
+	 * @ui5-restricted
 	 * @alias sap.ui.core.date.UniversalDate
 	 */
 	var UniversalDate = BaseObject.extend("sap.ui.core.date.UniversalDate", /** @lends sap.ui.core.date.UniversalDate.prototype */ {
@@ -42,7 +43,16 @@ sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData'],
 	UniversalDate.prototype.createDate = function(clDate, aArgs) {
 		switch (aArgs.length) {
 			case 0: return new clDate();
-			case 1: return new clDate(aArgs[0]);
+			// new Date(new Date()) is officially not supported
+			// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/Date
+			// IE 11 loses milliseconds when using new Date(new Date())
+			// var oDateWithMs = new Date(1985, 9, 9, 13, 37, 13, 370);
+			// new Date(oDateWithMs).getMilliseconds();
+			// ie11: 0
+			// chrome/edge/safari/ff: 370
+			// -> Date#getTime to circumvent this problem
+			// this is e.g. executed when calling <code>new UniversalDate(oDateWithMs)</code>
+			case 1: return new clDate(aArgs[0] instanceof Date ? aArgs[0].getTime() : aArgs[0]);
 			case 2: return new clDate(aArgs[0], aArgs[1]);
 			case 3: return new clDate(aArgs[0], aArgs[1], aArgs[2]);
 			case 4: return new clDate(aArgs[0], aArgs[1], aArgs[2], aArgs[3]);
@@ -56,15 +66,19 @@ sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData'],
 	 * Returns an instance of Date, based on the calendar type from the configuration, or as explicitly
 	 * defined by parameter. The object provides all methods also known on the JavaScript Date object.
 	 *
-	 * @param {Date} oDate A JavaScript date object
-	 * @param {sap.ui.core.CalendarType} sCalendarType A calendar type
-	 * @returns {sap.ui.core.date.UniversalDate} A date instance
+	 * Note: Prefer this method over calling <code>new UniversalDate</code> with an instance of <code>Date</code>
+	 *
+	 * @param {Date|sap.ui.core.date.UniversalDate} [oDate] JavaScript date object, defaults to <code>new Date()</code>
+	 * @param {sap.ui.core.CalendarType} [sCalendarType] The calendar type, defaults to <code>sap.ui.getCore().getConfiguration().getCalendarType()</code>
+	 * @returns {sap.ui.core.date.UniversalDate} The date instance
 	 * @public
 	 */
 	UniversalDate.getInstance = function(oDate, sCalendarType) {
 		var clDate, oInstance;
 		if (oDate instanceof UniversalDate) {
 			oDate = oDate.getJSDate();
+		} else if (!oDate) {
+			oDate = new Date();
 		}
 		if (!sCalendarType) {
 			sCalendarType = sap.ui.getCore().getConfiguration().getCalendarType();
@@ -87,7 +101,7 @@ sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData'],
 		if (!sCalendarType) {
 			sCalendarType = sap.ui.getCore().getConfiguration().getCalendarType();
 		}
-		return sap.ui.requireSync("sap/ui/core/date/" + sCalendarType);
+		return _Calendars.get(sCalendarType);
 	};
 
 	/*
@@ -201,7 +215,7 @@ sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData'],
 			iWeek, iLastYear, iNextYear, oLastFirstDay, oNextFirstDay;
 		// If region is US, always calculate the week for the current year, otherwise
 		// the week might be the last week of the previous year or first week of next year
-		if (oLocale.getRegion() === "US") {
+		if (oLocale.getLanguage() === "en" && (oLocale.getRegion() === "US" || !oLocale.getRegion())) {
 			iWeek = calculateWeeks(oFirstDay, oDate);
 		} else {
 			iLastYear = iYear - 1;
@@ -228,10 +242,12 @@ sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData'],
 		var oLocale = sap.ui.getCore().getConfiguration().getFormatSettings().getFormatLocale(),
 			clDate = this.getClass(sCalendarType),
 			oFirstDay = getFirstDayOfFirstWeek(clDate, iYear),
-			oDate = new clDate(oFirstDay.valueOf() + iWeek * iMillisecondsInWeek);
+			oDate = new clDate(oFirstDay.valueOf() + iWeek * iMillisecondsInWeek),
+			bIsRegionUS = oLocale.getLanguage() === "en" && (oLocale.getRegion() === "US" || !oLocale.getRegion());
 		//If first day of week is in last year and region is US, return the
 		//1st of January instead for symmetric behaviour
-		if (oLocale.getRegion() === "US" && iWeek === 0 && oFirstDay.getUTCFullYear() < iYear) {
+
+		if (bIsRegionUS && iWeek === 0 && oFirstDay.getUTCFullYear() < iYear) {
 			return {
 				year: iYear,
 				month: 0,
@@ -336,13 +352,13 @@ sap.ui.define(['sap/ui/base/Object', 'sap/ui/core/LocaleData'],
 			iYear, iMonth, iDay;
 		if (aParts[0] == "") {
 			// negative year
-			iYear = -parseInt(aParts[1], 10);
-			iMonth = parseInt(aParts[2], 10) - 1;
-			iDay = parseInt(aParts[3], 10);
+			iYear = -parseInt(aParts[1]);
+			iMonth = parseInt(aParts[2]) - 1;
+			iDay = parseInt(aParts[3]);
 		} else {
-			iYear = parseInt(aParts[0], 10);
-			iMonth = parseInt(aParts[1], 10) - 1;
-			iDay = parseInt(aParts[2], 10);
+			iYear = parseInt(aParts[0]);
+			iMonth = parseInt(aParts[1]) - 1;
+			iDay = parseInt(aParts[2]);
 		}
 		return {
 			timestamp: new Date(0).setUTCFullYear(iYear, iMonth, iDay),

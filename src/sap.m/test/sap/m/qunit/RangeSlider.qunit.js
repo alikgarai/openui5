@@ -1,13 +1,37 @@
-/*global QUnit,sinon,qutils*/
+/* global QUnit,sinon */
 
-(function () {
+sap.ui.define([
+	"sap/base/Log",
+	"sap/m/RangeSlider",
+	"sap/m/ResponsiveScale",
+	"sap/m/SliderTooltipBase",
+	"sap/m/SliderTooltipBaseRenderer",
+	"sap/m/Text",
+	"sap/ui/events/KeyCodes",
+	"sap/ui/qunit/QUnitUtils",
+	"jquery.sap.keycodes",
+	"sap/ui/model/json/JSONModel",
+	"jquery.sap.global"
+], function(
+	Log,
+	RangeSlider,
+	ResponsiveScale,
+	SliderTooltipBase,
+	SliderTooltipBaseRenderer,
+	Text,
+	KeyCodes,
+	qutils,
+	jQuery,
+	JSONModel
+) {
 	"use strict";
+
 
 	var DOM_RENDER_LOCATION = "qunit-fixture";
 
 	QUnit.module("HTML", {
 		beforeEach: function () {
-			this.rangeSlider = new sap.m.RangeSlider();
+			this.rangeSlider = new RangeSlider();
 
 			this.rangeSlider.placeAt(DOM_RENDER_LOCATION);
 			sap.ui.getCore().applyChanges();
@@ -25,6 +49,9 @@
 	});
 
 	QUnit.test("Handles", function (assert) {
+		var sKeyShortcutFirstHandle = this.rangeSlider.getDomRef("handle1").getAttribute("aria-keyshortcuts"),
+			sKeyShortcutSecondHandle = this.rangeSlider.getDomRef("handle2").getAttribute("aria-keyshortcuts");
+
 		assert.strictEqual(jQuery(".sapMSliderHandle").length, 2, "There should be two handles.");
 		assert.strictEqual(jQuery("[id*='-handle']").length, 2, "There should be four elements in the handles section rendered.");
 		assert.strictEqual(jQuery("[id$='-handle1']").length, 1, "There should be only one handle rendered with id \"-handle1\".");
@@ -36,17 +63,19 @@
 		assert.ok(jQuery("[id$='-handle1']").attr("aria-valuemin"), "Aria attribute \"aria-valuemin\" should be rendered for handle1.");
 		assert.ok(jQuery("[id$='-handle1']").attr("aria-valuemax"), "Aria attribute \"aria-valuemax\" should be rendered for handle1.");
 		assert.ok(jQuery("[id$='-handle1']").attr("aria-valuenow"), "Aria attribute \"aria-valuenow\" should be rendered for handle1.");
+		assert.notOk(sKeyShortcutFirstHandle, "The 'aria-keyshortcuts' attribute should not be presented on the first handle");
 
 		assert.ok(jQuery("[id$='-handle2']").attr("aria-orientation"), "Aria attribute \"aria-orientation\" should be rendered for handle2.");
 		assert.ok(jQuery("[id$='-handle2']").attr("aria-valuemin"), "Aria attribute \"aria-valuemin\" should be rendered for handle2.");
 		assert.ok(jQuery("[id$='-handle2']").attr("aria-valuemax"), "Aria attribute \"aria-valuemax\" should be rendered for handle2.");
 		assert.ok(jQuery("[id$='-handle2']").attr("aria-valuenow"), "Aria attribute \"aria-valuenow\" should be rendered for handle2.");
+		assert.notOk(sKeyShortcutSecondHandle, "The 'aria-keyshortcuts' attribute should not be presented on the second handle");
 	});
 
 	QUnit.test("Aria labels forwarding to handles and progress indicator", function (assert) {
 		// arrange & act
 		var s1stHandleLabels, s2ndHandleLabels, sProgressIndicatorLabels, sRSLabelId;
-		this.rangeSlider.addAriaLabelledBy(new sap.m.Text({text: "LabelForRS"}));
+		this.rangeSlider.addAriaLabelledBy(new Text({text: "LabelForRS"}));
 
 		sap.ui.getCore().applyChanges();
 
@@ -104,7 +133,7 @@
 
 	QUnit.module("API", {
 		beforeEach: function () {
-			this.rangeSlider = new sap.m.RangeSlider();
+			this.rangeSlider = new RangeSlider();
 
 			this.rangeSlider.placeAt(DOM_RENDER_LOCATION);
 			sap.ui.getCore().applyChanges();
@@ -140,7 +169,7 @@
 		// arrange & act
 		var oResourceBundle = sap.ui.getCore().getLibraryResourceBundle("sap.m"),
 			oBoundleCalledStub = this.stub(oResourceBundle, "getText"),
-			oSlider = new sap.m.RangeSlider(),
+			oSlider = new RangeSlider(),
 			aLabels = oSlider.getAggregation("_handlesLabels");
 
 		oSlider.placeAt("qunit-fixture");
@@ -179,8 +208,8 @@
 
 		assert.strictEqual(aRange[0], newRange[0], "The first value of the range should be set to " + newRange[0]);
 		assert.strictEqual(aRange[1], newRange[1], "The second value of the range should be set to " + newRange[1]);
-		assert.strictEqual(parseInt(this.rangeSlider.getAggregation("_tooltipContainer").getAssociatedTooltipsAsControls()[0].getValue(), 10), newRange[0], "The tooltip1's value should be changed to the left handle's value of " + newRange[0]);
-		assert.strictEqual(parseInt(this.rangeSlider.getAggregation("_tooltipContainer").getAssociatedTooltipsAsControls()[1].getValue(), 10), newRange[1], "The tooltip2's value should be changed to the right handle's value of " + newRange[1]);
+		assert.strictEqual(parseInt(this.rangeSlider.getAggregation("_tooltipContainer").getAssociatedTooltipsAsControls()[0].getValue()), newRange[0], "The tooltip1's value should be changed to the left handle's value of " + newRange[0]);
+		assert.strictEqual(parseInt(this.rangeSlider.getAggregation("_tooltipContainer").getAssociatedTooltipsAsControls()[1].getValue()), newRange[1], "The tooltip2's value should be changed to the right handle's value of " + newRange[1]);
 	});
 
 	QUnit.test("set/getValue()", function (assert) {
@@ -237,8 +266,7 @@
 
 	QUnit.test("set/getStep()", function (assert) {
 		//arrange
-		var aTooltips, log = sap.ui.require('sap/base/Log'),
-			fnWarningSpy = this.spy(log, "warning");
+		var aTooltips, fnWarningSpy = this.spy(Log, "warning");
 
 		assert.strictEqual(this.rangeSlider._iDecimalPrecision, 0, "The decimal precision should be 0 initially");
 
@@ -296,8 +324,7 @@
 	});
 
 	QUnit.test("Invalid range starting value of -20 (where min is 0)", function (assert) {
-		var log = sap.ui.require('sap/base/Log'),
-			fnWarningSpy = this.spy(log, "warning");
+		var fnWarningSpy = this.spy(Log, "warning");
 
 		this.rangeSlider.setRange([-20, 50]);
 		sap.ui.getCore().applyChanges();
@@ -314,8 +341,7 @@
 	});
 
 	QUnit.test("Invalid range ending value of 150 (where max is 100)", function (assert) {
-		var log = sap.ui.require('sap/base/Log'),
-			fnWarningSpy = this.spy(log, "warning");
+		var fnWarningSpy = this.spy(Log, "warning");
 
 		this.rangeSlider.setRange([20, 150]);
 		sap.ui.getCore().applyChanges();
@@ -423,10 +449,37 @@
 		assert.strictEqual(this.rangeSlider._calculateHandlePosition(value4), 31, "The function should return 31");
 	});
 
+	QUnit.test('Slider with decimal values, should apply all dom element attributes correctly', function (assert) {
+		// arrange
+		var oSliderInputElement,
+			oSlider = new RangeSlider({
+				min: -10,
+				max: 10,
+				range: [-5.05, 3],
+				name: "RangeSlider12",
+				step: 0.05
+			}).placeAt(DOM_RENDER_LOCATION);
+
+		// act
+		oSlider.setValue(1.2542324);
+		oSlider.setValue2(3.4122);
+
+		sap.ui.getCore().applyChanges();
+
+		oSliderInputElement = oSlider.$().find('.sapMSliderInput')[0];
+
+		// assert
+		assert.strictEqual(parseFloat(oSliderInputElement.getAttribute('start')), 1.25, "Range[0] to be set properly");
+		assert.strictEqual(parseFloat(oSliderInputElement.getAttribute('end')), 3.40, "Range[1] to be set properly");
+
+		// cleanup
+		oSlider.destroy();
+	});
+
 	QUnit.test("Calculate movement offset", function (assert) {
 		var aRange = [4, 27],
 			iStep = 5,
-			oSlider = new sap.m.RangeSlider("RangeSlider6", {
+			oSlider = new RangeSlider("RangeSlider6", {
 				step: iStep,
 				min: 4,
 				max: 27,
@@ -465,7 +518,7 @@
 	});
 
 	QUnit.test("_updateHandleAria", function (assert) {
-		var oSlider = new sap.m.RangeSlider().placeAt(DOM_RENDER_LOCATION);
+		var oSlider = new RangeSlider().placeAt(DOM_RENDER_LOCATION);
 		sap.ui.getCore().applyChanges();
 
 		//Act
@@ -481,7 +534,7 @@
 
 	QUnit.test("_updateHandlesAriaLabels", function (assert) {
 		var clock = sinon.useFakeTimers(),
-			oSlider = new sap.m.RangeSlider().placeAt(DOM_RENDER_LOCATION),
+			oSlider = new RangeSlider().placeAt(DOM_RENDER_LOCATION),
 			oInitStateStartLabel, oInitStateEndLabel;
 		sap.ui.getCore().applyChanges();
 
@@ -506,7 +559,7 @@
 	});
 
 	QUnit.test("_swapTooltips", function (assert) {
-		var oSlider = new sap.m.RangeSlider({
+		var oSlider = new RangeSlider({
 			showAdvancedTooltip: true
 		}).placeAt(DOM_RENDER_LOCATION),
 			oInitStateStartTooltip, oInitStateEndTooltip;
@@ -529,7 +582,7 @@
 
 	QUnit.test("The order of the arguments should not matter when setting the properties min/max, value/value2", function (assert) {
 		var check = function (oSliderConfig) {
-			var oSlider = new sap.m.RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
+			var oSlider = new RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
 			sap.ui.getCore().applyChanges();
 
 			//Assert
@@ -551,7 +604,7 @@
 
 	QUnit.test("The values of value and value2 properties should be adjusted correctly when they are not in the boundaries of min and max values", function (assert) {
 		var check = function (oSliderConfig) {
-			var oSlider = new sap.m.RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
+			var oSlider = new RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
 			sap.ui.getCore().applyChanges();
 
 			//Assert
@@ -573,7 +626,7 @@
 
 	QUnit.test("The order of the arguments should not matter when setting the properties min/max, range", function (assert) {
 		var check = function (oSliderConfig) {
-			var oSlider = new sap.m.RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
+			var oSlider = new RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
 			sap.ui.getCore().applyChanges();
 
 			//Assert
@@ -593,7 +646,7 @@
 
 	QUnit.test("The values of the range property should be adjusted correctly when they are not in the boundaries of min and max values", function (assert) {
 		var check = function (oSliderConfig) {
-			var oSlider = new sap.m.RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
+			var oSlider = new RangeSlider(oSliderConfig).placeAt(DOM_RENDER_LOCATION);
 			sap.ui.getCore().applyChanges();
 
 			//Assert
@@ -614,7 +667,7 @@
 	QUnit.test("Swap tooltips when values are swapped.", function (assert) {
 		//Setup
 		var oLeftTooltip, oRightTooltip,
-			oRangeSlider = new sap.m.RangeSlider({
+			oRangeSlider = new RangeSlider({
 				showAdvancedTooltip: true,
 				showHandleTooltip: true,
 				enableTickmarks: false,
@@ -641,7 +694,7 @@
 
 	QUnit.module("SAP KH", {
 		beforeEach: function () {
-			this.oRangeSlider = new sap.m.RangeSlider({range: [20, 30]});
+			this.oRangeSlider = new RangeSlider({range: [20, 30]});
 			this.oRangeSlider.placeAt(DOM_RENDER_LOCATION);
 			sap.ui.getCore().applyChanges();
 
@@ -738,7 +791,7 @@
 				stopPropagation: function () {},
 				setMarked: function () {}
 			},
-			oRangeSlider = new sap.m.RangeSlider().placeAt(DOM_RENDER_LOCATION),
+			oRangeSlider = new RangeSlider().placeAt(DOM_RENDER_LOCATION),
 			oEventSpyPreventDefault = this.spy(oMockEvent, "preventDefault"),
 			oEventSpySetMarked = this.spy(oMockEvent, "setMarked");
 
@@ -757,6 +810,23 @@
 		assert.ok(oEventSpySetMarked.callCount === 0, "The method is skipped and the event went to the global KH");
 	});
 
+	QUnit.test("KH: The range should be adjusted correctly when is decreased to go out of the boundaries by pressing SHIFT + ARROW LEFT", function (assert) {
+		// Arrange
+		var oSlider = new RangeSlider({range: [-181, 19], min: -200, max: 200}).placeAt(DOM_RENDER_LOCATION);
+		sap.ui.getCore().applyChanges();
+
+		// Act
+		qutils.triggerKeydown(oSlider.getDomRef("progress"), KeyCodes.ARROW_LEFT, true, false, false);
+
+		// Assert
+		assert.strictEqual(oSlider.getRange()[0], -200, "first range value should be equal to the start min value");
+		assert.strictEqual(oSlider.getRange()[1], 0, "second range value should be correct");
+
+		// Cleanup
+		oSlider.destroy();
+		oSlider = null;
+	});
+
 	QUnit.module("Events");
 
 	QUnit.test("liveChange trigger should be fired only when the range is actually changed.", function (assert) {
@@ -766,7 +836,7 @@
 				var aRangeParam = oEvent.getParameter("range");
 				assert.deepEqual(aRangeParam, aRange, "Range should be properly set");
 			}),
-			oRangeSlider = new sap.m.RangeSlider({range: aRange, min: 0, max: 100, liveChange: fnLiveChange}).placeAt(DOM_RENDER_LOCATION);
+			oRangeSlider = new RangeSlider({range: aRange, min: 0, max: 100, liveChange: fnLiveChange}).placeAt(DOM_RENDER_LOCATION);
 
 		assert.expect(5);
 
@@ -795,7 +865,7 @@
 
 	QUnit.test("getRange", function (assert) {
 		var aRange = [12, 38],
-			oRangeSlider = new sap.m.RangeSlider({range: aRange, min: 0, max: 100}).placeAt(DOM_RENDER_LOCATION);
+			oRangeSlider = new RangeSlider({range: aRange, min: 0, max: 100}).placeAt(DOM_RENDER_LOCATION);
 
 		sap.ui.getCore().applyChanges();
 
@@ -810,8 +880,8 @@
 
 	QUnit.test("Model change from the outside", function (assert) {
 		var oData = {min: 0, max: 5000, range: [100, 500]},
-			oModel = new sap.ui.model.json.JSONModel(oData),
-			oRangeSlider = new sap.m.RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}"});
+			oModel = new JSONModel(oData),
+			oRangeSlider = new RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}"});
 
 		oRangeSlider.setModel(oModel);
 		oRangeSlider.placeAt(DOM_RENDER_LOCATION);
@@ -841,8 +911,8 @@
 
 	QUnit.test("Model change from the inside", function (assert) {
 		var oData = {min: 0, max: 5000, range: [100, 500]},
-			oModel = new sap.ui.model.json.JSONModel(oData),
-			oRangeSlider = new sap.m.RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}"});
+			oModel = new JSONModel(oData),
+			oRangeSlider = new RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}"});
 
 		oRangeSlider.setModel(oModel);
 		oRangeSlider.placeAt(DOM_RENDER_LOCATION);
@@ -862,7 +932,7 @@
 	});
 
 	QUnit.test("Change whole range when a to-be-set is lower than min value", function (assert) {
-		var oRangeSlider = new sap.m.RangeSlider({min: -100, max: 100, range: [-50, 50]}),
+		var oRangeSlider = new RangeSlider({min: -100, max: 100, range: [-50, 50]}),
 			aInitialRange = oRangeSlider.getRange(), aNormalizedRange,
 			aHandles = [oRangeSlider._mHandleTooltip.start.tooltip, oRangeSlider._mHandleTooltip.end.tooltip];
 
@@ -897,7 +967,7 @@
 	});
 
 	QUnit.test("value, value2 and range bindings through setters", function (assert) {
-		var oRangeSlider = new sap.m.RangeSlider({value: 12, value2: 88, min: 0, max: 90});
+		var oRangeSlider = new RangeSlider({value: 12, value2: 88, min: 0, max: 90});
 		sap.ui.getCore().applyChanges();
 
 		//assert
@@ -937,8 +1007,8 @@
 
 	QUnit.test("value, value2 and range setters, bindings + outer Model", function (assert) {
 		var oData = {min: 0, max: 5000, range: [100, 500]},
-			oModel = new sap.ui.model.json.JSONModel(oData),
-			oRangeSlider = new sap.m.RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}"});
+			oModel = new JSONModel(oData),
+			oRangeSlider = new RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}"});
 
 		oRangeSlider.setModel(oModel);
 		sap.ui.getCore().applyChanges();
@@ -986,8 +1056,8 @@
 
 	QUnit.test("value, value2 and range setters, bindings + outer Model V2", function (assert) {
 		var oData = {min: 0, max: 5000, range: [100, 500]},
-			oModel = new sap.ui.model.json.JSONModel(oData),
-			oRangeSlider = new sap.m.RangeSlider({min: "{/min}", max: "{/max}", value: "{/range/0}", value2: "{/range/1}", range: "{/range}"});
+			oModel = new JSONModel(oData),
+			oRangeSlider = new RangeSlider({min: "{/min}", max: "{/max}", value: "{/range/0}", value2: "{/range/1}", range: "{/range}"});
 
 		oRangeSlider.setModel(oModel);
 		sap.ui.getCore().applyChanges();
@@ -1035,8 +1105,8 @@
 
 	QUnit.test("value, value2 and range setters, bindings + outer Model change", function (assert) {
 		var oData = {min: 0, max: 5000, range: [100, 500]},
-			oModel = new sap.ui.model.json.JSONModel(oData),
-			oRangeSlider = new sap.m.RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}", value: "{/range/0}", value2: "{/range/1}"});
+			oModel = new JSONModel(oData),
+			oRangeSlider = new RangeSlider({min: "{/min}", max: "{/max}", range: "{/range}", value: "{/range/0}", value2: "{/range/1}"});
 
 		oRangeSlider.setModel(oModel);
 		sap.ui.getCore().applyChanges();
@@ -1087,7 +1157,7 @@
 	QUnit.test("Range can be changed with progress bar when the current range is 1 step lower that max number of steps", function (assert) {
 
 		var clock = sinon.useFakeTimers(),
-			oRangeSlider = new sap.m.RangeSlider({
+			oRangeSlider = new RangeSlider({
 			enableTickmarks: true,
 			range: [0,9],
 			min: 0,
@@ -1141,9 +1211,9 @@
 
 	QUnit.test("RangeSlider with custom scale, should fallback to default one, after the scale is destroyed", function(assert) {
 		var oSlider, oDefaultScale,
-			oScale = new sap.m.ResponsiveScale({tickmarksBetweenLabels: 1});
+			oScale = new ResponsiveScale({tickmarksBetweenLabels: 1});
 
-		oSlider = new sap.m.RangeSlider({
+		oSlider = new RangeSlider({
 			enableTickmarks: true,
 			scale: oScale
 		});
@@ -1167,9 +1237,9 @@
 
 	QUnit.test("RangeSlider with enabled tickmarks and not set scale, should remove the default one, after 'scale' aggregation is set", function(assert) {
 		var oSlider, oDefaultScale,
-			oScale = new sap.m.ResponsiveScale({tickmarksBetweenLabels: 1});
+			oScale = new ResponsiveScale({tickmarksBetweenLabels: 1});
 
-		oSlider = new sap.m.RangeSlider({
+		oSlider = new RangeSlider({
 			enableTickmarks: true
 		});
 
@@ -1198,11 +1268,66 @@
 
 	QUnit.module("Accessibility");
 
+	QUnit.test("RangeSlider with inputs as tooltip should add an aria", function(assert) {
+		var clock = sinon.useFakeTimers(),
+			sFirstHandleAriaId,
+			sSecondHandleAriaId,
+			sKeyShortcutFirstHandle,
+			sKeyShortcutSecondHandle,
+			sResourceBundleText = sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("SLIDER_INPUT_TOOLTIP"),
+			oSlider = new RangeSlider({
+				showAdvancedTooltip: true,
+				inputsAsTooltips: true
+			});
+
+		// arrange
+		oSlider.placeAt(DOM_RENDER_LOCATION);
+		sap.ui.getCore().applyChanges();
+
+		sFirstHandleAriaId = oSlider.getDomRef("handle1").getAttribute("aria-describedby");
+		sSecondHandleAriaId = oSlider.getDomRef("handle2").getAttribute("aria-describedby");
+		sKeyShortcutFirstHandle = oSlider.getDomRef("handle1").getAttribute("aria-keyshortcuts");
+		sKeyShortcutSecondHandle = oSlider.getDomRef("handle2").getAttribute("aria-keyshortcuts");
+
+		// assert
+		assert.strictEqual(sFirstHandleAriaId, sSecondHandleAriaId, "aria-describedby attributes should point to the same element");
+		assert.strictEqual(sap.ui.getCore().byId(sFirstHandleAriaId).getText(), sResourceBundleText);
+		assert.strictEqual(sap.ui.getCore().byId(sSecondHandleAriaId).getText(), sResourceBundleText);
+
+		assert.ok(!oSlider.getDomRef("handle1").getAttribute("aria-controls"), 'The "aria-controls" should not be set, before the tooltip is rendered');
+		assert.ok(!oSlider.getDomRef("handle2").getAttribute("aria-controls"), 'The "aria-controls" should not be set, before the tooltip is rendered');
+		assert.strictEqual(sKeyShortcutFirstHandle, "F2", "The 'aria-keyshortcuts' attribute should be presented on the first handle with appropriate value");
+		assert.strictEqual(sKeyShortcutSecondHandle, "F2", "The 'aria-keyshortcuts' attribute should be presented on the second handle with appropriate value");
+
+		// act
+		oSlider.focus();
+		clock.tick(1);
+
+		// assert
+		assert.ok(oSlider.getDomRef("handle1").getAttribute("aria-controls"), 'The "aria-controls" should be set');
+		assert.ok(oSlider.getDomRef("handle2").getAttribute("aria-controls"), 'The "aria-controls" should be set');
+
+		// act
+		oSlider.setEnabled(false);
+		sap.ui.getCore().applyChanges();
+
+		sKeyShortcutFirstHandle = oSlider.getDomRef("handle1").getAttribute("aria-keyshortcuts");
+		sKeyShortcutSecondHandle = oSlider.getDomRef("handle2").getAttribute("aria-keyshortcuts");
+
+		// assert
+		assert.notOk(sKeyShortcutFirstHandle, "The 'aria-keyshortcuts' attribute should not be presented on the first handle");
+		assert.notOk(sKeyShortcutSecondHandle, "The 'aria-keyshortcuts' attribute should not be presented on the second handle");
+
+		// cleanup
+		oSlider.destroy();
+		clock.restore();
+	});
+
 	QUnit.test("RangeSlider with custom scale should change handle title html attribute accordingly", function(assert) {
 		var clock = sinon.useFakeTimers(),
 			oSlider,
-			oScale = new sap.m.ResponsiveScale({tickmarksBetweenLabels: 1}),
-			oHandleDomRef, oProgressHandle, aRange, oSecondHandleDomRef;
+			oScale = new ResponsiveScale({tickmarksBetweenLabels: 1}),
+			oHandleDomRef, oProgressHandle, oSecondHandleDomRef;
 
 		oScale.getLabel = function (fCurValue, oSlider) {
 			var monthList = ["Zero", "One", "2", "3"];
@@ -1210,7 +1335,7 @@
 			return monthList[fCurValue];
 		};
 
-		oSlider = new sap.m.RangeSlider({
+		oSlider = new RangeSlider({
 			step: 1,
 			min: 0,
 			max: 3,
@@ -1225,13 +1350,12 @@
 		oHandleDomRef = oSlider.getDomRef("handle1");
 		oSecondHandleDomRef = oSlider.getDomRef("handle2");
 		oProgressHandle = oSlider.getDomRef("progress");
-		aRange = oSlider.getRange();
 
 		// assert
 		assert.strictEqual(oHandleDomRef.getAttribute("title"), "Zero", "The title should be Zero.");
 		assert.strictEqual(oHandleDomRef.getAttribute("aria-valuenow"), "0", "The aria-valuenow should be 0.");
 		assert.strictEqual(oHandleDomRef.getAttribute("aria-valuetext"), "Zero", "The aria-valuetext should be Zero.");
-		assert.strictEqual(oProgressHandle.getAttribute("aria-valuenow"), aRange.join('-'), "The aria-valuenow of the progress handle should be 0-1.");
+		assert.ok(!oHandleDomRef.getAttribute("aria-controls"), "aria-controls should not be present before the tooltip is in the DOM.");
 		assert.strictEqual(oProgressHandle.getAttribute("aria-valuetext"), oSlider._oResourceBundle.getText('RANGE_SLIDER_RANGE_ANNOUNCEMENT', ["Zero", "One"]),
 			"The aria-valuetext of the progress handle should be From Zero to One.");
 
@@ -1242,6 +1366,7 @@
 		assert.strictEqual(oSecondHandleDomRef.getAttribute("title"), "2", "The title should be 2.");
 		assert.strictEqual(oSecondHandleDomRef.getAttribute("aria-valuenow"), "2", "The aria-valuenow should be 2, since the label is numeric.");
 		assert.notOk(oSecondHandleDomRef.getAttribute("aria-valuetext"), "The aria-valuetext should not be defined.");
+		assert.ok(!oSecondHandleDomRef.getAttribute("aria-controls"), "aria-controls should not be present before the tooltip is in the DOM.");
 
 		// cleanup
 		clock.restore();
@@ -1251,7 +1376,7 @@
 	QUnit.test("RangeSlider with scale and tooltip should use the prioritisation of the labelling", function (assert) {
 		var oSlider, oTooltip, oHandleDomRef, oSecondHandleDomRef, oProgressHandle,
 			clock = sinon.useFakeTimers(),
-			oScale = new sap.m.ResponsiveScale({tickmarksBetweenLabels: 1});
+			oScale = new ResponsiveScale({tickmarksBetweenLabels: 1});
 
 		oScale.getLabel = function (fCurValue) {
 			var monthList = ["Zero", "One", "2"];
@@ -1259,12 +1384,9 @@
 			return monthList[fCurValue];
 		};
 
-		jQuery.sap.require('sap.m.SliderTooltipBase');
-		jQuery.sap.require('sap.m.SliderTooltipBaseRenderer');
-
-		oTooltip = sap.m.SliderTooltipBase.extend("sap.xx.TestTooltip", {
+		oTooltip = SliderTooltipBase.extend("sap.xx.TestTooltip", {
 			renderer: function (oRm, oControl) {
-				sap.m.SliderTooltipBaseRenderer.render.apply({
+				SliderTooltipBaseRenderer.render.apply({
 					renderTooltipContent: function (oRm, oControl) {
 						oRm.write("zzzz");
 					}
@@ -1276,7 +1398,7 @@
 			return "XXXXXXX-" + fValue;
 		};
 
-		oSlider = new sap.m.RangeSlider({
+		oSlider = new RangeSlider({
 			step: 1,
 			min: 0,
 			max: 2,
@@ -1304,8 +1426,6 @@
 		assert.ok(!oSecondHandleDomRef.getAttribute("title"), "The title should be undefined if there's a tooltip.");
 		assert.strictEqual(oSecondHandleDomRef.getAttribute("aria-valuenow"), "2", "The aria-valuenow should be 0.");
 		assert.strictEqual(oSecondHandleDomRef.getAttribute("aria-valuetext"), "XXXXXXX-2", "The aria-valuetext should be XXXXXXX-2.");
-
-		assert.strictEqual(oProgressHandle.getAttribute("aria-valuenow"), "0-2", "The aria-valuenow should be 0-2.");
 		assert.strictEqual(oProgressHandle.getAttribute("aria-valuetext"), "From XXXXXXX-0 to XXXXXXX-2", "The aria-valuetext should be 'From XXXXXXX-0 to XXXXXXX-2'.");
 
 		// Act
@@ -1325,7 +1445,6 @@
 		assert.strictEqual(oSecondHandleDomRef.getAttribute("aria-valuenow"), "2", "The aria-valuenow should be 0.");
 		assert.strictEqual(oSecondHandleDomRef.getAttribute("aria-valuetext"), "XXXXXXX-2", "The aria-valuetext should be XXXXXXX-2.");
 
-		assert.strictEqual(oProgressHandle.getAttribute("aria-valuenow"), "1-2", "The aria-valuenow should be 1-2.");
 		assert.strictEqual(oProgressHandle.getAttribute("aria-valuetext"), "From XXXXXXX-1 to XXXXXXX-2", "The aria-valuetext should be 'From XXXXXXX-1 to XXXXXXX-2'.");
 
 
@@ -1345,14 +1464,12 @@
 
 	QUnit.module("Tooltips", function (hooks) {
 		hooks.before(function () {
-			jQuery.sap.require("sap/m/SliderTooltipBase");
-
 			// dummy class
-			sap.m.SliderTooltipBase.extend("sap.xx.SliderTooltipCustom", {});
+			SliderTooltipBase.extend("sap.xx.SliderTooltipCustom", {});
 		});
 
 		hooks.beforeEach(function () {
-			this.oRangeSlider = new sap.m.RangeSlider({
+			this.oRangeSlider = new RangeSlider({
 				showAdvancedTooltip: true
 			});
 
@@ -1469,7 +1586,7 @@
 
 		QUnit.test("Tooltips: Rendering when advanced tooltips are not used", function (assert) {
 			// setup
-			var oRangeSlider = new sap.m.RangeSlider({
+			var oRangeSlider = new RangeSlider({
 				showAdvancedTooltip: false,
 				inputsAsTooltips: true
 			});
@@ -1490,5 +1607,29 @@
 
 			assert.ok(true, "should not throw an error");
 		});
+
+		QUnit.test("Firing event keydown === SPACE should prevent the page to scroll down", function(assert) {
+
+			// system under test
+			var oRangeSlider = new RangeSlider();
+
+			// arrange
+			var preventDefaultSpy = this.spy(),
+				fnFakeEvent = {
+					preventDefault: preventDefaultSpy,
+					keyCode: KeyCodes.SPACE
+				};
+			oRangeSlider.placeAt(DOM_RENDER_LOCATION);
+			sap.ui.getCore().applyChanges();
+
+			// act
+			oRangeSlider.onkeydown(fnFakeEvent);
+
+			// assert
+			assert.ok(preventDefaultSpy.calledOnce, "Prevent default should be called once.");
+
+			// cleanup
+			oRangeSlider.destroy();
+		});
 	});
-}());
+});

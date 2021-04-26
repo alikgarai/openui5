@@ -3,17 +3,27 @@
  */
 
 sap.ui.define([
-	'jquery.sap.global',
 	'./library',
 	'sap/ui/core/Control',
 	'sap/m/GenericTile',
 	'sap/ui/Device',
 	'sap/ui/core/Icon',
 	'./SlideTileRenderer',
-	'jquery.sap.events',
-	'jquery.sap.keycodes'
+	"sap/ui/events/KeyCodes",
+	"sap/ui/events/PseudoEvents",
+	"sap/ui/thirdparty/jquery"
 ],
-	function(jQuery, library, Control, GenericTile, Device, Icon, SlideTileRenderer) {
+	function(
+		library,
+		Control,
+		GenericTile,
+		Device,
+		Icon,
+		SlideTileRenderer,
+		KeyCodes,
+		PseudoEvents,
+		jQuery
+	) {
 	"use strict";
 
 	var TileSizeBehavior = library.TileSizeBehavior;
@@ -59,7 +69,12 @@ sap.ui.define([
 				 *  This property has to be set consistently for the <code>SlideTile</code> along with all its inner <code>GenericTile</code>
 				 *  elements, so that they match one another visually.
 				 */
-				sizeBehavior: {type: "sap.m.TileSizeBehavior", defaultValue: TileSizeBehavior.Responsive}
+				sizeBehavior: {type: "sap.m.TileSizeBehavior", defaultValue: TileSizeBehavior.Responsive},
+				/**
+				 * Width of the control.
+				 * @since 1.72
+				 */
+				width: {type: "sap.ui.core.CSSSize", group: "Appearance"}
 			},
 			defaultAggregation: "tiles",
 			aggregations: {
@@ -187,7 +202,7 @@ sap.ui.define([
 	 */
 	SlideTile.prototype.ontap = function (oEvent) {
 		var sScope = this.getScope();
-		this.$().focus();
+		this.$().trigger("focus");
 		if (sScope === library.GenericTileScope.Actions) {
 			var oParams = this._getEventParams(oEvent);
 			this.firePress(oParams);
@@ -240,7 +255,7 @@ sap.ui.define([
 	 */
 	SlideTile.prototype.onkeydown = function (oEvent) {
 		if (this.getScope() === library.GenericTileScope.Display) {
-			if (jQuery.sap.PseudoEvents.sapenter.fnCheck(oEvent)) {
+			if (PseudoEvents.events.sapenter.fnCheck(oEvent)) {
 				var oGenericTile = this.getTiles()[this._iCurrentTile];
 				oGenericTile.onkeydown(oEvent);
 			}
@@ -255,25 +270,25 @@ sap.ui.define([
 	SlideTile.prototype.onkeyup = function (oEvent) {
 		var oParams;
 		if (this.getScope() === library.GenericTileScope.Display) {
-			if (jQuery.sap.PseudoEvents.sapenter.fnCheck(oEvent)) {
+			if (PseudoEvents.events.sapenter.fnCheck(oEvent)) {
 				var oGenericTile = this.getTiles()[this._iCurrentTile];
 				oGenericTile.onkeyup(oEvent);
 				return;
 			}
-			if (jQuery.sap.PseudoEvents.sapspace.fnCheck(oEvent)) {
+			if (PseudoEvents.events.sapspace.fnCheck(oEvent)) {
 				this._toggleAnimation();
 			}
-			if (oEvent.which === jQuery.sap.KeyCodes.B && this._bAnimationPause) {
+			if (oEvent.which === KeyCodes.B && this._bAnimationPause) {
 				this._scrollToNextTile(true, true);
 			}
-			if (oEvent.which === jQuery.sap.KeyCodes.F && this._bAnimationPause) {
+			if (oEvent.which === KeyCodes.F && this._bAnimationPause) {
 				this._scrollToNextTile(true, false);
 			}
 		} else if (this.getScope() === library.GenericTileScope.Actions) {
-			if (jQuery.sap.PseudoEvents.sapselect.fnCheck(oEvent)) {
+			if (PseudoEvents.events.sapselect.fnCheck(oEvent)) {
 				this.firePress(this._getEventParams(oEvent));
 				oEvent.preventDefault();
-			} else if (jQuery.sap.PseudoEvents.sapdelete.fnCheck(oEvent) || jQuery.sap.PseudoEvents.sapbackspace.fnCheck(oEvent)) {
+			} else if (PseudoEvents.events.sapdelete.fnCheck(oEvent) || PseudoEvents.events.sapbackspace.fnCheck(oEvent)) {
 				oParams = {
 					scope: this.getScope(),
 					action: GenericTile._Action.Remove,
@@ -283,6 +298,11 @@ sap.ui.define([
 				oEvent.preventDefault();
 			}
 		}
+	};
+
+	SlideTile.prototype.onsapspace = function(oEvent) {
+		// this prevents scrolling down the page (when there is scrollbar) we just want to pause the tile
+		oEvent.preventDefault();
 	};
 
 	/**
@@ -295,9 +315,6 @@ sap.ui.define([
 			if (this.hasStyleClass("sapMSTIconPressed")) {
 				this._toggleAnimation();
 				this.removeStyleClass("sapMSTIconPressed");
-			} else if (Device.system.desktop) {
-				oEvent.preventDefault();
-				this.getTiles()[this._iCurrentTile].firePress();
 			}
 		}
 	};
@@ -310,22 +327,6 @@ sap.ui.define([
 	SlideTile.prototype.onmousedown = function (oEvent) {
 		if (jQuery(oEvent.target).hasClass("sapMSTIconClickTapArea")) {
 			this.addStyleClass("sapMSTIconPressed");
-		}
-	};
-
-	/**
-	 * Handles the focusout event.
-	 *
-	 * @private
-	 * @param {jQuery.Event} oEvent Event object
-	 */
-	SlideTile.prototype.onfocusout = function (oEvent) {
-		if (this.getScope() === library.GenericTileScope.Actions) {
-			return;
-		}
-		if (this.getTiles().length > 1 && !this._isFocusInsideST() && this._bAnimationPause) {
-			this._startAnimation();
-			this._updatePausePlayIcon();
 		}
 	};
 
@@ -360,7 +361,7 @@ sap.ui.define([
 			}
 		}.bind(this);
 
-		jQuery(window).resize(fnCheckMedia);
+		jQuery(window).on("resize", fnCheckMedia);
 		fnCheckMedia();
 	};
 
@@ -496,7 +497,7 @@ sap.ui.define([
 		oWrapperTo = this.$("wrapper-" + this._iCurrentTile);
 		sDir = sap.ui.getCore().getConfiguration().getRTL() ? "right" : "left";
 
-		if (jQuery.isNumeric(this._iPreviousTile)) {
+		if (this._iPreviousTile != undefined) {
 			oWrapperFrom = this.$("wrapper-" + this._iPreviousTile);
 			sWidthFrom = oWrapperFrom.css("width");
 			fWidthTo = parseFloat(oWrapperTo.css("width"));

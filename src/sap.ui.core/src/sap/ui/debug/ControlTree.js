@@ -3,8 +3,15 @@
  */
 
 // Provides a tree of controls for the testsuite
-sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/EventProvider', 'sap/ui/core/Element', 'sap/ui/core/UIArea', './Highlighter'],
-	function(jQuery, EventProvider, Element, UIArea, Highlighter) {
+sap.ui.define('sap/ui/debug/ControlTree', [
+	'sap/ui/base/EventProvider',
+	'sap/ui/core/Element',
+	'sap/ui/core/UIArea',
+	'./Highlighter',
+	"sap/ui/dom/getOwnerWindow",
+	"sap/base/Log"
+],
+	function(EventProvider, Element, UIArea, Highlighter, getOwnerWindow, Log) {
 	"use strict";
 
 
@@ -38,16 +45,13 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 			this.oParentDomRef = oParentDomRef;
 			this.oSelectionHighlighter = new Highlighter("sap-ui-testsuite-SelectionHighlighter");
 			this.oHoverHighlighter = new Highlighter("sap-ui-testsuite-HoverHighlighter", true, '#c8f', 1);
-			var that = this;
-			jQuery(oParentDomRef).bind("click",function(evt) {
-				that.onclick(evt);
-			})
-			.bind("mouseover",function(evt) {
-				that.onmouseover(evt);
-			})
-			.bind("mouseout",function(evt) {
-				that.onmouseout(evt);
-			});
+			// create bound variants of the generic methods
+			this.onclick = ControlTree.prototype.onclick.bind(this);
+			this.onmouseover = ControlTree.prototype.onmouseover.bind(this);
+			this.onmouseout = ControlTree.prototype.onmouseout.bind(this);
+			this.oParentDomRef.addEventListener("click", this.onclick);
+			this.oParentDomRef.addEventListener("mouseover", this.onmouseover);
+			this.oParentDomRef.addEventListener("mouseout", this.onmouseout);
 			this.enableInplaceControlSelection();// see below...
 			this.oCore.attachUIUpdated(this.renderDelayed, this);
 			this.sSelectedNodeId = "";
@@ -70,8 +74,10 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 	 * @private
 	 */
 	ControlTree.prototype.exit = function() {
-		jQuery(document).unbind();
-		jQuery(this.oParentDomRef).unbind();
+		document.removeEventListener("mouseover", this.selectControlInTree);
+		this.oParentDomRef.removeEventListener("click", this.onclick);
+		this.oParentDomRef.removeEventListener("mouseover", this.onmouseover);
+		this.oParentDomRef.removeEventListener("mouseout", this.onmouseout);
 	};
 
 	/**
@@ -80,9 +86,9 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 	 */
 	ControlTree.prototype.renderDelayed = function() {
 		if (this.oTimer) {
-			this.oWindow.jQuery.sap.clearDelayedCall(this.oTimer);
+			this.oWindow.clearTimeout(this.oTimer);
 		}
-		this.oTimer = this.oWindow.jQuery.sap.delayedCall(0,this,"render");
+		this.oTimer = this.oWindow.setTimeout(this.render.bind(this), 0);
 	};
 
 	/**
@@ -114,7 +120,7 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 		var oDomNode = this.oParentDomRef.ownerDocument.createElement("DIV");
 		oDomNode.setAttribute("id","sap-debug-controltree-" + sId);
 		var sShortType = sType.substring(sType.lastIndexOf(".") >  -1 ? sType.lastIndexOf(".") + 1 : 0);
-		oDomNode.innerHTML = "<img style='height:12px;width:12px;display:none' src='" + this.sSpaceUrl + "' align='absmiddle'/><img style='height:16px;width:16px' src='" + sIcon + "' align='absmiddle'/>&nbsp;<span>" + sShortType + " - " + sId + "</span>";
+		oDomNode.innerHTML = "<img style='height:12px;width:12px;display:none' src='" + this.sSpaceUrl + "' align='absmiddle'><img style='height:16px;width:16px' src='" + sIcon + "' align='absmiddle'>&nbsp;<span>" + sShortType + " - " + sId + "</span>";
 		oDomNode.style.overflow = "hidden";
 		oDomNode.style.whiteSpace = "nowrap";
 		oDomNode.style.textOverflow = "ellipsis";
@@ -137,7 +143,7 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 		var oDomNode = this.oParentDomRef.ownerDocument.createElement("DIV");
 		oDomNode.setAttribute("id","sap-debug-controltreelink-" + sId);
 		var sShortType = sType ? sType.substring(sType.lastIndexOf(".") >  -1 ? sType.lastIndexOf(".") + 1 : 0) : "";
-		oDomNode.innerHTML = "<img style='height:12px;width:12px;display:none' src='" + this.sSpaceUrl + "' align='absmiddle'/><img style='height:12px;width:12px' src='" + this.sLinkUrl + "' align='absmiddle'/>&nbsp;<span style='color:#888;border-bottom:1px dotted #888;'>" + (sShortType ? sShortType + " - " : "") + sId + "</span>";
+		oDomNode.innerHTML = "<img style='height:12px;width:12px;display:none' src='" + this.sSpaceUrl + "' align='absmiddle'><img style='height:12px;width:12px' src='" + this.sLinkUrl + "' align='absmiddle'>&nbsp;<span style='color:#888;border-bottom:1px dotted #888;'>" + (sShortType ? sShortType + " - " : "") + sId + "</span>";
 		oDomNode.style.overflow = "hidden";
 		oDomNode.style.whiteSpace = "nowrap";
 		oDomNode.style.textOverflow = "ellipsis";
@@ -215,13 +221,13 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 		var oSource = oEvent.target;
 		if (oSource.tagName == "IMG") {
 			var oParent = oSource.parentNode,
-				iLevel = parseInt(oParent.getAttribute("sap-level"), 10),
+				iLevel = parseInt(oParent.getAttribute("sap-level")),
 				oNextNode = oParent.nextSibling,
 				bExpanded = oParent.getAttribute("sap-expanded") == "true";
 			// propagate expanded state to all children
 			oSource = oParent.firstChild;
 			if (oNextNode) {
-				var iNextLevel = parseInt(oNextNode.getAttribute("sap-level"), 10);
+				var iNextLevel = parseInt(oNextNode.getAttribute("sap-level"));
 				while (oNextNode && iNextLevel > iLevel) {
 					var oExpandImage = oNextNode.getElementsByTagName("IMG")[0];
 					if (bExpanded) {
@@ -239,7 +245,7 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 					}
 					oNextNode = oNextNode.nextSibling;
 					if (oNextNode) {
-						iNextLevel = parseInt(oNextNode.getAttribute("sap-level"), 10);
+						iNextLevel = parseInt(oNextNode.getAttribute("sap-level"));
 					}
 				}
 			}
@@ -303,9 +309,9 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 		if (!sId) {
 			return;
 		}
-		var oDomRef = jQuery.sap.domById(sId, jQuery.sap.ownerWindow(this.oParentDomRef));
+		var oDomRef = (getOwnerWindow(this.oParentDomRef) || window).document.getElementById(sId);
 		if ( !oDomRef ) {
-			jQuery.sap.log.warning("Control with Id '" + sId.substring(22) + "' not found in tree");
+			Log.warning("Control with Id '" + sId.substring(22) + "' not found in tree");
 			return;
 		}
 		var	sControlId = oDomRef.getAttribute("sap-id");
@@ -325,7 +331,7 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 		if (!sId) {
 			return;
 		}
-		var oDomRef = jQuery.sap.domById(sId, jQuery.sap.ownerWindow(this.oParentDomRef));
+		var oDomRef = (getOwnerWindow(this.oParentDomRef) || window).document.getElementById(sId);
 		var oSpan = oDomRef.getElementsByTagName("SPAN")[0];
 		oSpan.style.backgroundColor = "transparent";
 		oSpan.style.color = "#000000";
@@ -367,20 +373,18 @@ sap.ui.define('sap/ui/debug/ControlTree', ['jquery.sap.global', 'sap/ui/base/Eve
 	 * @private
 	 */
 	ControlTree.prototype.enableInplaceControlSelection = function() {
-		var that = this;
-		jQuery(document).bind("mouseover" , function (oEvt) {
-			that.selectControlInTree(oEvt);
-		});
+		this.selectControlInTree = ControlTree.prototype.selectControlInTree.bind(this);
+		document.addEventListener("mouseover", this.selectControlInTree);
 	};
 
 	ControlTree.prototype.selectControlInTree = function( oEvt ) {
 		if ( oEvt ) {
 		  if ( oEvt.ctrlKey && oEvt.shiftKey && !oEvt.altKey ) {
 			  var oControl = oEvt.srcElement || oEvt.target;
-			  while (oControl && (!oControl.id || !this.oCore.getControl(oControl.id )) ) {
+			  while (oControl && (!oControl.id || !this.oCore.byId(oControl.id)) ) {
 				oControl = oControl.parentNode;
 			}
-			 if ( oControl && oControl.id && this.oCore.getControl(oControl.id ) ) {
+			 if ( oControl && oControl.id && this.oCore.byId(oControl.id) ) {
 				this.oHoverHighlighter.highlight(oControl);
 			 } else {
 			// this.selectControlInTreeByCtrlId(sId);

@@ -1,7 +1,7 @@
 /*!
  * ${copyright}
  */
-sap.ui.define(['sap/ui/rta/command/FlexCommand'], function(FlexCommand) {
+sap.ui.define(["sap/ui/rta/command/FlexCommand"], function(FlexCommand) {
 	"use strict";
 
 	/**
@@ -19,15 +19,15 @@ sap.ui.define(['sap/ui/rta/command/FlexCommand'], function(FlexCommand) {
 	 *               changed in future.
 	 */
 	var Remove = FlexCommand.extend("sap.ui.rta.command.Remove", {
-		metadata : {
-			library : "sap.ui.rta",
-			properties : {
-				removedElement : {
-					type : "any"
+		metadata: {
+			library: "sap.ui.rta",
+			properties: {
+				removedElement: {
+					type: "any"
 				}
 			},
-			associations : {},
-			events : {}
+			associations: {},
+			events: {}
 		}
 	});
 
@@ -35,14 +35,13 @@ sap.ui.define(['sap/ui/rta/command/FlexCommand'], function(FlexCommand) {
 		var oElement = this.getRemovedElement() || this.getElement();
 
 		var mSpecificInfo = {
-			changeType : this.getChangeType(),
-			removedElement : {
-				id : oElement.getId()
+			changeType: this.getChangeType(),
+			removedElement: {
+				id: oElement.getId()
 			}
 		};
 		return mSpecificInfo;
 	};
 
 	return Remove;
-
-}, /* bExport= */true);
+});

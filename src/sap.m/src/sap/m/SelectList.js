@@ -4,14 +4,18 @@
 
 // Provides control sap.m.SelectList.
 sap.ui.define([
-	'jquery.sap.global',
 	'./library',
+	'sap/ui/core/Core',
 	'sap/ui/core/Control',
 	'sap/ui/core/delegate/ItemNavigation',
 	'sap/ui/core/Item',
-	'./SelectListRenderer'
+	'./SelectListRenderer',
+	'sap/base/Log',
+	"sap/ui/thirdparty/jquery",
+	// jQuery Plugin "control"
+	"sap/ui/dom/jquery/control"
 ],
-	function(jQuery, library, Control, ItemNavigation, Item, SelectListRenderer) {
+	function(library, Core, Control, ItemNavigation, Item, SelectListRenderer, Log, jQuery) {
 		"use strict";
 
 		// shortcut for sap.m.touch
@@ -101,7 +105,29 @@ sap.ui.define([
 						group: "Misc",
 						defaultValue: false
 					},
-
+					/**
+					 * Determines the ratio between the first and the second column when secondary values are displayed.
+					 *
+					 * <b>Note:</b> This property takes effect only when the <code>showSecondaryValues</code> property is set to <code>true</code>
+					 * and only in the context of <code>sap.m.Select</code>.
+					 * @private
+					 */
+					_columnRatio: {
+						type: "sap.m.SelectColumnRatio",
+						group: "Appearance",
+						visibility: "hidden"
+					},
+					/**
+					 * Determines the tabindex value of the [role="listbox"] element.
+					 *
+					 * @private
+					 */
+					_tabIndex: {
+						type: "string",
+						group: "Misc",
+						visibility: "hidden",
+						defaultValue: ""
+					},
 					/**
 					 * Defines the keyboard navigation mode.
 					 *
@@ -316,7 +342,9 @@ sap.ui.define([
 		};
 
 		SelectList.prototype.onBeforeRendering = function() {
-			this.synchronizeSelection();
+			this.synchronizeSelection({
+				forceSelection: false
+			});
 		};
 
 		SelectList.prototype.onAfterRendering = function() {
@@ -522,29 +550,15 @@ sap.ui.define([
 		 * @protected
 		 */
 		SelectList.prototype.setSelection = function(vItem) {
-			var oSelectedItem = this.getSelectedItem(),
-				CSS_CLASS = this.getRenderer().CSS_CLASS;
-
 			this.setAssociation("selectedItem", vItem, true);
-			this.setProperty("selectedItemId", (vItem instanceof Item) ? vItem.getId() : vItem, true);
+			this.setProperty("selectedItemId", (vItem instanceof Item) ? vItem.getId() : vItem);
 
 			if (typeof vItem === "string") {
-				vItem = sap.ui.getCore().byId(vItem);
+				vItem = Core.byId(vItem);
 			}
 
 			this.setProperty("selectedKey", vItem ? vItem.getKey() : "", true);
-
-			if (oSelectedItem) {
-				oSelectedItem.$().removeClass(CSS_CLASS + "ItemBaseSelected")
-								.attr("aria-selected", "false");
-			}
-
-			oSelectedItem = this.getSelectedItem();
-
-			if (oSelectedItem) {
-				oSelectedItem.$().addClass(CSS_CLASS + "ItemBaseSelected")
-								.attr("aria-selected", "true");
-			}
+			return this;
 		};
 
 		/*
@@ -554,19 +568,22 @@ sap.ui.define([
 		 */
 		SelectList.prototype.synchronizeSelection = function(mOptions) {
 
-			// the "selectedKey" property is set and it is synchronized with the "selectedItem" association
-			if (this.isSelectionSynchronized()) {
-				return;
-			}
-
-			var bForceSelection = true;
+			var sKey = this.getSelectedKey(),
+				vItem = this.getItemByKey("" + sKey),	// find the first item with the given key
+				bForceSelection = true;
 
 			if (mOptions) {
 				bForceSelection = !!mOptions.forceSelection;
 			}
 
-			var sKey = this.getSelectedKey(),
-				vItem = this.getItemByKey("" + sKey);	// find the first item with the given key
+			// the "selectedKey" property is set and it is synchronized with the "selectedItem" association
+			if (this.isSelectionSynchronized({
+				selectedKey: sKey,
+				firstItemWithKey: vItem,
+				forceSelection: bForceSelection
+			})) {
+				return;
+			}
 
 			// there is an item that match with the "selectedKey" property and
 			// it does not have the default value
@@ -579,19 +596,87 @@ sap.ui.define([
 			// the aggregation items is not bound or
 			// it is bound and the data is already available
 			} else if (bForceSelection && this.getDefaultSelectedItem() && (!this.isBound("items") || this.bItemsUpdated)) {
-				this.setSelection(this.getDefaultSelectedItem());
+				try {
+					this.setSelection(this.getDefaultSelectedItem());
+				} catch (e) {
+					Log.warning('Update failed due to exception. Loggable in support mode log', null, null, function () {
+						return { exception: e };
+					});
+				}
 			}
 		};
 
 		/*
 		 * Determines whether the <code>selectedItem</code> association and <code>selectedKey</code> property are synchronized.
 		 *
+		 * @param {object} sSelectedKey current selectedKey
+		 * @param {object} vFirstItemWithKey first item with key equal to selectedKey
+		 * @param {boolean} bForceSelection is force selection enabled
+		 *
 		 * @returns {boolean}
 		 * @protected
 		 */
-		SelectList.prototype.isSelectionSynchronized = function() {
-			var vItem = this.getSelectedItem();
-			return this.getSelectedKey() === (vItem && vItem.getKey());
+		SelectList.prototype.isSelectionSynchronized = function(mOptions) {
+			var vSelectedItem = this.getSelectedItem(),
+				sSelectedKey,
+				vFirstItemWithKey,
+				bForceSelection;
+
+			if (mOptions) {
+				sSelectedKey = mOptions.selectedKey;
+				vFirstItemWithKey = mOptions.firstItemWithKey;
+				bForceSelection = mOptions.forceSelection;
+			} else {
+				// FallBack - if the method is used without configuration
+				sSelectedKey = this.getSelectedKey();
+				vFirstItemWithKey = this.getItemByKey(sSelectedKey);
+				bForceSelection = this.getForceSelection();
+			}
+
+			if (bForceSelection) { // Upon force selection we need to have at minimum a "selectedItem"
+
+				if (!vSelectedItem) {
+					// If we don't have "selectedItem" - we need synchronization
+					return false;
+				}
+
+				if (sSelectedKey === "" && vSelectedItem.getKey() === "") {
+					// If we have "selectedItem" with empty string as "key" and "selectedKey" is equal to it's default
+					// value we don't need synchronization. As the "selectedKey" is equal to empty string it will be
+					// wrong to check if this is the first item in the list with that "key"
+					return true;
+				}
+
+				// If the "selectedKey" is equal to the "selectedItem" key and the "selectedItem" is the first item
+				// in the list with that "key" - we don't need synchronization
+				return sSelectedKey === vSelectedItem.getKey() && vSelectedItem === vFirstItemWithKey;
+
+			} else { // Force selection is false so it's not mandatory to have a "selectedItem"
+
+				if (vSelectedItem === null && sSelectedKey === "") {
+					// If "selectedItem" and "selectedKey" are both having their default values we don't need synchronization
+					return true;
+				}
+
+				if (sSelectedKey === "") {
+					// In this case "selectedKey" is equal to it's default value and we have vSelectedItem we need synchronization
+					return false;
+				}
+
+				// In this case we test that we have a "selectedItem" with "key" matching the "selectedKey" and it is
+				// the first item in the list with that "key" - in this case we don't need synchronization
+				return sSelectedKey === (vSelectedItem && vSelectedItem.getKey()) && vSelectedItem === vFirstItemWithKey;
+			}
+
+		};
+
+		/*
+		 * Returns force selection status
+		 * @returns {boolean}
+		 * @private
+		 */
+		SelectList.prototype.getForceSelection = function() {
+			return false;
 		};
 
 		/*
@@ -622,6 +707,35 @@ sap.ui.define([
 			}
 
 			return aVisiblesItems;
+		};
+
+		/*
+		 * Returns the <code>columnRatio</code> transformed to columns percentages.
+		 *
+		 * @returns {Object}
+		 * @private
+		 */
+		SelectList.prototype._getColumnsPercentages = function() {
+			var sRatio = this.getProperty("_columnRatio"),
+				aRatios,
+				iTotalProportions,
+				iFirstColumnProportion;
+
+			if (!sRatio) {
+				return null;
+			}
+
+			aRatios = sRatio.split(":").map(function(sNumber){
+					return parseInt(sNumber);
+				});
+
+			iTotalProportions = aRatios[0] + aRatios[1];
+			iFirstColumnProportion = Math.round(aRatios[0] / iTotalProportions * 100);
+
+			return {
+				firstColumn: iFirstColumnProportion + "%",
+				secondColumn: 100 - iFirstColumnProportion + "%"
+			};
 		};
 
 		/*
@@ -723,6 +837,17 @@ sap.ui.define([
 			if (!this._oItemNavigation) {
 				this._oItemNavigation = new ItemNavigation(null, null, !this.getEnabled() /* not in tab chain */);
 				this._oItemNavigation.attachEvent(ItemNavigation.Events.AfterFocus, this.onAfterFocus, this);
+				this._oItemNavigation.setDisabledModifiers({
+					// Alt + arrow keys are reserved for browser navigation
+					sapnext: [
+						"alt", // Windows and Linux
+						"meta" // Apple (⌘)
+					],
+					sapprevious: [
+						"alt",
+						"meta"
+					]
+				});
 				this.addEventDelegate(this._oItemNavigation);
 			}
 
@@ -767,14 +892,14 @@ sap.ui.define([
 		 * If an ID of a <code>sap.ui.core.Item</code> is given, the item with this ID becomes the <code>selectedItem</code> association.
 		 * Alternatively, a <code>sap.ui.core.Item</code> instance may be given or <code>null</code> to clear the selection.
 		 *
-		 * @returns {sap.m.SelectList} <code>this</code> to allow method chaining.
+		 * @returns {this} <code>this</code> to allow method chaining.
 		 * @public
 		 */
 		SelectList.prototype.setSelectedItem = function(vItem) {
 
 			if (typeof vItem === "string") {
 				this.setAssociation("selectedItem", vItem, true);
-				vItem = sap.ui.getCore().byId(vItem);
+				vItem = Core.byId(vItem);
 			}
 
 			if (!(vItem instanceof Item) && vItem !== null) {
@@ -796,7 +921,7 @@ sap.ui.define([
 		 * Default value is an empty string <code>""</code> or <code>undefined</code>.
 		 *
 		 * @param {string | undefined} vItem New value for property <code>selectedItemId</code>.
-		 * @returns {sap.m.SelectList} <code>this</code> to allow method chaining.
+		 * @returns {this} <code>this</code> to allow method chaining.
 		 * @public
 		 */
 		SelectList.prototype.setSelectedItemId = function(vItem) {
@@ -811,7 +936,7 @@ sap.ui.define([
 		 * Default value is an empty string <code>""</code> or <code>undefined</code>.
 		 *
 		 * @param {string} sKey New value for property <code>selectedKey</code>.
-		 * @returns {sap.m.SelectList} <code>this</code> to allow method chaining.
+		 * @returns {this} <code>this</code> to allow method chaining.
 		 * @public
 		 */
 		SelectList.prototype.setSelectedKey = function(sKey) {
@@ -839,7 +964,7 @@ sap.ui.define([
 		 */
 		SelectList.prototype.getSelectedItem = function() {
 			var vSelectedItem = this.getAssociation("selectedItem");
-			return (vSelectedItem === null) ? null : sap.ui.getCore().byId(vSelectedItem) || null;
+			return (vSelectedItem === null) ? null : Core.byId(vSelectedItem) || null;
 		};
 
 		/**
@@ -942,7 +1067,7 @@ sap.ui.define([
 		/**
 		 * Destroys all the items in the aggregation named <code>items</code>.
 		 *
-		 * @returns {sap.m.SelectList} <code>this</code> to allow method chaining.
+		 * @returns {this} <code>this</code> to allow method chaining.
 		 * @public
 		 */
 		SelectList.prototype.destroyItems = function() {
@@ -950,7 +1075,7 @@ sap.ui.define([
 			return this;
 		};
 
-		SelectList.prototype.setNoDataText = jQuery.noop;
+		SelectList.prototype.setNoDataText = function() {};
 
 		return SelectList;
 	});

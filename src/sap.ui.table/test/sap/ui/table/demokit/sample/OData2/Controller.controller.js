@@ -5,24 +5,25 @@ sap.ui.define([
 	"sap/ui/model/json/JSONModel",
 	"sap/ui/table/Column",
 	"sap/ui/unified/Currency",
+	"sap/m/Label",
 	"sap/m/Text",
 	"sap/ui/model/type/String"
-], function(Controller, MockServer, ODataModel, JSONModel, Column, Currency, Text, String) {
+], function(Controller, MockServer, ODataModel, JSONModel, Column, Currency, Label, Text, String) {
 	"use strict";
 
 	var sServiceUrl = "http://my.test.service.com/";
 
 	return Controller.extend("sap.ui.table.sample.OData2.Controller", {
 
-		onInit : function () {
+		onInit : function() {
 			this.oMockServer = new MockServer({
 				rootUri : sServiceUrl
 			});
 
 			MockServer.config({autoRespondAfter: 2000});
 
-			this.oMockServer.simulate(sap.ui.require.toUrl("sap/ui/table/sample/") + "OData2" + "/metadata.xml", {
-				sMockdataBaseUrl : sap.ui.require.toUrl("sap/ui/table/sample/") + "OData",
+			this.oMockServer.simulate(sap.ui.require.toUrl("sap/ui/table/sample/OData2/metadata.xml"), {
+				sMockdataBaseUrl : sap.ui.require.toUrl("sap/ui/table/sample/OData"),
 				bGenerateMissingMockData : true
 			});
 
@@ -37,7 +38,7 @@ sap.ui.define([
 			oView.setModel(oDataModel);
 
 			var oTable = oView.byId("table");
-			var oBinding = oTable.getBinding("rows");
+			var oBinding = oTable.getBinding();
 			var oBusyIndicator = oTable.getNoData();
 			oBinding.attachDataRequested(function(){
 				oTable.setNoData(oBusyIndicator);
@@ -47,7 +48,7 @@ sap.ui.define([
 			});
 		},
 
-		onExit : function () {
+		onExit : function() {
 			this.oMockServer.destroy();
 			this.oMockServer = null;
 			MockServer.config({autoRespondAfter: 0});
@@ -73,7 +74,7 @@ sap.ui.define([
 				return null;
 			}
 
-			iLen = iLen ? parseInt(iLen, 10) : 10;
+			iLen = iLen ? parseInt(iLen) : 10;
 
 			if (iLen > 50) {
 				sColumnWidth = "15rem";
@@ -86,9 +87,9 @@ sap.ui.define([
 				sortProperty: oContext.getProperty("sap:sortable") == "true" ? sName : null,
 				filterProperty: oContext.getProperty("sap:filterable") == "true" ? sName : null,
 				width: sColumnWidth,
-				label: new sap.m.Label({text: "{/#Product/" + sName + "/@sap:label}"}),
+				label: new Label({text: "{/#Product/" + sName + "/@sap:label}"}),
 				hAlign: sType && sType.indexOf("Decimal") >= 0 ? "End" : "Begin",
-				template: specialTemplate() || new Text({text: {path: sName}})
+				template: specialTemplate() || new Text({text: {path: sName}, wrapping: false})
 			});
 		}
 

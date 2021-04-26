@@ -2,7 +2,7 @@
  * ${copyright}
  */
 
-sap.ui.define(['jquery.sap.global'],
+sap.ui.define(["sap/ui/thirdparty/jquery"],
 	function(jQuery) {
 		"use strict";
 
@@ -16,7 +16,7 @@ sap.ui.define(['jquery.sap.global'],
 				if (oNodes.length === 0) {
 					return '';
 				}
-				var nodeText = jQuery("<div/>").html(removeHTMLTags(oNodes[0].innerHTML)).text();
+				var nodeText = jQuery("<div></div>").html(removeHTMLTags(oNodes[0].innerHTML)).text();
 				return oNodes && oNodes.length > 0 && ("innerHTML" in oNodes[0]) && nodeText || '';
 			};
 
@@ -25,54 +25,14 @@ sap.ui.define(['jquery.sap.global'],
 						.replace(/\s{2,}/g, ' ');
 			};
 
-			/**
-			 * Adjusts link href values
-			 * @param element The DOM element which may contain cross reference links
-			 */
-			var fixLinks = function(element) {
-				var links = element.querySelectorAll("a.xref, a.link, area"),
-					i,
-					link,
-					href,
-					startsWithHash,
-					startsWithHTTP;
-
-				for (i = 0; i < links.length; i++) {
-					link = links[i];
-					href = link.getAttribute("href");
-					startsWithHash = href.indexOf("#") == 0;
-					startsWithHTTP = href.indexOf("http") == 0;
-
-					// absolute links should open in a new window
-					if (startsWithHTTP) {
-						link.setAttribute('target', '_blank');
-					}
-					// absolute links and links starting with # are ok and should not be modified
-					if (startsWithHTTP || startsWithHash) {
-						continue;
-					}
-
-					// API reference are recognized by "/docs/api/" string
-					if (href.indexOf("/docs/api/") > -1) {
-						href = href.substr(0, href.lastIndexOf(".html"));
-						href = href.substr(href.lastIndexOf('/') + 1);
-						href = "#/api/" + href;
-					} else if (href.indexOf("explored.html") > -1) { // explored app links have explored.html in them
-						href = href.split("../").join("");
-						href = oConfig.exploredURI + href;
-					} else { // we assume all other links are links to other documentation pages
-						href = href.substr(0, href.lastIndexOf(".html"));
-						href = "#/topic/" + href;
-					}
-
-					link.setAttribute("href", href);
-				}
-			};
-
 			var fixImgLocation = function(element) {
 				var images = element.querySelectorAll("img");
 
 				for (var i = 0; i < images.length; i++) {
+					if (images[i].classList.contains('link-external')) {
+						images[i].setAttribute("src", "./resources/sap/ui/documentation/sdk/images/link-external.png");
+						continue;
+					}
 					images[i].setAttribute("src", oConfig.docuPath + images[i].getAttribute("src"));
 				}
 
@@ -83,25 +43,31 @@ sap.ui.define(['jquery.sap.global'],
 				/* "Invalid DOM Elements" (ones that should not be added to the body) are:
 					- all scripts
 					- element with class topictitle1 (this is used as title)
-					- element with class shortdesc (this is used as subtitle)
-					- element with id local-navigation (this is the left-side navigation which we already have)
-					- element with tag header
-					- element with id footer-container
-					- element with id nav.mobile-nav
-					- element with id breadcrumb-container
-					- element with id content-toolbar (it contains info about the previous page)
-					- element with class related-links (it contains the related links info and should have a custom position)
+					- element with class shortdesc (this is used as subtitle, if we have nested topics only the first shortdesc element should be removed)
 				 */
 				var wrapperContainer = xmlDom,
-					invalidChildren = wrapperContainer.querySelectorAll("script, .topictitle1, .shortdesc, #local-navigation, header, #footer-container, nav.mobile-nav, #breadcrumb-container, #content-toolbar"),
+					invalidChildren = wrapperContainer.querySelectorAll("script, .topictitle1"),
+					invalidChildrenFirstOnly = [".shortdesc"],
+					invalidChild,
 					invalidChildParent, i;
+
+				// Convert NodeList to Array to use functions like .push(), etc.
+				invalidChildren = Array.prototype.slice.call(invalidChildren);
+
+				invalidChildrenFirstOnly.forEach(function (selector) {
+					invalidChild = wrapperContainer.querySelector(selector);
+					if (invalidChild && invalidChildren.indexOf(invalidChild) === -1) { //make sure invalidChild is not already a part of the invalidChildren
+						invalidChildren.push(invalidChild);
+					}
+				});
 
 				for (var i = 0; i < invalidChildren.length; i++) {
 					invalidChildParent = invalidChildren[i].parentElement;
-					invalidChildParent.removeChild(invalidChildren[i]);
+					if (invalidChildParent) {
+						invalidChildParent.removeChild(invalidChildren[i]);
+					}
 				}
 
-				fixLinks(wrapperContainer);
 				fixImgLocation(wrapperContainer);
 
 				json['html'] =  wrapperContainer.innerHTML;

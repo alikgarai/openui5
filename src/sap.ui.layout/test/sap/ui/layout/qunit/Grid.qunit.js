@@ -1,10 +1,26 @@
-/* global QUnit*/
+/* global QUnit, sinon */
 
-(function () {
+sap.ui.define([
+	"sap/m/Label",
+	"sap/m/Button",
+	"sap/m/Input",
+	"sap/ui/layout/Grid",
+	"sap/ui/layout/GridData",
+	"sap/ui/layout/library",
+	"sap/ui/core/Core"
+],
+function (
+	Label,
+	Button,
+	Input,
+	Grid,
+	GridData,
+	Library,
+	Core
+) {
 	"use strict";
 
-	var oCore = sap.ui.getCore(),
-		TESTS_DOM_CONTAINER = 'qunit-fixture',
+	var TESTS_DOM_CONTAINER = 'qunit-fixture',
 		GRID_ID = 'grid1',
 		VISIBLE_PREFIX = 'visible_',
 		CLASSES_FOR_PREFIX = 'CSS classes for ',
@@ -21,7 +37,7 @@
 			getLabel: function(sId, oLayoutData) {
 				oLayoutData = oLayoutData && oFactory.getLayoutData(oLayoutData);
 
-				return new sap.m.Label(sId, {
+				return new Label(sId, {
 					text: "Label's text",
 					width: '100%',
 					layoutData: oLayoutData
@@ -30,7 +46,7 @@
 			getButton: function (sId, bVisible, oLayoutData) {
 				oLayoutData = oLayoutData && oFactory.getLayoutData(oLayoutData);
 
-				return new sap.m.Button(sId, {
+				return new Button(sId, {
 					text: "Button's text",
 					width: "100%",
 					visible: bVisible,
@@ -40,7 +56,7 @@
 			getInput: function (sId, oLayoutData) {
 				oLayoutData = oLayoutData && oFactory.getLayoutData(oLayoutData);
 
-				return new sap.m.Input(sId, {
+				return new Input(sId, {
 					value: "Input's value",
 					width: '100%',
 					layoutData: oLayoutData
@@ -48,10 +64,10 @@
 			},
 			getLayoutData: function (oProps) {
 				oProps = oProps || {};
-				return new sap.ui.layout.GridData(oProps);
+				return new GridData(oProps);
 			},
 			getGrid: function (sId) {
-				return new sap.ui.layout.Grid(sId, {
+				return new Grid(sId, {
 					hSpacing: 1,
 					vSpacing: 1,
 					defaultSpan: 'L2',
@@ -105,13 +121,13 @@
 			setupFunction: function() {
 				this.oGrid = oFactory.getGrid(GRID_ID);
 				this.oGrid.placeAt(TESTS_DOM_CONTAINER);
-				oCore.applyChanges();
+				Core.applyChanges();
 			},
 			teardownFunction: function() {
 				this.oGrid.destroy();
 			},
 			getRefById: function(sId) {
-				var oElement = oCore.byId(sId);
+				var oElement = Core.byId(sId);
 				return oElement ? oElement.$() : null;
 			},
 			getParentRefById: function(sId) {
@@ -180,8 +196,8 @@
 		assert.ok(!$oVisibleButtonContainer.hasClass("sapUiRespGridSpanInvisible"), "Visible element doesn't have the class for hidden elements");
 
 		// Swap visibility
-		sap.ui.getCore().byId('hiddenButton').setVisible(true);
-		sap.ui.getCore().byId('visibleButton').setVisible(false);
+		Core.byId('hiddenButton').setVisible(true);
+		Core.byId('visibleButton').setVisible(false);
 
 		assert.ok(!$oInvisibleButtonContainer.hasClass("sapUiRespGridSpanInvisible"), "Class is removed after element's visibility is changed to visible");
 		assert.ok($oVisibleButtonContainer.hasClass("sapUiRespGridSpanInvisible"), "Class is added when element's visibility changed to hidden");
@@ -300,4 +316,48 @@
 		assert.ok(oInfo.editable === undefined || oInfo.editable === null, 'Editable');
 		assert.ok(oInfo.children && oInfo.children.length === 7, 'Children'); // Only 7 children are visible, because 4 of them are hidden on L devices
 	});
-})();
+
+	QUnit.module("Overflow hidden library specific support");
+
+	QUnit.test("Library gridHelper is defined", function (assert) {
+		var oGridHelper = Library.GridHelper;
+		assert.ok(oGridHelper, "Grid helper is defined");
+		assert.strictEqual(typeof oGridHelper.getLibrarySpecificClass, "function",
+			"getLibrarySpecificClass function defined");
+		assert.strictEqual(oGridHelper.bFinal, true,
+			"GridHelper definition is final as in this test sap.m library is loaded");
+	});
+
+	QUnit.test("onBeforeRendering applying of class", function (assert) {
+		// Arrange
+		var oSpyMethod = sinon.spy(Library.GridHelper, "getLibrarySpecificClass"),
+			oSpyAddStyleClass = sinon.spy(Grid.prototype, "addStyleClass"),
+			fnOriginalLibrarySpecificClass,
+			oGrid;
+
+		// Act
+		oGrid = new Grid();
+
+		// Assert
+		assert.strictEqual(oSpyMethod.callCount, 1, "Method called once onBeforeRendering");
+		assert.strictEqual(oSpyAddStyleClass.callCount, 0, "AddStyleClass not called in mobile scenario");
+
+		// Arrange - mock getLibrarySpecificClass method for testing
+		fnOriginalLibrarySpecificClass = Library.GridHelper.getLibrarySpecificClass;
+		Library.GridHelper.getLibrarySpecificClass = function () {
+			return "testClassName";
+		};
+		oSpyAddStyleClass.reset();
+
+		// Act
+		oGrid = new Grid();
+
+		// Assert
+		assert.strictEqual(oSpyAddStyleClass.callCount, 1, "AddStyleClass method called - non-mobile scenario");
+		assert.ok(oSpyAddStyleClass.calledWithExactly("testClassName"), "addStyleClass called with returned class name");
+		assert.ok(oSpyAddStyleClass.calledOn(oGrid), "Spy called on the tested instance");
+
+		// Cleanup - restore mocked method
+		Library.GridHelper.getLibrarySpecificClass = fnOriginalLibrarySpecificClass;
+	});
+});

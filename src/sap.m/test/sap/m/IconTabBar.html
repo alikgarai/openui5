@@ -6,7 +6,8 @@
 		<script src="shared-config.js"></script>
 		<script src="../../../resources/sap-ui-core.js"
 			id="sap-ui-bootstrap"
-			data-sap-ui-libs="sap.m, sap.ui.layout">
+			data-sap-ui-compatVersion="edge"
+			data-sap-ui-libs="sap.ui.core,sap.m,sap.ui.layout">
 		</script>
 
 		<style>
@@ -22,7 +23,6 @@
 			.iconTabBarContainer {
 				background-color: #a9c6de;
 			}
-			sapUiSizeCozy .cozyLabel,
 			.cozyLabel {
 				padding-top: 1rem;
 			}
@@ -64,6 +64,11 @@
 			});
 			label2.addStyleClass("label");
 
+			var label2a = new sap.m.Label({
+				text: "Icon Only IconTabBar with semantic colours."
+			});
+			label2a.addStyleClass("label");
+
 			var label3 = new sap.m.Label({
 				text: "IconTabBar with tabs which have labels. Tabs are expandable. Semantic colors are used. Some tabs are invisible."
 			});
@@ -99,7 +104,7 @@
 			});
 			label7.addStyleClass("label");
 			var label9 = new sap.m.Label({
-				text: "Process-like icon tab bar with horizontal layout, expandable and expanded set to true."
+				text: "Process-like icon tab bar with horizontal layout, expandable and expanded set to true. No truncation of texts!"
 			});
 			label9.addStyleClass("label");
 			var label10 = new sap.m.Label({
@@ -107,7 +112,7 @@
 			});
 			label10.addStyleClass("label");
 			var label11 = new sap.m.Label({
-				text: "IconTabBar with images as items."
+				text: "IconTabBar with images as items and horizontal design"
 			});
 			label11.addStyleClass("label");
 			var label12 = new sap.m.Label({
@@ -138,7 +143,6 @@
 			}
 
 			var iconTabBarOverflowSelectList = new sap.m.IconTabBar("overFlowTab", {
-				showOverflowSelectList: true,
 				items: tabItems
 			});
 
@@ -335,7 +339,7 @@
 
 			// Checkbox for Compact Content Density for the page
 			var cbCompactContentDensity  = new sap.m.CheckBox("densityModeBox", {
-				selected: "true",
+				selected: true,
 				select: function (oEvent) {
 					var bSelectedValue = oEvent.getSource().getSelected();
 					jQuery("#body").toggleClass("sapUiSizeCompact", !bSelectedValue).toggleClass("sapUiSizeCozy", bSelectedValue);
@@ -349,7 +353,43 @@
 			}).addStyleClass("cozyLabel");
 
 
+			var contrastPlusIconTabBar = new sap.m.IconTabBar('contrastPlusIconTabBar', {
+				backgroundDesign: sap.m.BackgroundDesign.Transparent,
+				headerBackgroundDesign: sap.m.BackgroundDesign.Transparent,
+				items: [
+					new sap.m.IconTabFilter({
+						text: "Info",
+						content: new sap.m.Text({
+							text: "Info content goes here ..."
+						})
+					}),
+					new sap.m.IconTabFilter({
+						text: "Attachments",
+						content: new sap.m.Text({
+							text: "Attachments go here ..."
+						})
+					})
+				]
+			}).addStyleClass("sapContrast sapContrastPlus");
 
+			var labelIconTabBarResponsivePadding = new sap.m.Label({
+				text: "IconTabBar with Responsive Padding (Fiori 3 themes only)"
+			}).addStyleClass("label");
+
+			var iconTabBarResponsivePadding = new sap.m.IconTabBar("itb_rp", {
+				items: (function() {
+					var aTabFilters = [];
+					for (var i = 1; i <= 50; i++) {
+						aTabFilters.push(new sap.m.IconTabFilter({
+							text: "Tab " + i,
+							content: new sap.m.Text({
+								text: "Lorem Ipsum " + i
+							})
+						}));
+					}
+					return aTabFilters;
+				})()
+			}).addStyleClass("sapUiResponsivePadding--header sapUiResponsivePadding--content");
 
 			var page1 = new sap.m.Page("page1", {
 				content: [
@@ -639,6 +679,62 @@
 								content: [
 									new sap.m.Label({
 										text: "alert alert alert"
+									})
+								]
+							})
+						]
+					}),
+					label2a,
+					new sap.m.IconTabBar("itb2a", {
+						selectedKey: "key13",
+						items: [
+							new sap.m.IconTabFilter({
+								icon: "sap-icon://hint",
+								iconColor: sap.ui.core.IconColor.Critical,
+								count: "3222",
+								key: "key1",
+								content: [
+									new sap.m.Label({
+										text: "info info info"
+									})
+								]
+							}),
+							new sap.m.IconTabFilter({
+								icon: "sap-icon://activity-items",
+								iconColor: sap.ui.core.IconColor.Negative,
+								enabled:false,
+								count: "322",
+								key: "key2",
+								content: [
+									new sap.m.Input({
+										placeholder: "input placeholder"
+									})
+								]
+							}),
+							new sap.m.IconTabFilter({
+								icon: "sap-icon://attachment",
+								iconColor: sap.ui.core.IconColor.Neutral,
+								key: "key3",
+								content: [
+									new sap.m.Link({
+										text:"message box",
+										press: function () {
+											jQuery.sap.require("sap.m.MessageBox");
+											sap.m.MessageBox.alert("Link was clicked!");
+										}
+									})
+								]
+							}),
+							new sap.m.IconTabFilter({
+								icon: "sap-icon://collaborate",
+								iconColor: sap.ui.core.IconColor.Positive,
+								key: "key4",
+								count: "537733",
+								content: [
+									new sap.m.Link({
+										text:"hallo",
+										target: "_blank",
+										href: "http://www.sap.com/"
 									})
 								]
 							})
@@ -988,6 +1084,13 @@
 						expandable: true,
 						selectedKey: "key3",
 						items: [
+							new sap.m.IconTabFilter({
+								showAll: true,
+								design: sap.m.IconTabFilterDesign.Horizontal,
+								count: "30",
+								text: "Honorificabilitudinitatibus"
+							}),
+							new sap.m.IconTabSeparator(),
 							new sap.m.IconTabFilter("itf7", {
 								icon: "sap-icon://hint",
 								iconColor: sap.ui.core.IconColor.Neutral,
@@ -1008,7 +1111,7 @@
 							new sap.m.IconTabSeparator({icon: "sap-icon://process"}),
 							new sap.m.IconTabFilter({
 								icon: "sap-icon://attachment",
-								count: "50 / 934 long counter",
+								count: "50 / 934679035648 long counter",
 								design: sap.m.IconTabFilterDesign.Horizontal,
 								iconColor: sap.ui.core.IconColor.Negative,
 								text: "Short text",
@@ -1051,6 +1154,7 @@
 							new sap.m.IconTabSeparator({icon: "sap-icon://process"}),
 							new sap.m.IconTabFilter({
 								icon: "images/candy_v_46x46.png",
+								iconDensityAware: false,
 								iconColor: sap.ui.core.IconColor.Critical,
 								design: sap.m.IconTabFilterDesign.Horizontal,
 								key: "key2",
@@ -1059,6 +1163,7 @@
 							new sap.m.IconTabSeparator({icon: "sap-icon://process"}),
 							new sap.m.IconTabFilter({
 								icon: "images/candy_x_46x46.png",
+								iconDensityAware: false,
 								count: "50 / 934 long counter",
 								design: sap.m.IconTabFilterDesign.Horizontal,
 								iconColor: sap.ui.core.IconColor.Negative,
@@ -1068,6 +1173,7 @@
 							new sap.m.IconTabSeparator({icon: "sap-icon://process"}),
 							new sap.m.IconTabFilter({
 								icon: "images/candy_star_46x46.png",
+								iconDensityAware: false,
 								count: "42",
 								design: sap.m.IconTabFilterDesign.Horizontal,
 								iconColor: sap.ui.core.IconColor.Negative,
@@ -1233,12 +1339,45 @@
 						]
 					}).addStyleClass("ITBContainer"),
 					iconTabBarOverflowSelectList,
-					panelBackgroundDesign
+					labelIconTabBarResponsivePadding,
+					iconTabBarResponsivePadding,
+					panelBackgroundDesign,
+					new sap.m.Label({
+						text: "Contrast IconTabBar with transparent backgrounds"
+					}),
+					contrastPlusIconTabBar,
+					new sap.m.Label({
+						text: "IconTabBar with specific accesibility decription: 'Available spaces'"
+					}),
+					new sap.m.IconTabBar({
+						ariaTexts: {
+							headerLabel: "Available spaces",
+							headerDescription: "Select tab to show a space"
+						},
+						items: [
+							new sap.m.IconTabFilter({
+								showAll: true,
+								count: "8",
+								text: "Orders Productive",
+								key: "All",
+								iconColor: sap.ui.core.IconColor.Neutral
+							}),
+							new sap.m.IconTabSeparator(),
+							new sap.m.IconTabFilter({
+								icon: "sap-icon://task",
+								iconColor: sap.ui.core.IconColor.Critical,
+								count: "3",
+								text: "Open",
+								key: "Open"
+							})
+						]
+					})
 				]
 			});
+
 			app.addPage(page1);
 		</script>
 	</head>
-	<body id="body" class="sapUiBody" role="application">
+	<body id="body" class="sapUiBody">
 	</body>
 </html>

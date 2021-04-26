@@ -3,20 +3,30 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global",
 	"./library",
 	"sap/ui/core/Control",
 	"sap/ui/core/IconPool",
 	"sap/m/TextArea",
 	"sap/m/Button",
-	"./FeedInputRenderer"
+	"./FeedInputRenderer",
+	"sap/ui/thirdparty/jquery",
+	"sap/base/security/URLListValidator",
+	"sap/base/security/sanitizeHTML"
 ],
-	function(jQuery, library, Control, IconPool, TextArea, Button, FeedInputRenderer) {
+	function(library, Control, IconPool, TextArea, Button, FeedInputRenderer, jQuery, URLListValidator, sanitizeHTML0) {
 	"use strict";
 
 	// shortcut for sap.m.ButtonType
 	var ButtonType = library.ButtonType;
 
+	// shortcut for sap.m.Avatar
+	var Avatar = library.Avatar;
+	var AvatarSize = library.AvatarSize;
+	var AvatarShape = library.AvatarShape;
+
+	var MAX_ROWS = 15,
+		MIN_ROWS = 2,
+		UNLIMITED_ROWS = 0;
 	/**
 	 * Constructor for a new FeedInput.
 	 *
@@ -48,9 +58,36 @@ sap.ui.define([
 			enabled : {type : "boolean", group : "Behavior", defaultValue : true},
 
 			/**
-			 * The maximum length (the maximum number of characters) for the feed input's value. By default this is not limited.
+			 * Defines the number of visible text lines for the control.
+			 * <b>Note:</b> Minimum value is 2, maximum value is 15.
+			 */
+			rows : {type : "int", group : "Appearance", defaultValue : 2},
+
+			/**
+			 * Determines whether the characters, exceeding the maximum allowed character count, are visible in the input field.
+			 *
+			 * If set to <code>false</code>, the user is not allowed to enter more characters than what is set in the <code>maxLength</code> property.
+			 * If set to <code>true</code>, the characters exceeding the <code>maxLength</code> value are selected on paste and the counter below
+			 * the input field displays their number.
+			 */
+			showExceededText: {type: "boolean", group: "Behavior", defaultValue: false},
+
+			/**
+			 * The maximum length (the maximum number of characters) for the feed's input value. By default this is not limited.
 			 */
 			maxLength : {type : "int", group : "Behavior", defaultValue : 0},
+
+			/**
+			 * Indicates the ability of the control to automatically grow and shrink dynamically with its content.
+			 */
+			growing : {type : "boolean", group : "Behavior", defaultValue : false},
+
+			/**
+			 * Defines the maximum number of lines that the control can grow.
+			 * Value is set to 0 by default, which means an unlimited numbers of rows.
+			 * <b>Note:</b> Minimum value to set is equal to the <code>rows</code> property value, maximum value is 15.
+			 */
+			growingMaxLines : {type : "int", group : "Behavior", defaultValue : 0},
 
 			/**
 			 * The placeholder text shown in the input area as long as the user has not entered any text value.
@@ -68,6 +105,24 @@ sap.ui.define([
 			icon : {type : "sap.ui.core.URI", group : "Data", defaultValue : null},
 
 			/**
+			 * Defines the shape of the icon.
+			* @since 1.88
+			*/
+			iconDisplayShape: { type: "sap.m.AvatarShape", defaultValue: AvatarShape.Circle},
+
+			/**
+			 * Defines the initials of the icon.
+			 * @since 1.88
+			 */
+			iconInitials: { type: "string", defaultValue: "" },
+
+			/**
+			 * Defines the size of the icon.
+			 * @since 1.88
+			 */
+			iconSize: { type: "sap.m.AvatarSize", defaultValue: AvatarSize.M},
+
+			/**
 			 * If set to "true" (default), icons will be displayed. In case no icon is provided the standard placeholder will be displayed. if set to "false" icons are hidden
 			 */
 			showIcon : {type : "boolean", group : "Behavior", defaultValue : true},
@@ -79,6 +134,8 @@ sap.ui.define([
 			 * If you do not have higher resolution images, you should set the property to "false" to avoid unnecessary round-trips.
 			 *
 			 * Please be aware that this property is relevant only for images and not for icons.
+			 *
+			 * Deprecated as of version 1.88. Image is replaced by avatar.
 			 */
 			iconDensityAware : {type : "boolean", group : "Appearance", defaultValue : true},
 
@@ -94,11 +151,10 @@ sap.ui.define([
 			/**
 			 * Text for Picture which will be read by screenreader.
 			 * If a new ariaLabelForPicture is set, any previously set ariaLabelForPicture is deactivated.
-			 * @since 1.30
+			 * Deprecated as of version 1.88. This will not have any effect in code now.
 			 */
 			ariaLabelForPicture : {type : "string", group : "Accessibility", defaultValue : null}
 		},
-
 		events : {
 
 			/**
@@ -116,6 +172,135 @@ sap.ui.define([
 	}});
 
 
+	/*
+	* These are the rules for the FormattedText
+	*/
+	var _defaultRenderingRules = {
+		// rules for the allowed attributes
+		ATTRIBS: {
+			'style': 1,
+			'class': 1,
+			'a::href': 1,
+			'a::target': 1
+		},
+		// rules for the allowed tags
+		ELEMENTS: {
+			// Text Module Tags
+			'a': { cssClass: 'sapMLnk' },
+			'abbr': 1,
+			'blockquote': 1,
+			'br': 1,
+			'cite': 1,
+			'code': 1,
+			'em': 1,
+			'h1': { cssClass: 'sapMTitle sapMTitleStyleH1' },
+			'h2': { cssClass: 'sapMTitle sapMTitleStyleH2' },
+			'h3': { cssClass: 'sapMTitle sapMTitleStyleH3' },
+			'h4': { cssClass: 'sapMTitle sapMTitleStyleH4' },
+			'h5': { cssClass: 'sapMTitle sapMTitleStyleH5' },
+			'h6': { cssClass: 'sapMTitle sapMTitleStyleH6' },
+			'p': 1,
+			'pre': 1,
+			'strong': 1,
+			'span': 1,
+			'u': 1,
+
+			// List Module Tags
+			'dl': 1,
+			'dt': 1,
+			'dd': 1,
+			'ol': 1,
+			'ul': 1,
+			'li': 1
+		}
+	};
+
+	/**
+	 * Holds the internal list of allowed and evaluated HTML elements and attributes
+	 * @private
+	 */
+	FeedInput.prototype._renderingRules = _defaultRenderingRules;
+
+	/**
+	 * Sanitizes attributes on an HTML tag.
+	 *
+	 * @param {string} tagName An HTML tag name in lower case
+	 * @param {array} attribs An array of alternating names and values
+	 * @return {array} The sanitized attributes as a list of alternating names and values. Value <code>null</code> removes the attribute.
+	 * @private
+	 */
+	function fnSanitizeAttribs(tagName, attribs) {
+
+		var attr,
+			value,
+			addTarget = tagName === "a";
+		// add UI5 specific classes when appropriate
+		var cssClass = this._renderingRules.ELEMENTS[tagName].cssClass || "";
+		for (var i = 0; i < attribs.length; i += 2) {
+			// attribs[i] is the name of the tag's attribute.
+			// attribs[i+1] is its corresponding value.
+			// (i.e. <span class="foo"> -> attribs[i] = "class" | attribs[i+1] = "foo")
+			attr = attribs[i];
+			value = attribs[i + 1];
+
+			if (!this._renderingRules.ATTRIBS[attr] && !this._renderingRules.ATTRIBS[tagName + "::" + attr]) {
+				attribs[i + 1] = null;
+				continue;
+			}
+
+			// sanitize hrefs
+			if (attr == "href") { // a::href
+				if (!URLListValidator.validate(value)) {
+					attribs[i + 1] = "#";
+					addTarget = false;
+				}
+			}
+			if (attr == "target") { // a::target already exists
+				addTarget = false;
+			}
+
+			// add UI5 classes to the user defined
+			if (cssClass && attr.toLowerCase() == "class") {
+				attribs[i + 1] = cssClass + " " + value;
+				cssClass = "";
+			}
+		}
+
+		if (addTarget) {
+			attribs.push("target");
+			attribs.push("_blank");
+		}
+		// add UI5 classes, if not done before
+		if (cssClass) {
+			attribs.push("class");
+			attribs.push(cssClass);
+		}
+
+		return attribs;
+	}
+
+	function fnPolicy(tagName, attribs) {
+		return fnSanitizeAttribs.call(this, tagName, attribs);
+	}
+	/**
+	 * Sanitizes HTML tags and attributes according to a given policy.
+	 *
+	 * @param {string} sText The HTML to sanitize
+	 * @return {string} The sanitized HTML
+	 * @private
+	 */
+
+	FeedInput.prototype._sanitizeHTML = function (sText) {
+		return sanitizeHTML0(sText, {
+			tagPolicy: fnPolicy.bind(this),
+			uriRewriter: function (sUrl) {
+				// by default, we use the URLListValidator to check the URLs
+				if (URLListValidator.validate(sUrl)) {
+					return sUrl;
+				}
+			}
+		});
+	};
 
 	/////////////////////////////////// Lifecycle /////////////////////////////////////////////////////////
 
@@ -139,25 +324,58 @@ sap.ui.define([
 		if (this._oButton) {
 			this._oButton.destroy();
 		}
-		if (this._oImageControl) {
-			this._oImageControl.destroy();
+		if (this.oAvatar) {
+			this.oAvatar.destroy();
 		}
 	};
 
 	/////////////////////////////////// Properties /////////////////////////////////////////////////////////
 
-	FeedInput.prototype.setIconDensityAware = function (iIconDensityAware) {
-		this.setProperty("iconDensityAware", iIconDensityAware, true);
-		var fnClass = sap.ui.require("sap/m/Image");
-		if (this._getImageControl() instanceof fnClass) {
-			this._getImageControl().setDensityAware(iIconDensityAware);
+	FeedInput.prototype.setRows = function (iRows) {
+		var iMaxLines = this.getProperty("growingMaxLines");
+		if (iRows > MAX_ROWS) {
+			iRows = MAX_ROWS;
+		} else if (iRows < MIN_ROWS) {
+			iRows = MIN_ROWS;
 		}
+		if (iRows > iMaxLines && iMaxLines !== 0) {
+			this.setProperty("growingMaxLines", iRows, true);
+			this._getTextArea().setGrowingMaxLines(iRows);
+		}
+		this.setProperty("rows", iRows, true);
+		this._getTextArea().setRows(iRows);
+		return this;
+	};
+
+	FeedInput.prototype.setShowExceededText = function (bValue) {
+		this.setProperty("showExceededText", bValue, true);
+		this._getTextArea().setShowExceededText(bValue);
 		return this;
 	};
 
 	FeedInput.prototype.setMaxLength = function (iMaxLength) {
 		this.setProperty("maxLength", iMaxLength, true);
 		this._getTextArea().setMaxLength(iMaxLength);
+		return this;
+	};
+
+	FeedInput.prototype.setGrowing = function (bGrowing) {
+		this.setProperty("growing", bGrowing, true);
+		this._getTextArea().setGrowing(bGrowing);
+		return this;
+	};
+
+	FeedInput.prototype.setGrowingMaxLines = function (iMaxLines) {
+		var iRows = this.getProperty("rows");
+		if (iMaxLines !== UNLIMITED_ROWS) {
+			if (iMaxLines < iRows) {
+				iMaxLines = iRows;
+			} else if (iMaxLines > MAX_ROWS) {
+				iMaxLines = MAX_ROWS;
+			}
+		}
+		this.setProperty("growingMaxLines", iMaxLines, true);
+		this._getTextArea().setGrowingMaxLines(iMaxLines);
 		return this;
 	};
 
@@ -176,6 +394,15 @@ sap.ui.define([
 
 	FeedInput.prototype.setEnabled = function (bEnabled) {
 		this.setProperty("enabled", bEnabled, true);
+
+	  //Dynamically adding or removing the css
+        if (this.getDomRef("outerContainer")) {
+			if (bEnabled) {
+				this.getDomRef("outerContainer").classList.remove("sapMFeedInDisabled");
+			} else {
+				this.getDomRef("outerContainer").classList.add("sapMFeedInDisabled");
+			}
+		}
 		this._getTextArea().setEnabled(bEnabled);
 		this._enablePostButton();
 		return this;
@@ -194,13 +421,17 @@ sap.ui.define([
 	 * @returns {sap.m.TextArea} The text area
 	 */
 	FeedInput.prototype._getTextArea = function () {
+		var that = this;
+
 		if (!this._oTextArea) {
 			this._oTextArea = new TextArea(this.getId() + "-textArea", {
-				rows : 3,
-				value : null,
+				value : this.getValue(),
 				maxLength : this.getMaxLength(),
 				placeholder : this.getPlaceholder(),
-				height: "100%",
+				growing : this.getGrowing(),
+				growingMaxLines : this.getGrowingMaxLines(),
+				showExceededText : this.getShowExceededText(),
+				rows : this.getRows(),
 				liveChange : jQuery.proxy(function (oEvt) {
 					var sValue = oEvt.getParameter("value");
 					this.setProperty("value", sValue, true); // update myself without re-rendering
@@ -208,6 +439,12 @@ sap.ui.define([
 				}, this)
 			});
 			this._oTextArea.setParent(this);
+			this._oTextArea.addEventDelegate({
+				onAfterRendering: function () {
+					that.$("counterContainer").empty();
+					that.$("counterContainer").html(that._oTextArea.getAggregation("_counter").$());
+				}
+			});
 		}
 		return this._oTextArea;
 	};
@@ -226,7 +463,7 @@ sap.ui.define([
 				press : jQuery.proxy(function () {
 					this._oTextArea.focus();
 					this.firePost({
-						value : this.getValue()
+						value : this._sanitizeHTML(this.getValue())
 					});
 					this.setValue(null);
 				}, this)
@@ -251,31 +488,37 @@ sap.ui.define([
 	 */
 	FeedInput.prototype._isControlEnabled = function() {
 		var sValue = this.getValue();
-		return this.getEnabled() && jQuery.type(sValue) === "string" && sValue.trim().length > 0;
+		return this.getEnabled() && (typeof sValue === "string" || sValue instanceof String) && sValue.trim().length > 0;
 	};
 
 	/**
 	 * Lazy load feed icon image.
 	 *
 	 * @private
-	 * @returns {sap.m.Image} The image control
+	 * @returns {sap.m.Avatar} The Avatar control
 	 */
-	FeedInput.prototype._getImageControl = function() {
+	FeedInput.prototype._getAvatar = function() {
+		var sIcon = this.getIcon();
+		var sIconSrc = sIcon ? sIcon : IconPool.getIconURI("person-placeholder");
+		var sId = this.getId() + '-icon';
 
-		var sIconSrc = this.getIcon() || IconPool.getIconURI("person-placeholder"),
-			sImgId = this.getId() + '-icon',
-			mProperties = {
-				src : sIconSrc,
-				alt : this.getAriaLabelForPicture(),
-				densityAware : this.getIconDensityAware(),
-				decorative : false,
-				useIconTooltip: false
-			},
-			aCssClasses = ['sapMFeedInImage'];
+		if (!this.oAvatar) {
+			this.oAvatar = new Avatar({
+				id: sId,
+				src: sIconSrc,
+				displayShape: this.getIconDisplayShape(),
+				initials: this.getIconInitials(),
+				displaySize: this.getIconSize()
+			}).addStyleClass("sapMFeedInImage");
+		} else {
+			this.oAvatar
+				.setSrc(sIconSrc)
+				.setDisplayShape(this.getIconDisplayShape())
+				.setInitials(this.getIconInitials())
+				.setDisplaySize(this.getIconSize());
+		}
 
-		this._oImageControl = library.ImageHelper.getImageControl(sImgId, this._oImageControl, this, mProperties, aCssClasses);
-
-		return this._oImageControl;
+		return this.oAvatar;
 	};
 
 	return FeedInput;

@@ -3,14 +3,10 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global",
-	"./Base",
-	"sap/ui/fl/Utils"
+	"sap/base/Log"
 ],
 function(
-	jQuery,
-	Base,
-	FlexUtils
+	Log
 ) {
 	"use strict";
 
@@ -98,7 +94,6 @@ function(
 	};
 
 	MoveControls._getSpecificChangeInfo = function(oModifier, mSpecificChangeInfo, oAppComponent) {
-
 		delete mSpecificChangeInfo.source.publicAggregation;
 		delete mSpecificChangeInfo.target.publicAggregation;
 
@@ -110,9 +105,9 @@ function(
 
 
 		var mAdditionalSourceInfo = {
-				aggregation: mSpecificChangeInfo.source.aggregation,
-				type: oModifier.getControlType(oSourceParent)
-			};
+			aggregation: mSpecificChangeInfo.source.aggregation,
+			type: oModifier.getControlType(oSourceParent)
+		};
 
 		var mAdditionalTargetInfo = {
 			aggregation: mSpecificChangeInfo.target.aggregation,
@@ -120,19 +115,19 @@ function(
 		};
 
 		var mSpecificInfo = {
-			source : {
-				id : oSourceParent.getId(),
-				aggregation : sSourceAggregation,
-				type : mAdditionalSourceInfo.type,
-				selector : oModifier.getSelector(mSpecificChangeInfo.source.id, oAppComponent, mAdditionalSourceInfo)
+			source: {
+				id: oSourceParent.getId(),
+				aggregation: sSourceAggregation,
+				type: mAdditionalSourceInfo.type,
+				selector: oModifier.getSelector(mSpecificChangeInfo.source.id, oAppComponent, mAdditionalSourceInfo)
 			},
-			target : {
-				id : oTargetParent.getId(),
-				aggregation : sTargetAggregation,
-				type : mAdditionalTargetInfo.type,
-				selector : oModifier.getSelector(mSpecificChangeInfo.target.id, oAppComponent, mAdditionalTargetInfo)
+			target: {
+				id: oTargetParent.getId(),
+				aggregation: sTargetAggregation,
+				type: mAdditionalTargetInfo.type,
+				selector: oModifier.getSelector(mSpecificChangeInfo.target.id, oAppComponent, mAdditionalTargetInfo)
 			},
-			movedElements : mSpecificChangeInfo.movedElements
+			movedElements: mSpecificChangeInfo.movedElements
 		};
 
 		return mSpecificInfo;
@@ -162,38 +157,47 @@ function(
 		this._checkConditions(oChange, oModifier, oView, oAppComponent);
 
 		var oChangeContent = oChange.getContent();
-		var sSourceAggregation = mPropertyBag.sourceAggregation || oChangeContent.source.selector.aggregation;
-		var oTargetParent = oModifier.bySelector(oChangeContent.target.selector, oAppComponent, oView);
-		var sTargetAggregation = mPropertyBag.targetAggregation || oChangeContent.target.selector.aggregation;
-
 		var aRevertData = [];
-		oChangeContent.movedElements.forEach(function(mMovedElement, iElementIndex) {
+		oChangeContent.movedElements.forEach(function(mMovedElement) {
 			var oMovedElement = this._getElementControlOrThrowError(mMovedElement, oModifier, oAppComponent, oView);
 
+			// mPropertyBag.sourceAggregation and mPropertyBag.targetAggregation should always be used when available
 			var oSourceParent = oModifier.getParent(oMovedElement);
-			var iInsertIndex = mMovedElement.targetIndex;
+			var sSourceAggregation = mPropertyBag.sourceAggregation || oModifier.getParentAggregationName(oMovedElement, oSourceParent);
+			var oTargetParent = oModifier.bySelector(oChangeContent.target.selector, oAppComponent, oView);
+			var sTargetAggregation = mPropertyBag.targetAggregation || oChangeContent.target.selector.aggregation;
 
 			// save the current index, sourceParent and sourceAggregation for revert
-			var iIndex = oModifier.findIndexInParentAggregation(oMovedElement);
-			if (iIndex > -1) {
-				// mPropertyBag.sourceAggregation should always be used when available
-				sSourceAggregation = mPropertyBag.sourceAggregation || oModifier.getParentAggregationName(oMovedElement, oSourceParent);
+			var iSourceIndex = oModifier.findIndexInParentAggregation(oMovedElement);
+			var iInsertIndex = mMovedElement.targetIndex;
+			var bChangeAlreadyPerformed = false;
 
-				// if iIndex === iInsertIndex the operation was already performed
-				// in this case we need the sourceIndex that is saved in the change in order to revert it to the correct index
-				if (iIndex === iInsertIndex) {
-					iIndex = mMovedElement.sourceIndex;
+			if (iSourceIndex > -1) {
+				// if iIndex === iInsertIndex and source===target the operation was already performed (e.g. drag&drop in RTA)
+				// in this case we need the sourceIndex and sourceParent that is saved in the change in order to revert it to the correct index
+				// and we can't use the current aggregations/parents
+				if (
+					iSourceIndex === iInsertIndex
+					&& sSourceAggregation === sTargetAggregation
+					&& oModifier.getParent(oMovedElement) === oTargetParent
+				) {
+					iSourceIndex = mMovedElement.sourceIndex;
+					oSourceParent = oModifier.bySelector(oChangeContent.source.selector, oAppComponent, oView);
+					sSourceAggregation = mPropertyBag.sourceAggregation || oChangeContent.source.selector.aggregation;
+					bChangeAlreadyPerformed = true;
 				}
 
 				aRevertData.unshift({
-					index: iIndex,
+					index: iSourceIndex,
 					aggregation: sSourceAggregation,
-					sourceParent: oSourceParent
+					sourceParent: oModifier.getSelector(oSourceParent, oAppComponent)
 				});
 			}
 
-			oModifier.removeAggregation(oSourceParent, sSourceAggregation, oMovedElement);
-			oModifier.insertAggregation(oTargetParent, sTargetAggregation, oMovedElement, iInsertIndex, oView);
+			if (!bChangeAlreadyPerformed) {
+				oModifier.removeAggregation(oSourceParent, sSourceAggregation, oMovedElement);
+				oModifier.insertAggregation(oTargetParent, sTargetAggregation, oMovedElement, iInsertIndex, oView);
+			}
 		}, this);
 
 		oChange.setRevertData(aRevertData);
@@ -235,15 +239,16 @@ function(
 		oChangeContent.movedElements.forEach(function(mMovedElement, iElementIndex) {
 			var oMovedElement = this._getElementControlOrThrowError(mMovedElement, oModifier, oAppComponent, oView);
 			if (!oMovedElement) {
-				FlexUtils.log.warning("Element to move not found");
+				Log.warning("Element to move not found");
 				return;
 			}
 
 			var iInsertIndex = mMovedElement.sourceIndex;
 			if (aRevertData) {
-				oSourceParent = aRevertData[iElementIndex].sourceParent;
-				sSourceAggregation = aRevertData[iElementIndex].aggregation;
-				iInsertIndex = aRevertData[iElementIndex].index;
+				var mRevertData = aRevertData[iElementIndex];
+				sSourceAggregation = mRevertData.aggregation;
+				iInsertIndex = mRevertData.index;
+				oSourceParent = oModifier.bySelector(mRevertData.sourceParent, oAppComponent, oView);
 			}
 
 			oModifier.removeAggregation(oTargetParent, sTargetAggregation, oMovedElement);
@@ -276,12 +281,12 @@ function(
 		mSpecificChangeInfo = this._getSpecificChangeInfo(oModifier, mSpecificChangeInfo, oAppComponent);
 
 		mChangeData.content = {
-			movedElements : [],
-			source : {
-				selector : mSpecificChangeInfo.source.selector
+			movedElements: [],
+			source: {
+				selector: mSpecificChangeInfo.source.selector
 			},
-			target : {
-				selector : mSpecificChangeInfo.target.selector
+			target: {
+				selector: mSpecificChangeInfo.target.selector
 			}
 		};
 
@@ -290,8 +295,8 @@ function(
 
 			mChangeData.content.movedElements.push({
 				selector: oModifier.getSelector(oElement, oAppComponent),
-				sourceIndex : mElement.sourceIndex,
-				targetIndex : mElement.targetIndex
+				sourceIndex: mElement.sourceIndex,
+				targetIndex: mElement.targetIndex
 			});
 		});
 
@@ -302,6 +307,40 @@ function(
 		}), MoveControls.MOVED_ELEMENTS_ALIAS, mPropertyBag);
 	};
 
+	/**
+	 * Retrieves the condenser-specific information.
+	 *
+	 * @param {sap.ui.fl.Change} oChange - Change object with instructions to be applied on the control map
+	 * @returns {object} - Condenser-specific information
+	 * @public
+	 */
+	MoveControls.getCondenserInfo = function(oChange) {
+		var oChangeContent = oChange.getContent();
+		var oRevertData = oChange.getRevertData()[0];
+		return {
+			affectedControl: oChangeContent.movedElements[0].selector,
+			classification: sap.ui.fl.condenser.Classification.Move,
+			sourceContainer: oRevertData.sourceParent,
+			targetContainer: oChangeContent.target.selector,
+			sourceIndex: oRevertData.index,
+			sourceAggregation: oRevertData.aggregation,
+			targetAggregation: oChangeContent.target.selector.aggregation,
+			setTargetIndex: function(oChange, iNewTargetIndex) {
+				oChange.getContent().movedElements[0].targetIndex = iNewTargetIndex;
+			},
+			getTargetIndex: function(oChange) {
+				return oChange.getContent().movedElements[0].targetIndex;
+			}
+		};
+	};
+
+	MoveControls.getChangeVisualizationInfo = function(oChange) {
+		var oChangeContent = oChange.getContent();
+		return {
+			affectedControls: [oChangeContent.movedElements[0].selector],
+			dependentControls: [oChangeContent.source.selector]
+		};
+	};
 	return MoveControls;
 },
 /* bExport= */true);

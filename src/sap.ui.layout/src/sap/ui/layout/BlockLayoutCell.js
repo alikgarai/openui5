@@ -2,8 +2,15 @@
  * ${copyright}
  */
 
-sap.ui.define(['sap/ui/core/Control', './library', "./BlockLayoutCellRenderer"],
-	function(Control, library, BlockLayoutCellRenderer) {
+sap.ui.define([
+	'sap/ui/core/Control',
+	'./library',
+	"./BlockLayoutCellRenderer",
+	"sap/base/Log",
+	"./BlockLayoutCellData",
+	"sap/ui/thirdparty/jquery"
+],
+	function(Control, library, BlockLayoutCellRenderer, Log, BlockLayoutCellData, jQuery) {
 		"use strict";
 
 		/**
@@ -104,20 +111,37 @@ sap.ui.define(['sap/ui/core/Control', './library', "./BlockLayoutCellRenderer"],
 				oRow._handleEvent(oEvent);
 			}
 			//Check if current cell has defined width
-			if (this.getWidth() != 0) {
+			if (oLayoutData && this.getWidth() != 0) {
 				this.getLayoutData().setSize(this.getWidth());
 			}
 
 			return this;
 		};
 
-		BlockLayoutCell.prototype.setTitleLink = function(oObject) {
-				if (oObject && oObject.getMetadata().getName() !== "sap.m.Link") {
-					jQuery.sap.log.warning("sap.ui.layout.BlockLayoutCell " + this.getId() + ": Can't add value for titleLink aggregation different than sap.m.Link.");
-					return;
-				}
+		/**
+		 * Sets the Width.
+		 *
+		 * @public
+		 * @param {number} iWidth value.
+		 * @returns {this} this BlockLayoutCell reference for chaining.
+		 */
+		BlockLayoutCell.prototype.setWidth = function (iWidth) {
+			this.setProperty("width", iWidth);
 
-				this.setAggregation("titleLink", oObject);
+			if (this.getLayoutData() && (this.getLayoutData().isA("sap.ui.layout.BlockLayoutCellData"))) {
+				this.getLayoutData().setSize(iWidth);
+			}
+
+			return this;
+		};
+
+		BlockLayoutCell.prototype.setTitleLink = function(oObject) {
+			if (oObject && oObject.getMetadata().getName() !== "sap.m.Link") {
+				Log.warning("sap.ui.layout.BlockLayoutCell " + this.getId() + ": Can't add value for titleLink aggregation different than sap.m.Link.");
+				return this;
+			}
+
+			this.setAggregation("titleLink", oObject);
 
 			return this;
 		};

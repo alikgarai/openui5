@@ -4,24 +4,29 @@
 
 // Provides control sap.ui.core.tmpl.TemplateControl.
 sap.ui.define([
-    'jquery.sap.global',
-    'sap/ui/core/Control',
-    'sap/ui/core/DeclarativeSupport',
-    'sap/ui/core/library',
-    'sap/ui/core/UIArea',
-    './DOMElement',
-    './Template',
-    "./TemplateControlRenderer"
+	'sap/ui/core/Control',
+	'sap/ui/core/DeclarativeSupport',
+	'sap/ui/core/UIArea',
+	'./DOMElement',
+	'./Template',
+	"./TemplateControlRenderer",
+	"sap/base/strings/capitalize",
+	"sap/base/strings/hyphenate",
+	"sap/base/Log",
+	"sap/ui/thirdparty/jquery",
+	'sap/ui/core/library'
 ],
 	function(
-	    jQuery,
 		Control,
 		DeclarativeSupport,
-		library,
 		UIArea,
 		DOMElement,
 		Template,
-		TemplateControlRenderer
+		TemplateControlRenderer,
+		capitalize,
+		hyphenate,
+		Log,
+		jQuery
 	) {
 	"use strict";
 
@@ -44,43 +49,46 @@ sap.ui.define([
 	 * @alias sap.ui.core.tmpl.TemplateControl
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
-	var TemplateControl = Control.extend("sap.ui.core.tmpl.TemplateControl", /** @lends sap.ui.core.tmpl.TemplateControl.prototype */ { metadata : {
+	var TemplateControl = Control.extend("sap.ui.core.tmpl.TemplateControl", /** @lends sap.ui.core.tmpl.TemplateControl.prototype */ {
+		metadata : {
 
-		library : "sap.ui.core",
-		properties : {
+			library : "sap.ui.core",
+			properties : {
 
-			/**
-			 * The context is a data object. It can be used for default template expressions. A change of the context object leads to a re-rendering whereas a change of a nested property of the context object doesn't. By default the context is an empty object.
-			 */
-			context : {type : "object", group : "Data", defaultValue : null}
+				/**
+				 * The context is a data object. It can be used for default template expressions. A change of the context object leads to a re-rendering whereas a change of a nested property of the context object doesn't. By default the context is an empty object.
+				 */
+				context : {type : "object", group : "Data", defaultValue : null}
+			},
+			aggregations : {
+
+				/**
+				 * The nested controls of the template control
+				 */
+				controls : {type : "sap.ui.core.Control", multiple : true, singularName : "control", visibility : "hidden"}
+			},
+			associations : {
+
+				/**
+				 * The template on which the template control is based on.
+				 */
+				template : {type : "sap.ui.core.tmpl.Template", multiple : false}
+			},
+			events : {
+
+				/**
+				 * Fired when the Template Control has been (re-)rendered and its HTML is present in the DOM.
+				 */
+				afterRendering : {},
+
+				/**
+				 * Fired before this Template Control is re-rendered. Use to unbind event handlers from HTML elements etc.
+				 */
+				beforeRendering : {}
+			}
 		},
-		aggregations : {
-
-			/**
-			 * The nested controls of the template control
-			 */
-			controls : {type : "sap.ui.core.Control", multiple : true, singularName : "control", visibility : "hidden"}
-		},
-		associations : {
-
-			/**
-			 * The template on which the template control is based on.
-			 */
-			template : {type : "sap.ui.core.tmpl.Template", multiple : false}
-		},
-		events : {
-
-			/**
-			 * Fired when the Template Control has been (re-)rendered and its HTML is present in the DOM.
-			 */
-			afterRendering : {},
-
-			/**
-			 * Fired before this Template Control is re-rendered. Use to unbind event handlers from HTML elements etc.
-			 */
-			beforeRendering : {}
-		}
-	}});
+		renderer: TemplateControlRenderer
+	});
 
 
 
@@ -149,7 +157,7 @@ sap.ui.define([
 	 * Sets the instance specific renderer for an anonymous template control.
 	 *
 	 * @param {function} fnRenderer the instance specific renderer function
-	 * @return {sap.ui.core.tmpl.Template} <code>this</code> to allow method chaining
+	 * @return {this} <code>this</code> to allow method chaining
 	 * @protected
 	 */
 	TemplateControl.prototype.setTemplateRenderer = function(fnRenderer) {
@@ -256,7 +264,7 @@ sap.ui.define([
 		var oPathInfo = Template.parsePath(sPath),
 			oModel = this.getModel(oPathInfo.model),
 			sPath = oPathInfo.path,
-			sModelFunc = sType ? "bind" + jQuery.sap.charToUpperCase(sType) : "bindProperty",
+			sModelFunc = sType ? "bind" + capitalize(sType) : "bindProperty",
 			oBinding = oModel && oModel[sModelFunc](sPath),
 			oBindingInfo = {
 				binding: oBinding,
@@ -267,7 +275,7 @@ sap.ui.define([
 		// attach a change handler (if the binding exists)
 		if (oBinding) {
 			oBindingInfo.changeHandler = function() {
-				jQuery.sap.log.debug("TemplateControl#" + this.getId() + ": " + sType + " binding changed for path \"" + sPath + "\"");
+				Log.debug("TemplateControl#" + this.getId() + ": " + sType + " binding changed for path \"" + sPath + "\"");
 				this.invalidate();
 			}.bind(this);
 			oBinding.attachChange(oBindingInfo.changeHandler);
@@ -293,8 +301,8 @@ sap.ui.define([
 	TemplateControl.prototype.calculatePath = function(sPath, sType) {
 		var oBindingContext = this.getBindingContext(),
 		    sBindingContextPath = oBindingContext && oBindingContext.getPath();
-		if (sPath && sBindingContextPath && !jQuery.sap.startsWith(sPath, "/")) {
-			if (!jQuery.sap.endsWith(sBindingContextPath, "/")) {
+		if (sPath && sBindingContextPath && !sPath.startsWith("/")) {
+			if (!sBindingContextPath.endsWith("/")) {
 				sBindingContextPath += "/";
 			}
 			sPath = sBindingContextPath + sPath;
@@ -374,9 +382,9 @@ sap.ui.define([
 		// conversion for the values done (would be the better approach)
 		var mHTMLSettings = {};
 		jQuery.each(mSettings, function(sKey, oValue) {
-			mHTMLSettings["data-" + jQuery.sap.hyphen(sKey)] = oValue;
+			mHTMLSettings["data-" + hyphenate(sKey)] = oValue;
 		});
-		var $control = jQuery("<div/>", mHTMLSettings);
+		var $control = jQuery("<div></div>", mHTMLSettings);
 		var oControl = DeclarativeSupport._createControl($control.get(0), oView);
 		if (sParentPath) {
 			// set the context for the control

@@ -3,16 +3,13 @@
 /* Base theme                   */
 /* ============================ */
 
+@_sap_m_Table_SelNavColWidth: 3rem;
+
 .sapMListTbl {
 	width: 100%;
 	border-collapse: separate;
 	border-spacing: 0;
 	table-layout: fixed;
-}
-
-html[data-sap-ui-browser='ie11'] .sapMListTbl,
-html[data-sap-ui-browser^='ed'] .sapMListTbl {
-	padding: 1px; /* outline must be visible */
 }
 
 .sapMListTbl .sapMLIB {
@@ -37,6 +34,7 @@ html[data-sap-ui-browser^='ed'] .sapMListTbl {
 	/* hide content visually but have it available for screen readers */
 	position: absolute;
 	clip: rect(0, 0, 0, 0);
+	height: 0;
 }
 
 tr.sapMListTblHeaderNone > .sapMTableTH {
@@ -56,13 +54,33 @@ tr.sapMListTblHeaderNone > .sapMTableTH {
 	word-wrap: normal;
 }
 
+/**
+ * For compatibility reasons text alignment should inherit from the table headers & cells.
+ * Default value of textAlign property is Begin(not Initial) for the following controls
+ * therefore they always set text-align as a style attribute in DOM, this blocks
+ * alignment inheritance from the table headers & cells.
+ */
+.sapMColumnHeader > .sapMLabel,
+.sapMColumnHeader > .sapMText,
+.sapMListTblCell > .sapMSlt > .sapMSltLabel,
+.sapMListTblCell > .sapMObjectNumber,
+.sapMListTblCell > .sapMLabel,
+.sapMListTblCell > .sapMText {
+	text-align: inherit !important;
+}
+
 .sapMListTblNone {
 	display: none;
 }
 
+.sapMListTblSelCol,
+.sapMListTblCell,
+.sapMListTblNavCol {
+  vertical-align: middle;
+}
+
 .sapMListTblNavCol {
 	width: 0;
-	vertical-align: top;
 	line-height: 3rem;
 }
 
@@ -89,7 +107,8 @@ tr.sapMListTblHeaderNone > .sapMTableTH {
 	display: block;
 }
 
-.sapMListTblHighlightCol {
+.sapMListTblHighlightCol,
+.sapMListTblNavigatedCol {
 	width: 0;
 	padding: 0;
 }
@@ -99,74 +118,21 @@ tr.sapMListTblHeaderNone > .sapMTableTH {
 	padding-left: 1rem;
 }
 
-.sapMListHighlight .sapMListTblHighlightCol{
-	width: 0.375rem;
+// 0.0625rem -> border-right width for highlight
+.sapMListHighlight .sapMListTblHighlightCol {
+	width: 0.375rem + 0.0625rem;
+	min-width: 0.375rem + 0.0625rem;
 }
 
-.sapMListTblHighlightCell {
+.sapMListNavigated .sapMListTblNavigatedCol {
+	width: 0.1875rem;
+}
+
+.sapMListTblHighlightCell,
+.sapMListTblNavigatedCell {
 	padding: 0;
 	position: relative;
 	overflow: hidden;
-}
-
-html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
-	height: 40rem; /* IE11 cannot stretch the height of the cell content */
-}
-
-/* responsive table approach */
-@media screen and (max-width: 1119px) {
-	.sapMListTblCell.sapMSize-xxlarge{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 1023px) {
-	.sapMListTblCell.sapMSize-desktop{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 959px) {
-	.sapMListTblCell.sapMSize-xlarge{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 767px) {
-	.sapMListTblCell.sapMSize-large{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 599px) {
-	.sapMListTblCell.sapMSize-tablet{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 559px) {
-	.sapMListTblCell.sapMSize-medium{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 479px) {
-	.sapMListTblCell.sapMSize-small{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 319px) {
-	.sapMListTblCell.sapMSize-xsmall{
-		display: none;
-	}
-}
-
-@media screen and (max-width: 239px) {
-	.sapMListTblCell.sapMSize-xxsmall,
-	.sapMListTblCell.sapMSize-phone{
-		display: none;
-	}
 }
 
 /* mixin call for creating container content padding classes (arguments: rootContainer, contentSelector) */
@@ -192,19 +158,18 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 	font-weight: normal;
 }
 
-.sapMListTbl .sapUiIcon:not(.sapMLIBImgNav):not(.sapMBtnIcon) {
+.sapMListTbl .sapUiIcon:not(.sapMLIBImgNav):not(.sapMBtnIcon):not(.sapFAvatarTypeIcon) {
 	font-size: @sapUiListTableIconSize;
 }
 
 .sapMListTblCell {
 	padding: .875rem .5rem;
-	vertical-align: top;
 	font-size: @sapUiListTableTextSize;
 }
 
 /* Ensuring that the row height is not smaller that 3rem in Cozy mode */
 .sapMListTblRow {
-	height: 3rem;
+	height: @sapUiElementLineHeight;
 }
 
 .sapMListTblCell.sapMListTblCellNoData {
@@ -219,18 +184,13 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 	padding-left: 1rem;
 }
 
-.sapMListTblCell.sapMListTblCellNoData,
-.sapMListTblCell:nth-last-child(2) {
+.sapMListTblCell.sapMListTblCellNoData {
 	padding-right: 1rem;
-}
-
-.sapMListTblHasNav .sapMListTblCell:nth-last-child(2) {
-	padding-right: 0;
 }
 
 .sapMListTblSelCol,
 .sapMListTblHasNav .sapMListTblNavCol {
-	width: 3rem;
+	width: @_sap_m_Table_SelNavColWidth;
 }
 
 .sapMLIB.sapMListTblRow {
@@ -241,36 +201,21 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 	border-color: transparent;
 }
 
-.sapMListModeMultiSelect .sapMListTblSubCnt,
-.sapMListModeSingleSelectLeft .sapMListTblSubCnt {
-	padding-left: 3rem;
-}
-
 /* table column header */
-.sapMListTblHeader > .sapMTableTH {
+.sapMTableTH {
 	background: @sapUiListHeaderBackground;
 	border-bottom: 1px solid @sapUiListBorderColor;
-	background-clip: padding-box;
 	vertical-align: middle;
 }
 
+/* backgound-clip is required in other browsers, so that focus outline is visible on all sides of the header row */
+.sapMSticky .sapMListTblHeader:focus > .sapMTableTH {
+	background-clip: padding-box;
+}
+
 /* sticky headerToolbar, infoToolbar and column headers */
-.sapMSticky > .sapMListHdr,
-.sapMSticky > .sapMListInfoTBar,
 .sapMSticky .sapMTableTH {
-	position: sticky;
-	position: -webkit-sticky;
-}
-
-.sapMSticky > .sapMListHdr {
-	z-index: 3;
-}
-
-.sapMSticky > .sapMListInfoTBar {
-	z-index: 2;
-}
-
-.sapMSticky .sapMTableTH {
+	position: sticky !important;
 	z-index: 1;
 }
 
@@ -278,36 +223,28 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 /* .sapMSticky6 denotes that the infoToolbar and column headers are sticky */
 /* .sapMSticky5 denotes that the headerToolbar and column headers are sticky */
 /* .sapMSticky4 denotes that only the column headers are sticky */
-/* .sapMSticky3 denotes that the headerToolbar/headerText and the infoToolbar are sticky */
-/* .sapMSticky2 denotes that only the infoToolbar is sticky */
-/* .sapMSticky1 denotes that only the headerToolbar/headerText is sticky */
-/* top: 0 sticky conditions */
-.sapMSticky1 > .sapMListHdr,
-.sapMSticky2 > .sapMListInfoTBar,
-.sapMSticky3 > .sapMListHdr,
+/* top: 0 sticky conditions : 1st sticky elements */
 .sapMSticky4 .sapMTableTH,
 .sapMSticky5 > .sapMListHdr,
-.sapMSticky6 > .sapMListInfoTBar,
+.sapMSticky6 > .sapMListInfoTBarContainer,
 .sapMSticky7 > .sapMListHdr {
 	top: 0;
 }
 
-/* top: 2rem sticky conditions */
+/* top: 2rem sticky conditions : 2nd sticky elements */
 .sapMSticky6 .sapMTableTH {
 	top: 2rem;
 }
 
-/* top: 3rem sticky conditions */
-.sapMSticky3 > .sapMListInfoTBar,
+/* top: 3rem sticky conditions : 2nd sticky elements */
 .sapMSticky5 .sapMTableTH,
-.sapMSticky7 > .sapMListInfoTBar,
-.sapMSticky7 > .sapMListInfoTBar {
-	top: 3rem;
+.sapMSticky7 > .sapMListInfoTBarContainer {
+	top: @sapUiElementLineHeight;
 }
 
-/* top: 5rem conditions */
+/* top: 5rem conditions : 3rd sticky elements */
 .sapMSticky7 .sapMTableTH {
-	top: 5rem;
+	top: @sapUiElementLineHeight + 2rem;
 }
 
 /* to make the focus outline visible on the all sides */
@@ -315,23 +252,11 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 	padding: 1px 1px 0 1px;
 }
 
-.sapMTableTBody {
-	background: @sapUiListBackground;
-}
-
-.sapMListTblRow {
-	background: transparent;
-}
-
-/* sticky headerToolbar/headerText background color when toolbar is transparent */
-.sapMSticky > .sapMTB-Transparent-CTX,
-.sapMSticky > .sapMListHdrText {
-	background: @sapUiListHeaderBackground;
-}
-
-/* busyIndicator should not overlapped by the sticky elements */
-.sapMSticky > .sapUiLocalBusyIndicator {
-	z-index: 3;
+/* In Safari browser the table content was visible when scrolled with sticky elements,
+hence margin-top is applied instead of padding */
+html[data-sap-ui-browser^="sf"] .sapMSticky > .sapMListTbl {
+	margin-top: 1px;
+	padding: 0 1px;
 }
 
 /* busyIndicator should not block the toolbars if <table> is set busy */
@@ -353,6 +278,32 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 .sapMListTblFooter .sapMText,
 .sapMListTblFooter .sapMLabel {
 	font-weight: bold;
+}
+
+.sapMListTblDummyCell{
+	padding: 0;
+}
+
+.sapMTableLastColumn ~ .sapMListTblDummyCell {
+	width: 0;
+}
+
+.sapMListTblDummyCell:last-child {
+	background-color: @sapBackgroundColor;
+	border-left: 1px solid @sapList_TableFooterBorder;
+}
+
+:not(.sapMListHasGrowing) > .sapMTableTBody .sapMListTblRow:last-child > .sapMListTblDummyCell:last-child {
+	border-bottom: 1px solid @sapList_BorderColor;
+}
+
+.sapMListTblHeader > .sapMListTblDummyCell:last-child {
+	background-color: @sapList_HeaderBackground;
+}
+
+.sapMListTblFooter > .sapMListTblDummyCell:last-child,
+.sapMTableTBody > :not(:first-child) .sapMListTblDummyCell:last-child {
+	border-top-color: transparent;
 }
 
 /* grid layout for popin row */
@@ -380,13 +331,134 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 	vertical-align: middle;
 }
 
+/* Column header and column header content */
+.sapMListTblCell.sapMListTblHeaderCell {
+	padding: 0;
+}
+
+.sapMColumnHeader {
+	display: flex;
+	flex: 1 1 auto;
+	padding: .875rem .5rem 1rem;
+}
+
+.sapMColumnHeaderText {
+	width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: normal;
+	font-size: @sapMFontMediumSize;
+}
+
+.sapMColumnHeaderIcons {
+	white-space: nowrap;
+}
+
+.sapMColumnHeaderIcons > .sapUiIcon {
+	padding-left: 0.375rem;
+}
+
+.sapMListTblHighlightCol + .sapMListTblCell.sapMListTblHeaderCell {
+	padding-left: .5rem;
+}
+
+.sapMColumnHeaderActive:hover {
+	background-color: @sapUiListHoverBackground;
+}
+
+.sapMColumnHeaderActive:focus {
+	outline: 1px dotted @sapUiContentFocusColor;
+	outline-offset: -2px;
+}
+
+.sapMColumnHeaderActive:active {
+	color: @sapUiListActiveTextColor;
+	background-color: @sapUiListActiveBackground;
+	outline-color: @sapUiContentContrastFocusColor;
+}
+
+.sapMColumnHeaderActive:active > .sapMColumnHeaderContent {
+	color: @sapUiListActiveTextColor;
+}
+
+.sapMColumnHeaderActive > .sapMColumnHeaderContent {
+	cursor: default;
+}
+
+.sapMColumnHeaderFocusable:focus {
+	outline: 1px dotted @sapUiContentFocusColor;
+	outline-offset: -2px;
+}
+
+/* sort icons */
+[aria-sort=ascending] > .sapMColumnHeader::after,
+[aria-sort=descending] > .sapMColumnHeader::after {
+	font-family: "SAP-Icons";
+	font-size: @sapMFontMediumSize;
+	font-weight: normal;
+	align-self: center;
+	padding-left: 0.5rem;
+	padding-right: 0.5rem;
+}
+
+[aria-sort=ascending] > .sapMColumnHeader::after {
+	content: "\e1fd";
+}
+
+[aria-sort=descending] > .sapMColumnHeader::after {
+	content: "\e1fc";
+}
+
+/* Focus border workaround for dummy column */
+.sapMListTblDummyCell:last-child {
+	pointer-events: none;
+}
+
+.sapMTableRowCustomFocus:focus {
+	outline: none;
+
+	.sapMListTblCell > :first-child {
+		position: relative;
+	}
+
+	& > :not(.sapMListTblDummyCell:last-child) {
+		position: relative;
+	}
+
+	& > :not(.sapMListTblDummyCell:last-child)::before {
+		content: "";
+		position: absolute;
+		left: 0;
+		right: 0;
+		pointer-events: none;
+		top: 1px; // mimics outline-offset: -1px
+		bottom: 1px; // mimics outline-offset: -1px
+		border-top: 1px dotted @sapUiContentFocusColor;
+		border-bottom: 1px dotted @sapUiContentFocusColor;
+		margin-right: 1px; // 1px is set so that the focus border is clearly visible on all sides
+	}
+
+	& > .sapMTblFirstVisibleCell::before {
+		border-left: 1px dotted @sapUiContentFocusColor;
+		margin-left: 1px; // mimics outline-offset: -1px
+	}
+
+	& > .sapMTblLastVisibleCell::before {
+		border-right: 1px dotted @sapUiContentFocusColor;
+	}
+}
+
+html[data-sap-ui-browser^='ff'] .sapMTableRowCustomFocus:focus > :not(.sapMListTblDummyCell)::before {
+	margin-right: 0; // firefox seems fine with rendering borders clearly without additional margin
+}
+
 /********** COMPACT DESIGN ************/
 
 /* overwite cell style */
 .sapUiSizeCompact .sapMListTblCell {
 	padding-top: 0.25rem;
 	padding-bottom: 0.25rem;
-	vertical-align: middle;
 }
 
 .sapUiSizeCompact .sapMListTblCell.sapMListTblCellNoData {
@@ -397,12 +469,15 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 .sapUiSizeCompact .sapMListTblCell > .sapMLnk,
 .sapUiSizeCompact .sapMListTblCell > .sapMText,
 .sapUiSizeCompact .sapMListTblCell > .sapMLabel,
-.sapUiSizeCompact .sapMListTblCell > .sapMObjectNumber {
+.sapUiSizeCompact .sapMListTblCell > .sapMObjectNumber,
+.sapUiSizeCompact .sapMListTblCell > .sapMObjectIdentifier,
+.sapUiSizeCompact .sapMListTblCell > .sapMObjStatus {
 	vertical-align: middle;
 	line-height: 1.4;
 }
 
 /* special class name to add margin to multiline contents */
+/* deprecated - kept for compatibility reasons, but apps should use sapUiTinyMarginTopBottom instead */
 .sapUiSizeCompact .sapMTableContentMargin {
 	margin: .5rem 0;
 }
@@ -410,7 +485,6 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 /* navigation and selection columns are in the middle */
 .sapUiSizeCompact .sapMListTblNavCol,
 .sapUiSizeCompact .sapMListTblSelCol {
-	vertical-align: middle;
 	line-height: 2rem;
 	text-align: center;
 }
@@ -421,12 +495,16 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 }
 
 .sapUiSizeCompact .sapMListTblSelCol,
+.sapUiSizeCompact .sapMListTblSelCol > .sapMLIBSelectM,
+.sapUiSizeCompact .sapMListTblSelCol > .sapMLIBSelectS,
 .sapUiSizeCompact .sapMListTblHasNav .sapMListTblNavCol {
 	width: 2rem;
 }
 
-.sapUiSizeCompact .sapMListTblHasNav .sapMListTblNavCol:last-child,
-.sapUiSizeCompact .sapMListTblSelCol:last-child {
+.sapUiSizeCompact .sapMListTblHasNav .sapMListTblNavCol:nth-last-child(2),
+.sapUiSizeCompact .sapMListTblSelCol:nth-last-child(2),
+.sapUiSizeCompact .sapMListTblHasNav .sapMTableRowCustomFocus .sapMListTblNavCol:nth-last-child(3),
+.sapUiSizeCompact .sapMTableRowCustomFocus .sapMListTblSelCol:nth-last-child(3) {
 	width: 2.5rem;
 }
 
@@ -440,4 +518,18 @@ html[data-sap-ui-browser='ie11'] .sapMListTblHighlightCell > .sapMLIBHighlight {
 	height: 0;
 	padding-top: 0;
 	padding-bottom: 0;
+}
+
+/* Column header and column header content */
+.sapUiSizeCompact .sapMColumnHeader {
+	padding-top: .5rem;
+	padding-bottom: .5rem;
+}
+
+.sapUiSizeCompact .sapMListTblCell.sapMListTblHeaderCell {
+	padding: 0;
+}
+
+.sapUiSizeCompact .sapMListTblHighlightCol + .sapMListTblCell.sapMListTblHeaderCell {
+	padding-left: .5rem;
 }

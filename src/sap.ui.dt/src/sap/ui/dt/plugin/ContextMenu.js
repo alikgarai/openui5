@@ -2,17 +2,25 @@
  * ! ${copyright}
  */
 sap.ui.define([
-	'jquery.sap.global',
-	'sap/ui/dt/Plugin',
-	'sap/ui/dt/ContextMenuControl',
-	'sap/ui/dt/Util',
-	'sap/ui/Device'
-], function (
-	jQuery,
+	"sap/ui/dt/Plugin",
+	"sap/ui/dt/ContextMenuControl",
+	"sap/ui/dt/Util",
+	"sap/ui/dt/OverlayRegistry",
+	"sap/ui/dt/util/_createPromise",
+	"sap/ui/Device",
+	"sap/base/assert",
+	"sap/ui/events/KeyCodes",
+	"sap/base/util/restricted/_debounce"
+], function(
 	Plugin,
 	ContextMenuControl,
-	Utils,
-	Device
+	DtUtil,
+	OverlayRegistry,
+	_createPromise,
+	Device,
+	assert,
+	KeyCodes,
+	_debounce
 ) {
 	"use strict";
 
@@ -33,6 +41,7 @@ sap.ui.define([
 	 */
 	var ContextMenu = Plugin.extend("sap.ui.dt.plugin.ContextMenu", /** @lends sap.ui.rta.plugin.ContextMenu.prototype */ {
 		metadata: {
+			library: "sap.ui.dt",
 			properties: {
 				contextElement: {
 					type: "object"
@@ -41,6 +50,10 @@ sap.ui.define([
 					type: "string"
 				},
 				openOnHover: {
+					type: "boolean",
+					defaultValue: true
+				},
+				openOnClick: {
 					type: "boolean",
 					defaultValue: true
 				}
@@ -54,12 +67,10 @@ sap.ui.define([
 	});
 
 	ContextMenu.prototype.init = function () {
-		this.iMenuTouchOpeningDelay = 150;
-		this.iMenuLeftclickOpeningDelay = 0;
 		this.iMenuHoverOpeningDelay = 500;
 		this.iMenuHoverClosingDelay = 250; //Should be lower than iMenuHoverOpeningDelay, otherwise ContextMenu is instantly closed
 
-		this.oContextMenuControl = new sap.ui.dt.ContextMenuControl({
+		this.oContextMenuControl = new ContextMenuControl({
 			maxButtonsDisplayed: 4 //The maximum number of buttons which should be displayed in the collapsed version of the ContextMenu (including overflow-button)
 		});
 
@@ -69,7 +80,6 @@ sap.ui.define([
 		this._aMenuItems = [];
 		this._aGroupedItems = [];
 		this._aSubMenus = [];
-		this._aPluginsWithBusyFunction = [];
 	};
 
 	ContextMenu.prototype.exit = function () {
@@ -114,12 +124,13 @@ sap.ui.define([
 	 * @override
 	 */
 	ContextMenu.prototype.registerElementOverlay = function (oOverlay) {
-		oOverlay.attachBrowserEvent("click", this._onClick, this);
-		oOverlay.attachBrowserEvent("touchstart", this._onTouch, this);
-		oOverlay.attachBrowserEvent("contextmenu", this._onContextMenu, this);
+		oOverlay.attachBrowserEvent("click", this._onContextMenuOrClick, this);
+		oOverlay.attachBrowserEvent("touchstart", this._onContextMenuOrClick, this);
+		oOverlay.attachBrowserEvent("contextmenu", this._onContextMenuOrClick, this);
 		// oOverlay.attachBrowserEvent("mouseover", this._onHover, this); FIXME: wait for hover PoC from UX colleagues
 		// oOverlay.attachBrowserEvent("mouseout", this._clearHoverTimeout, this);
 		oOverlay.attachBrowserEvent("keydown", this._onKeyDown, this);
+		oOverlay.attachBrowserEvent("keyup", this._onKeyUp, this);
 	};
 
 
@@ -130,34 +141,49 @@ sap.ui.define([
 	 * @override
 	 */
 	ContextMenu.prototype.deregisterElementOverlay = function (oOverlay) {
-		oOverlay.detachBrowserEvent("click", this._onClick, this);
-		oOverlay.detachBrowserEvent("touchstart", this._onTouch, this);
-		oOverlay.detachBrowserEvent("contextmenu", this._onContextMenu, this);
+		oOverlay.detachBrowserEvent("click", this._onContextMenuOrClick, this);
+		oOverlay.detachBrowserEvent("touchstart", this._onContextMenuOrClick, this);
+		oOverlay.detachBrowserEvent("contextmenu", this._onContextMenuOrClick, this);
 		// oOverlay.detachBrowserEvent("mouseover", this._onHover, this); FIXME: wait for hover PoC from UX colleagues
 		// oOverlay.detachBrowserEvent("mouseout", this._clearHoverTimeout, this);
 		oOverlay.detachBrowserEvent("keydown", this._onKeyDown, this);
+		oOverlay.detachBrowserEvent("keyup", this._onKeyUp, this);
 	};
 
 	/**
 	 * Opens the Context Menu
-	 * @param {sap.ui.base.Event} oEvent Event that triggered the menu to open
+	 * @param {object} mPosition position of the element triggering the open
 	 * @param {sap.ui.dt.Overlay} oOverlay overlay object
-	 * @param {boolean} bContextMenu whether the contol should be opened as a context menu
+	 * @param {boolean} bContextMenu whether the control should be opened as a context menu
 	 * @param {boolean} bIsSubMenu whether the new ContextMenu is a SubMenu opened by a button inside another ContextMenu
 	 */
-	ContextMenu.prototype.open = function (oEvent, oOverlay, bContextMenu, bIsSubMenu) {
-
+	ContextMenu.prototype.open = function (mPosition, oOverlay, bContextMenu, bIsSubMenu) {
 		this._bContextMenu = !!bContextMenu;
 
-		this._aPluginsWithBusyFunction = [];
-		this.setContextElement(oOverlay.getElement());
-
-		var aPlugins = this.getDesignTime().getPlugins();
-		aPlugins.forEach(function (oPlugin) {
-			if (oPlugin.isBusy) {
-				this._aPluginsWithBusyFunction.push(oPlugin);
+		var oNewContextElement = oOverlay.getElement();
+		if (this._fnCancelMenuPromise) {
+			// Menu is still opening
+			if (this.getContextElement() === oNewContextElement) {
+				// Same context element, first opening request is still valid
+				return;
 			}
-		}.bind(this));
+			this._fnCancelMenuPromise();
+			delete this._fnCancelMenuPromise;
+		}
+
+		this.setContextElement(oNewContextElement);
+
+		this.getDesignTime().getSelectionManager().attachChange(this._onSelectionChanged, this);
+
+		var aSelectedOverlays = this.getSelectedOverlays().filter(function (oElementOverlay) {
+			return oElementOverlay !== oOverlay;
+		});
+		aSelectedOverlays.unshift(oOverlay);
+
+		//IE sometimes returns null for document.activeElement
+		if (document.activeElement) {
+			document.activeElement.blur();
+		}
 
 		//Remove all previous entries retrieved by plugins (the list should always be rebuilt)
 		this._aMenuItems = this._aMenuItems.filter(function (mMenuItemEntry) {
@@ -168,52 +194,77 @@ sap.ui.define([
 			return !mMenuItemEntry.fromPlugin;
 		});
 
+		var oPromise = Promise.resolve();
 		if (!bIsSubMenu) {
-
-			this._aGroupedItems = [];
-
-			this._aSubMenus = [];
-
-			aPlugins.forEach(function (oPlugin) {
-				var aPluginMenuItems = oPlugin.getMenuItems(oOverlay) || [];
-				aPluginMenuItems.forEach(function (mMenuItem) {
-					if (mMenuItem.group != undefined && !bContextMenu) {
-						this._addMenuItemToGroup(mMenuItem);
-					} else if (mMenuItem.submenu != undefined) {
-						this._addSubMenu(mMenuItem, oEvent, oOverlay);
-					} else {
-						this.addMenuItem(mMenuItem, true);
-					}
-				}.bind(this));
+			var oDtSyncPromise = _createPromise(function (resolve, reject) {
+				DtUtil.waitForSynced(this.getDesignTime())().then(resolve).catch(reject);
 			}.bind(this));
+			this._fnCancelMenuPromise = oDtSyncPromise.cancel;
+			oPromise = oDtSyncPromise.promise
+				.then(function() {
+					this._aGroupedItems = [];
+					this._aSubMenus = [];
+					var aPluginItemPromises = [];
+					var oPlugins = this.getDesignTime().getPlugins();
+					oPlugins.forEach(function (oPlugin) {
+						var vMenuItems = oPlugin.getMenuItems(aSelectedOverlays);
+						if (!(vMenuItems instanceof Promise)) {
+							vMenuItems = Promise.resolve(vMenuItems);
+						}
+						aPluginItemPromises.push(vMenuItems);
+					});
 
-			this._addItemGroupsToMenu(oEvent, oOverlay);
+					var oPluginItemsPromise = _createPromise(function (resolve, reject) {
+						Promise.all(aPluginItemPromises).then(resolve).catch(reject);
+					});
+					this._fnCancelMenuPromise = oPluginItemsPromise.cancel;
+					return oPluginItemsPromise.promise;
+				}.bind(this))
+				.then(function(aPluginMenuItems) {
+					return aPluginMenuItems.reduce(function(aConcatinatedMenuItems, aMenuItems) {
+						return aConcatinatedMenuItems.concat(aMenuItems);
+					});
+				})
+				.then(function(aPluginMenuItems) {
+					aPluginMenuItems.forEach(function (mMenuItem) {
+						if (mMenuItem.group !== undefined && !bContextMenu) {
+							this._addMenuItemToGroup(mMenuItem);
+						} else if (mMenuItem.submenu !== undefined) {
+							this._addSubMenu(mMenuItem, mPosition, oOverlay);
+						} else {
+							this.addMenuItem(mMenuItem, true);
+						}
+					}.bind(this));
+
+					this._addItemGroupsToMenu(mPosition, oOverlay);
+					delete this._fnCancelMenuPromise;
+				}.bind(this));
 		}
 
-		var aMenuItems = this._aMenuItems.map(function (mMenuItemEntry) {
-			return mMenuItemEntry.menuItem;
-		});
+		oPromise.then(function() {
+			var aMenuItems = this._aMenuItems.map(function (mMenuItemEntry) {
+				return mMenuItemEntry.menuItem;
+			});
 
-		if (aMenuItems.length > 0) {
+			if (aMenuItems.length > 0) {
+				aMenuItems = this._sortMenuItems(aMenuItems);
+				this.oContextMenuControl.setButtons(aMenuItems, this._onItemSelected.bind(this), aSelectedOverlays);
+				this.oContextMenuControl.setStyleClass(this.getStyleClass());
 
-			this.oContextMenuControl._bUseExpPop = !!bContextMenu;
-
-			aMenuItems = this._sortMenuItems(aMenuItems);
-			this.oContextMenuControl.setButtons(aMenuItems, this._onItemSelected.bind(this), oOverlay);
-
-			this.oContextMenuControl.setStyleClass(this.getStyleClass());
-			if (bIsSubMenu) {
-				this.oContextMenuControl.setOpenNew(true);
+				this.oContextMenuControl.show(oOverlay, bContextMenu, {
+					x: mPosition.clientX,
+					y: mPosition.clientY
+				});
 			}
 
-
-			this.oContextMenuControl.show(oOverlay, bContextMenu, {
-				x: oEvent.clientX,
-				y: oEvent.clientY
-			});
-		}
-
-		this.fireOpenedContextMenu();
+			this.fireOpenedContextMenu();
+		}.bind(this))
+		.catch(function(oError) {
+			throw DtUtil.createError(
+				"ContextMenu#open",
+				"An error occured during calling getMenuItems: " + oError
+			);
+		});
 	};
 
 	/**
@@ -244,38 +295,17 @@ sap.ui.define([
 	 * @private
 	 */
 	ContextMenu.prototype._onContextMenu = function (oEvent) {
-		var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
-
-		if (oOverlay && oOverlay.isSelectable()) {
-			oEvent.preventDefault();
-			if (!this._bTouched) {
-				this._oCurrentOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
-				this.oContextMenuControl.close();
-				this._bOpenedByHover = false;
-
-				//IE sometimes returns null for document.activeElement
-				if (document.activeElement) {
-					document.activeElement.blur();
-				}
-
-				clearTimeout(this.hoverTimeout);
-
-				this._bTouched = false;
-				this._ensureSelection(oOverlay);
-
-				clearTimeout(this.clickTimeout);
-
-				this.lockMenuOpening();
-				this.oContextMenuControl.setOpenNew(true);
-				this.open(oEvent, oOverlay, true);
-				oEvent.stopPropagation();
-			}
-		}
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
+		var mPosition = {
+			clientX: oEvent.clientX,
+			clientY: oEvent.clientY
+		};
+		this._openContextMenu(oEvent, oOverlay, mPosition);
 	};
 
 	/**
 	 * Called when a context menu item gets selected by user
-	 * @param {sap.ui.base.Event} oEvent event object
+	 * @param {sap.ui.base.Event} oEventItem event object
 	 * @override
 	 * @private
 	 */
@@ -284,78 +314,66 @@ sap.ui.define([
 		this._ensureSelection(this._oCurrentOverlay);
 		this.setFocusLock(true);
 
-		var aSelection = [],
-			oContextElement = this.getContextElement(),
-			sSelectedButtonId = oEventItem.data("id");
+		var aSelection = [];
+		var oContextElement = this.getContextElement();
+		var sSelectedButtonId = oEventItem.data("id");
 
 		this._aMenuItems.some(function (mMenuItemEntry) {
 			if (sSelectedButtonId === mMenuItemEntry.menuItem.id) {
 				var oItem = mMenuItemEntry.menuItem;
-				aSelection = this.getSelectedOverlays();
-				jQuery.sap.assert(aSelection.length > 0, "sap.ui.rta - Opening context menu, with empty selection - check event order");
+				aSelection = mMenuItemEntry.menuItem.responsible || this.getSelectedOverlays();
+				assert(aSelection.length > 0, "sap.ui.rta - Opening context menu, with empty selection - check event order");
 				var mPropertiesBag = {};
 				mPropertiesBag.eventItem = oEventItem;
 				mPropertiesBag.contextElement = oContextElement;
-				oItem.handler(aSelection, mPropertiesBag);
+				var fnHandler = oItem.handler;
+				if (this.oContextMenuControl.isPopupOpen()) {
+					this.oContextMenuControl.attachEventOnce("Closed", function() {
+						fnHandler(aSelection, mPropertiesBag);
+					});
+				} else {
+					fnHandler(aSelection, mPropertiesBag);
+				}
 				oItem = null;
 				return true;
 			}
 		}, this);
-
 	};
 
-
-	/**
-	 * Called when the user touches an overlay
-	 * @param {sap.ui.base.Event} oEvent event object
-	 * @private
-	 */
-	ContextMenu.prototype._onTouch = function (oEvent) {
-
-		this._bTouched = true;
-
-		var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
-		if (oOverlay && oOverlay.isSelectable()) {
-			oEvent.stopPropagation();
-			if (this.touchTimeout) {
-				clearTimeout(this.touchTimeout);
-			}
-			this.touchTimeout = setTimeout(function () {
-				this._bTouched = true;
-				this._startOpening(oEvent);
-			}.bind(this), this.iMenuTouchOpeningDelay);
-		}
-	};
-
-
-	/**
-	 * Called when the user clicks on an overlay
-	 * @param {sap.ui.base.Event} oEvent event object
-	 * @private
-	 */
-	ContextMenu.prototype._onClick = function (oEvent) {
-
-		if (!Device.os.ios) {
-			var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
-			if (oOverlay && oOverlay.isSelectable() && oOverlay.getSelected()) {
-
-				if (this.isMenuOpeningLocked() && !this._bTouched) {
-					this.unlockMenuOpening();
-					this._bTouched = false;
-					this.oContextMenuControl.close();
+	ContextMenu.prototype._onContextMenuOrClick = function(oEvent) {
+		if (!this.fnDebounced) {
+			this.fnDebounced = _debounce(function() {
+				if (this._oCurrentEvent.type === "contextmenu") {
+					this._onContextMenu(this._oCurrentEvent);
+				} else {
+					this._onClickorTouch(this._oCurrentEvent);
 				}
+				this._oCurrentEvent = undefined;
+				this.fnDebounced = undefined;
+			}.bind(this), 50);
+		}
 
-				this._startOpeningWithDelay(oEvent);
-			}
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
+		if (oOverlay && oOverlay.isSelectable() && oOverlay.getSelected()) {
+			this._oCurrentEvent = oEvent;
+			oEvent.stopPropagation();
+			this.fnDebounced();
 		}
 	};
 
-	ContextMenu.prototype._startOpeningWithDelay = function(oEvent) {
-		this._bTouched = false;
-		var oCurrentEvent = jQuery.extend({}, oEvent);
-		this.clickTimeout = setTimeout(function () {
-			this._startOpening(oCurrentEvent, true);
-		}.bind(this), this.iMenuLeftclickOpeningDelay);
+	/**
+	 * Called when the user clicks or touches an overlay
+	 * @param {sap.ui.base.Event} oEvent event object
+	 * @private
+	 */
+	ContextMenu.prototype._onClickorTouch = function (oEvent) {
+		if (this.getOpenOnClick()) {
+			if (this.isMenuOpeningLocked()) {
+				this.unlockMenuOpening();
+				this.oContextMenuControl.close();
+			}
+			this._startOpening(oEvent);
+		}
 	};
 
 	/**
@@ -367,21 +385,15 @@ sap.ui.define([
 	 * @private
 	 */
 	ContextMenu.prototype._startOpening = function (oEvent, bLockOpening) {
-
 		clearTimeout(this.hoverTimeout);
 		this._bOpenedByHover = false;
 
-		if (this._oTempTarget != oEvent.currentTarget.id) {
-			clearTimeout(this.clickTimeout);
-		}
-
 		this._oTempTarget = oEvent.currentTarget.id;
 
-		var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
 		var sTargetClasses = oEvent.target.className;
 
-		if (oOverlay && oOverlay.isSelectable() && sTargetClasses.indexOf("sapUiDtOverlay") > -1 && (!this.isMenuOpeningLocked() || this._bTouched)) {
-
+		if (oOverlay && oOverlay.isSelectable() && sTargetClasses.indexOf("sapUiDtOverlay") > -1 && (!this.isMenuOpeningLocked())) {
 			oEvent.stopPropagation();
 
 			if (this._shouldContextMenuOpen(oEvent)) {
@@ -390,8 +402,13 @@ sap.ui.define([
 					if (bLockOpening) {
 						this.lockMenuOpening();
 					}
-					this.oContextMenuControl.setOpenNew(true);
-					this.open(oEvent, oOverlay);
+					this.open(
+						{
+							clientX: oEvent.clientX,
+							clientY: oEvent.clientY
+						},
+						oOverlay
+					);
 
 					return true;
 				}
@@ -405,28 +422,26 @@ sap.ui.define([
 	 * @private
 	 */
 	ContextMenu.prototype._onHover = function (oEvent) {
-		var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
 		if (oOverlay && oOverlay.isSelectable() && !oEvent.ctrlKey && this.getOpenOnHover()) {
 			oEvent.stopPropagation();
 			if (this._shouldContextMenuOpen(oEvent, true)) {
 				if (this.iMenuHoverClosingDelay >= this.iMenuHoverOpeningDelay) {
-					jQuery.error("sap.ui.dt ContextMenu iMenuHoverClosingDelay is bigger or equal to iMenuHoverOpeningDelay!");
+					throw new Error("sap.ui.dt ContextMenu iMenuHoverClosingDelay is bigger or equal to iMenuHoverOpeningDelay!");
 				}
 
 				if (this.oContextMenuControl.getPopover().isOpen()) {
 					this._closingTimeout = setTimeout(function () {
-						if (!this._bTouched && this.oContextMenuControl.getPopover().isOpen()) {
+						if (this.oContextMenuControl.getPopover().isOpen()) {
 							this.oContextMenuControl.close();
 						}
 					}.bind(this), this.iMenuHoverClosingDelay);
 				}
 
 				this.hoverTimeout = setTimeout(function () {
-					if (!this._bTouched) {
-						sap.ui.getCore().byId(oEvent.currentTarget.id).focus();
-						this._startOpening(oEvent);
-						this._bOpenedByHover = true;
-					}
+					OverlayRegistry.getOverlay(oEvent.currentTarget.id).focus();
+					this._startOpening(oEvent);
+					this._bOpenedByHover = true;
 				}.bind(this), this.iMenuHoverOpeningDelay);
 			}
 		}
@@ -448,33 +463,54 @@ sap.ui.define([
 	};
 
 	/**
-	 * Called when user presses key on keyboard. Opens the ContextMenu for Keyboard Controls
-	 @param {sap.ui.base.Event} oEvent the event which was fired
+	 * Called when user presses key on keyboard.
+	 * Opens the Compact ContextMenu on ENTER or SPACE when no other plugin is active
+	 * Opens the Context Menu when user presses SHIFT-F10
+	 * @param {sap.ui.base.Event} oEvent the event which was fired
 	 */
-	ContextMenu.prototype._onKeyDown = function (oEvent) {
-		var oOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
-		if ((oEvent.keyCode === jQuery.sap.KeyCodes.SPACE || oEvent.keyCode === jQuery.sap.KeyCodes.ENTER) &&
+	ContextMenu.prototype._onKeyUp = function (oEvent) {
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
+		if ((oEvent.keyCode === KeyCodes.SPACE || oEvent.keyCode === KeyCodes.ENTER) &&
 			(oEvent.shiftKey === false) &&
 			(oEvent.altKey === false) &&
 			(oEvent.ctrlKey === false)) {
-
-			if (oOverlay && oOverlay.isSelectable()) {
+			if (oOverlay && oOverlay.isSelectable() && !this._checkForPluginLock()) {
 				this._startOpening(oEvent, true);
 				oEvent.stopPropagation();
+				oEvent.preventDefault();
 			}
 		}
-		if ((oEvent.keyCode === jQuery.sap.KeyCodes.F10) &&
+		if ((oEvent.keyCode === KeyCodes.F10) &&
 			(oEvent.shiftKey === true) &&
 			(oEvent.altKey === false) &&
 			(oEvent.ctrlKey === false)) {
-
 			if (oOverlay && oOverlay.isSelectable()) {
 				oEvent.preventDefault();
 
-				oEvent.clientX = oOverlay.$().offset().left + oOverlay.$().width() / 2;
-				oEvent.clientY = oOverlay.$().offset().top + oOverlay.$().height() / 2;
+				var mPosition = {
+					clientX: "not set",
+					clientY: "not set"
+				};
 
-				this._onContextMenu(oEvent);
+				this._openContextMenu(oEvent, oOverlay, mPosition);
+			}
+		}
+	};
+
+	/**
+	 * Called when user presses key on keyboard.
+	 * Needed for suppressing the scrolling on pressing SPACE when no other plugin is active.
+	 * @param {sap.ui.base.Event} oEvent the event which was fired
+	 */
+	ContextMenu.prototype._onKeyDown = function (oEvent) {
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
+		if ((oEvent.keyCode === KeyCodes.SPACE) &&
+			(oEvent.shiftKey === false) &&
+			(oEvent.altKey === false) &&
+			(oEvent.ctrlKey === false)) {
+			if (oOverlay && oOverlay.isSelectable() && !this._checkForPluginLock()) {
+				oEvent.stopPropagation();
+				oEvent.preventDefault();
 			}
 		}
 	};
@@ -487,34 +523,65 @@ sap.ui.define([
 	 * @private
 	 */
 	ContextMenu.prototype._shouldContextMenuOpen = function (oEvent, onHover) {
-		if ((!this._checkForPluginLock() && !this.isMenuOpeningLocked() || this._bTouched)) {
+		if ((!this._checkForPluginLock() && !this.isMenuOpeningLocked())) {
 			if (!onHover) {
-				this._oCurrentOverlay = sap.ui.getCore().byId(oEvent.currentTarget.id);
+				this._oCurrentOverlay = OverlayRegistry.getOverlay(oEvent.currentTarget.id);
 			}
 			return true;
-		} else {
-			return false;
 		}
+		return false;
 	};
 
 	/**
-	 * Called when overflow button is pressed on ContextMenu
+	 * Called when overflow button is pressed on compact ContextMenu
+	 * @param {sap.ui.base.Event} oEvent event object
+	 * @private
 	 */
-	ContextMenu.prototype._pressedOverflowButton = function () {
+	ContextMenu.prototype._pressedOverflowButton = function (oEvent) {
+		this.lockMenuOpening();
+		var oOverlay = OverlayRegistry.getOverlay(oEvent.oSource._oTarget.getAttribute("overlay"));
+		var mPosition = {
+			clientX: oEvent.mParameters.oButton.$().offset().left,
+			clientY: oEvent.mParameters.oButton.$().offset().top
+		};
+		this._openContextMenu(oEvent, oOverlay, mPosition);
 
-		if (!this._bTouched) {
-			this.lockMenuOpening();
-		}
 		this.setFocusLock(true);
+	};
+
+	ContextMenu.prototype._openContextMenu = function(oEvent, oOverlay, mPosition) {
+		if (oOverlay && oOverlay.isSelectable()) {
+			oEvent.preventDefault();
+			this._oCurrentOverlay = oOverlay;
+			this.oContextMenuControl.close(true);
+			this._bOpenedByHover = false;
+
+			clearTimeout(this.hoverTimeout);
+
+			this._ensureSelection(oOverlay);
+
+			this.lockMenuOpening();
+			this.open(mPosition, oOverlay, true);
+			if (oEvent.stopPropagation) {
+				oEvent.stopPropagation();
+			}
+		}
 	};
 
 	/**
 	 * Called when ContextMenu gets closed
 	 */
 	ContextMenu.prototype._contextMenuClosed = function () {
-		this._bTouched = false;
 		this.unlockMenuOpening();
 		this.setFocusLock(false);
+	};
+
+	/**
+	 * Called when the selection changes
+	 */
+	ContextMenu.prototype._onSelectionChanged = function() {
+		this.oContextMenuControl.close(true);
+		this.getDesignTime().getSelectionManager().detachChange(this._onSelectionChanged, this);
 	};
 
 	/**
@@ -541,7 +608,6 @@ sap.ui.define([
 			this.lockMenuOpening(true);
 		}
 		this._bAsyncLock = false;
-		this.resetFocus();
 	};
 
 	/**
@@ -560,22 +626,11 @@ sap.ui.define([
 	};
 
 	/**
-	 * resets the focus to the Overlay
-	 */
-	ContextMenu.prototype.resetFocus = function () {
-		if (!this._bFocusLocked && this._oCurrentOverlay && document.activeElement) { //IE sometimes doesn't get an active element and throws an error when trying to set focus
-			if (!Device.os.ios) {
-				this._oCurrentOverlay.focus();
-			}
-		}
-	};
-
-	/**
 	 * checks wehther the given Overlay is selected, if not it does so
 	 * @param {object} oOverlay the Overlay which should be checked for
 	 */
 	ContextMenu.prototype._ensureSelection = function (oOverlay) {
-		if ((!this._bTouched || Device.os.ios) && oOverlay && !oOverlay.isSelected()) {
+		if (oOverlay && !oOverlay.isSelected()) {
 			oOverlay.setSelected(true);
 		}
 	};
@@ -587,15 +642,12 @@ sap.ui.define([
 	 */
 
 	ContextMenu.prototype._checkForPluginLock = function () {
-
 		//As long as Selection doesn't work correctly on ios we need to ensure that the ContextMenu opens even if a plugin mistakenly locks it
 		if (Device.os.ios) {
 			return false;
 		}
 
-		if (this._aPluginsWithBusyFunction.some(function (oPlugin) {
-				return (typeof oPlugin.isBusy === "function" && oPlugin.isBusy());
-			})) {
+		if (this.getDesignTime().getBusyPlugins().length) {
 			return true;
 		}
 
@@ -608,9 +660,7 @@ sap.ui.define([
 	 * @param {object} mMenuItem The menu item to add to a group
 	 */
 	ContextMenu.prototype._addMenuItemToGroup = function (mMenuItem) {
-
 		var bGroupExists = this._aGroupedItems.some(function (_oGroupedItem) {
-
 			if (_oGroupedItem.sGroupName === mMenuItem.group) {
 				_oGroupedItem.aGroupedItems.push(mMenuItem);
 				return true;
@@ -628,16 +678,15 @@ sap.ui.define([
 	/**
 	 * Adds a submenu to the list of submenus
 	 * @param {object} mMenuItem The menu item to add to a group
-	 * @param {sap.ui.base.Event} oEvent A event which was called on the Overlay
+	 * @param {object} mPosition The position where the submenu should be opened
 	 * @param {sap.ui.dt.Overlay} oOverlay The Overlay on which the ContextMenu was opened
 	 */
-	ContextMenu.prototype._addSubMenu = function (mMenuItem, oEvent, oOverlay) {
-
+	ContextMenu.prototype._addSubMenu = function (mMenuItem, mPosition, oOverlay) {
 		mMenuItem.submenu.forEach(function (oSubMenuItem) {
 			oSubMenuItem.handler = mMenuItem.handler;
 		});
 
-		mMenuItem.handler = function (sMenuItemId, oEvent, oOverlay, aOverlays, mPropertiesBag) {
+		mMenuItem.handler = function (sMenuItemId, mPosition, oOverlay) {
 			this._aSubMenus.some(function (_oMenuItem) {
 				if (_oMenuItem.sSubMenuId === sMenuItemId) {
 					_oMenuItem.aSubMenuItems.forEach(function (oSubMenuItem) {
@@ -648,17 +697,16 @@ sap.ui.define([
 			}.bind(this));
 
 			if (!this._bContextMenu) {
-				oEvent.clientX = null;
-				oEvent.clientY = null;
+				mPosition.clientX = null;
+				mPosition.clientY = null;
 			}
 
 			this.oContextMenuControl.close();
 			setTimeout(function () {
-				this.open(oEvent, oOverlay, true, true);
+				this.open(mPosition, oOverlay, true, true);
 			}.bind(this), 0);
 			this.lockMenuOpening();
-
-		}.bind(this, mMenuItem.id, oEvent, oOverlay);
+		}.bind(this, mMenuItem.id, mPosition, oOverlay);
 
 		this._aSubMenus.push({
 			sSubMenuId: mMenuItem.id,
@@ -670,45 +718,38 @@ sap.ui.define([
 
 	/**
 	 * Adds the grouped Button to the collapsed version of a ContextMenu
-	 * @param {sap.ui.base.Event} oEvent A event which was called on the Overlay
+	 * @param {object} mPosition The position where the menu is opened
 	 * @param {sap.ui.dt.Overlay} oOverlay The Overlay on which the ContextMenu was opened
 	 */
-	ContextMenu.prototype._addItemGroupsToMenu = function (oEvent, oOverlay) {
+	ContextMenu.prototype._addItemGroupsToMenu = function (mPosition, oOverlay) {
 		this._aGroupedItems.forEach(function (oGroupedItem, iIndex) {
-
 			//If there is only one button that belongs to a group we don't need that group
 			if (oGroupedItem.aGroupedItems.length === 1) {
 				this.addMenuItem(oGroupedItem.aGroupedItems[0], true, false);
 			} else {
-
-				var fHandlerForGroupedButton = function (iIndex, oEvent, oOverlay) {
-
+				var fHandlerForGroupedButton = function (iIndex, mPosition, oOverlay) {
 					this._aGroupedItems[iIndex].aGroupedItems.forEach(function (mMenuItem) {
 						this.addMenuItem(mMenuItem, true, true);
 					}.bind(this));
 
-					oEvent.clientX = null;
-					oEvent.clientY = null;
-
 					this.oContextMenuControl.close();
 					setTimeout(function () {
-						this.open(oEvent, oOverlay, true, true);
+						this.open(mPosition, oOverlay, true, true);
 					}.bind(this), 0);
 					this.lockMenuOpening();
 				};
 
 				this.addMenuItem({
-						id: oGroupedItem.sGroupName + "-groupButton",
-						enabled: true,
-						text: oGroupedItem.sGroupName,
-						icon: oGroupedItem.aGroupedItems[0].icon,
-						rank: oGroupedItem.aGroupedItems[0].rank,
-						handler: fHandlerForGroupedButton.bind(this, iIndex, oEvent, oOverlay)
+					id: oGroupedItem.sGroupName + "-groupButton",
+					enabled: true,
+					text: oGroupedItem.sGroupName,
+					icon: oGroupedItem.aGroupedItems[0].icon,
+					rank: oGroupedItem.aGroupedItems[0].rank,
+					handler: fHandlerForGroupedButton.bind(this, iIndex, mPosition, oOverlay)
 				}, true);
 			}
 		}.bind(this));
 	};
 
 	return ContextMenu;
-
-}, /* bExport= */ true);
+});

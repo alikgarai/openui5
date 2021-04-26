@@ -6,8 +6,8 @@
  * The IssueManager interface stores, groups and converts issues from the Core Object to a usable model by the Support Assistant.
  * Issues can be added only through the IssueManager using <code>addIssue</code> method.
  */
-sap.ui.define(["jquery.sap.global", "sap/ui/base/Object", "sap/ui/support/supportRules/Constants"],
-	function (jQuery, BaseObject, constants) {
+sap.ui.define(["jquery.sap.global", "sap/ui/base/Object", "sap/ui/support/library", "sap/ui/support/supportRules/Constants"],
+	function (jQuery, BaseObject, library, constants) {
 		"use strict";
 		/**
 		 * @type {object[]} _aIssues Issues stored in the IssueManager
@@ -208,31 +208,36 @@ sap.ui.define(["jquery.sap.global", "sap/ui/base/Object", "sap/ui/support/suppor
 					innerIndex = 0,
 					treeTableModel = {},
 					rulesViewModel,
-					rule;
+					rule,
+					rules = [];
 
 				rulesViewModel = this.getRulesViewModel(oRules, [], []);
 				for (var libraryName in rulesViewModel) {
 					treeTableModel[index] = {
 						name: libraryName,
+						id: libraryName + " " + index,
+						selected: true,
 						type: "lib",
-						rules: []
+						nodes: rules
 					};
 
 					for (var ruleName in rulesViewModel[libraryName]) {
 						rule = rulesViewModel[libraryName][ruleName];
-						treeTableModel[index][innerIndex] = {
+						rules.push({
 							name: rule.title,
 							description: rule.description,
 							id: rule.id,
-							audiences: rule.audiences,
-							categories: rule.categories,
+							audiences: rule.audiences.toString(),
+							categories: rule.categories.toString(),
 							minversion: rule.minversion,
 							resolution: rule.resolution,
 							title:  rule.title,
-							libName: libraryName
-						};
+							libName: libraryName,
+							selected: true
+						});
 						innerIndex++;
 					}
+					rules = [];
 					index++;
 				}
 				return treeTableModel;
@@ -465,7 +470,7 @@ sap.ui.define(["jquery.sap.global", "sap/ui/base/Object", "sap/ui/support/suppor
 		IssueManagerFacade.prototype.addIssue = function (oIssue) {
 			oIssue.rule = this.oRule;
 
-			if (!sap.ui.support.Severity[oIssue.severity]) {
+			if (!library.Severity[oIssue.severity]) {
 				throw "The issue from rule " + this.oRule.title + " does not have proper severity defined. Allowed values can be found" +
 						"in sap.ui.support.Severity";
 			}

@@ -10,12 +10,21 @@
 		id="page"
 		showFooter="false"
 		class="sapContrast">
+		<landmarkInfo>
+			<PageAccessibleLandmarkInfo
+				rootRole="Region"
+				rootLabel="{i18n>Overview_rootLabel}"
+				contentRole="Main"
+				contentLabel="{i18n>Overview_contentLabel}"
+				headerRole="Banner"
+				headerLabel="{i18n>Overview_headerLabel}"/>
+		</landmarkInfo>
 		<customHeader>
 			<Toolbar>
 				<Button
 					type="Back"
 					id="buttonNavigateBack"
-					press="onNavBack"/>
+					press=".onNavBack"/>
 				<ToolbarSpacer/>
 				<Button
 					id="fontSelector"
@@ -23,29 +32,40 @@
 						path: 'view>/fontName',
 						formatter: '.formatter.fontName'
 					}"
-					type="transparent"
+					type="Transparent"
 					icon="sap-icon://slim-arrow-down"
 					iconFirst="false"
-					press="onSelectFont"/>
+					press=".onSelectFont"/>
 				<ToolbarSpacer/>
 				<Button
 					id="surprise"
 					visible="{= ${device>/system/phone} ? false : true}"
 					tooltip="{i18n>overviewRandomIconButtonTooltip}"
 					icon="sap-icon://activate"
-					press="onSurpriseMe"/>
+					press=".onSurpriseMe"
+					ariaLabelledBy="labelRandomButton"/>
 				<Button
 					id="download"
 					visible="{= ${device>/system/phone} ? false : true}"
 					tooltip="{i18n>overviewDownloadButtonTooltip}"
 					icon="sap-icon://download"
-					press="onDownload"/>
+					press=".onDownload"
+					ariaLabelledBy="labelDownloadButton"/>
 			</Toolbar>
 		</customHeader>
 		<content>
+			<!-- Invisible Texts for ARIA -->
+			<core:InvisibleText id="labelCopyButton" text="{i18n>labelCopyButton}"/>
+			<core:InvisibleText id="labelPreviewButton" text="{i18n>labelPreviewButton}"/>
+			<core:InvisibleText id="labelRandomButton" text="{i18n>labelRandomButton}"/>
+			<core:InvisibleText id="labelDownloadButton" text="{i18n>labelDownloadButton}"/>
+			<core:InvisibleText id="labelTags" text="{i18n>overviewTagSelectionLabel}"/>
+			<core:InvisibleText id="labelIconSearch" text="{i18n>labelIconSearch}"/>
+			<core:InvisibleText id="labelCategory" text="{i18n>labelCategory}"/>
+			<!-- -->
 			<IconTabBar
 				id="iconTabBar"
-				select="onTabSelect"
+				select=".onTabSelect"
 				stretchContentHeight="true"
 				expandable="false"
 				backgroundDesign="Solid"
@@ -83,10 +103,11 @@
 								requiredParentWidth="400"
 								id="default">
 								<ScrollContainer
-									id="resultContainer"
 									vertical="true"
 									horizontal="false"
 									height="100%">
+									<Panel
+										accessibleRole="Region">
 									<FlexBox
 										width="auto"
 										class="sapUiSmallMargin sapUiNoMarginBottom"
@@ -95,10 +116,11 @@
 										<items>
 											<SearchField
 												id="searchField"
-												liveChange="onSearch"
+												liveChange=".onSearch"
 												class="sapUiTinyMarginEnd"
 												tooltip="{i18n>searchPlaceholder}"
-												width="auto">
+												width="auto"
+												ariaLabelledBy="labelIconSearch">
 												<layoutData>
 													<FlexItemData growFactor="1"/>
 												</layoutData>
@@ -108,8 +130,9 @@
 												items="{groups}"
 												class=" sapUiTinyMarginEnd"
 												tooltip="{i18n>overviewSelectCategoryTooltip}"
-												selectionChange="onSelectCategory"
+												selectionChange=".onSelectCategory"
 												visible="{= ${device>/system/phone} ? false : true}"
+												ariaLabelledBy="labelCategory"
 												width="auto">
 												<layoutData>
 													<FlexItemData growFactor="1"/>
@@ -131,6 +154,11 @@
 											length: 50
 										}">
 									</OverflowToolbar>
+								</Panel>
+								<Panel
+									id="resultContainer"
+									accessibleRole="Region">
+								</Panel>
 								</ScrollContainer>
 							</l:SplitPane>
 							<l:SplitPane requiredParentWidth="800">
@@ -146,6 +174,7 @@
 										<Panel
 											id="previewCopy"
 											headerText="{i18n>previewCopyTitle}"
+											accessibleRole="Region"
 											class="previewCopy">
 											<l:FixFlex
 												fixFirst="false"
@@ -161,8 +190,9 @@
 														icon="sap-icon://copy"
 														type="Emphasized"
 														tooltip="{i18n>previewCopyIconToClipboard}"
-														press="onCopyCodeToClipboard"
-														class="sapUiTinyMarginBegin"/>
+														press=".onCopyCodeToClipboard"
+														class="sapUiTinyMarginBegin"
+														ariaLabelledBy="labelCopyButton"/>
 												</l:fixContent>
 											</l:FixFlex>
 											<l:FixFlex
@@ -179,8 +209,9 @@
 														icon="sap-icon://copy"
 														type="Emphasized"
 														tooltip="{i18n>previewCopyIconToClipboard}"
-														press="onCopyIconToClipboard"
-														class="sapUiTinyMarginBegin"/>
+														press=".onCopyIconToClipboard"
+														class="sapUiTinyMarginBegin"
+														ariaLabelledBy="labelCopyButton"/>
 												</l:fixContent>
 											</l:FixFlex>
 											<l:FixFlex
@@ -200,13 +231,15 @@
 														icon="sap-icon://copy"
 														type="Emphasized"
 														tooltip="{i18n>previewCopyIconToClipboard}"
-														press="onCopyUnicodeToClipboard"
-														class="sapUiTinyMarginBegin"/>
+														press=".onCopyUnicodeToClipboard"
+														class="sapUiTinyMarginBegin"
+														ariaLabelledBy="labelCopyButton"/>
 												</l:fixContent>
 											</l:FixFlex>
 										</Panel>
 										<Panel
 										headerText="{i18n>previewIconTitle}"
+										accessibleRole="Region"
 										backgroundDesign="Solid"
 										class="sapUiContentPadding">
 											<l:BlockLayout
@@ -222,7 +255,10 @@
 												</l:BlockLayoutRow>
 											</l:BlockLayout>
 										</Panel>
-										<Panel id="previewUseCases" headerText="{i18n>previewUseCasesTitle}">
+										<Panel
+											id="previewUseCases"
+											headerText="{i18n>previewUseCasesTitle}"
+											accessibleRole="Region">
 											<l:BlockLayout
 												id="useCaseLayout"
 												class="centeredBlockCells"
@@ -233,22 +269,26 @@
 													<Button
 														icon="sap-icon://{view>/iconPath}{name}"
 														class="sapUiTinyMarginEnd"
-														tooltip="{i18n>previewIconButton}"/>
+														tooltip="{i18n>previewIconButton}"
+														ariaLabelledBy="labelPreviewButton"/>
 													<Button
 														icon="sap-icon://{view>/iconPath}{name}"
 														type="Accept"
 														class="sapUiTinyMarginEnd"
-														tooltip="{i18n>previewIconButton}"/>
+														tooltip="{i18n>previewIconButton}"
+														ariaLabelledBy="labelPreviewButton"/>
 													<Button
 														icon="sap-icon://{view>/iconPath}{name}"
 														type="Reject"
 														class="sapUiTinyMarginEnd"
-														tooltip="{i18n>previewIconButton}"/>
+														tooltip="{i18n>previewIconButton}"
+														ariaLabelledBy="labelPreviewButton"/>
 													<Button
 														icon="sap-icon://{view>/iconPath}{name}"
 														type="Emphasized"
 														class="sapUiTinyMarginEnd"
-														tooltip="{i18n>previewIconButton}"/>
+														tooltip="{i18n>previewIconButton}"
+														ariaLabelledBy="labelPreviewButton"/>
 												</l:BlockLayoutCell>
 												<l:BlockLayoutCell>
 													<!-- Preview for only icon buttons in Toolbar -->
@@ -262,19 +302,23 @@
 														<ToolbarSpacer/>
 														<Button
 															icon="sap-icon://{view>/iconPath}{name}"
-															tooltip="{i18n>previewIconButton}"/>
+															tooltip="{i18n>previewIconButton}"
+															ariaLabelledBy="labelPreviewButton"/>
 														<Button
 															icon="sap-icon://{view>/iconPath}{name}"
 															type="Accept"
-															tooltip="{i18n>previewIconButton}"/>
+															tooltip="{i18n>previewIconButton}"
+															ariaLabelledBy="labelPreviewButton"/>
 														<Button
 															icon="sap-icon://{view>/iconPath}{name}"
 															type="Reject"
-															tooltip="{i18n>previewIconButton}"/>
+															tooltip="{i18n>previewIconButton}"
+															ariaLabelledBy="labelPreviewButton"/>
 														<Button
 															icon="sap-icon://{view>/iconPath}{name}"
 															type="Emphasized"
-															tooltip="{i18n>previewIconButton}"/>
+															tooltip="{i18n>previewIconButton}"
+															ariaLabelledBy="labelPreviewButton"/>
 													</OverflowToolbar>
 												</l:BlockLayoutCell>
 											</l:BlockLayoutRow>
@@ -357,6 +401,7 @@
 									</Panel>
 									<Panel
 										id="previewInfo"
+										accessibleRole="Region"
 										headerText="{i18n>previewInfoTitle}">
 										<ObjectAttribute
 											id="unicodeInfo"
@@ -381,7 +426,7 @@
 											<Token
 												text="{name}"
 												class="tagsToken"
-												press="onTagSelect"/>
+												press=".onTagSelect"/>
 										</Tokenizer>
 									</Panel>
 									</l:VerticalLayout>
@@ -399,7 +444,7 @@
 				showHeader="false">
 				<List
 					id="selectFontList"
-					selectionChange="onChangeFont"
+					selectionChange=".onChangeFont"
 					mode="SingleSelectMaster"
 					items="{
 						path: '/AllFonts',

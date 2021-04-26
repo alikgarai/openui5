@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>Data Handling</title>
+	<meta http-equiv="Content-Type" content="text/html">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta charset="utf-8">
+	<script src="../../../scripts/boot.js"></script>
+</head>
+
+<body class="sapUiBody topicBody">
+
+	<div class="topic">
+		<div class="content">
+
+			<h1>
+				Data Handling
+			</h1>
+
+			<h2 id="overview">
+				Overview
+			</h2>
+
+			<p>
+				The data sections of the card can be defined on different levels (card level, header level,
+				filter-definition level or content
+				level).
+				Inner level data sections will take precedence. Defining a data section configures how the card will
+				handle
+				its data.
+				A data section will result in a JSON model creation which can be used in binding syntaxes later on.
+				There are a few possible configurations for a data section:
+			</p>
+			<ol>
+				<li>Using static data by providing the "json" property.</li>
+				<li>Requesting data by providing the "request" property.</li>
+				<li>Use the <a href="../../../index.html#/learn/features/extension" target="_parent">Extension</a> to
+					get data by providing the "extension" property.</li>
+				<li>Provide "path" only to specify the context path of the current level.</li>
+			</ol>
+
+			<p>Data:</p>
+
+			<div class="tableWrapper">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Type</th>
+						<th>Required</th>
+						<th>Description</th>
+						<th>Schema Version</th>
+						<th>Since</th>
+					</tr>
+					<tr>
+						<td>request</td>
+						<td><a href="#request">Request</a></td>
+						<td>No</td>
+						<td>An object defining a request.</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>json</td>
+						<td>Object</td>
+						<td>No</td>
+						<td>A data object.</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>extension</td>
+						<td><a href="#extension">Extension</a></td>
+						<td>No</td>
+						<td>An object defining which method of an Extension to be called for fetching the data.
+						</td>
+						<td></td>
+						<td>1.79</td>
+					</tr>
+					<tr>
+						<td>name</td>
+						<td>string</td>
+						<td>No</td>
+						<td>
+							Name for the data section.
+							<br>
+							If this name is given, a model with the same name is assigned to the card and can be used inside the manifest and inside
+							an <a href="../../../index.html#/learn/features/extension" target="_parent">extension</a> or a <a href="../../../index.html#/learn/types/component" target="_parent">Component card</a>.
+							<br>
+							A unique name must be used for each individual data section. The names "parameters", "filters", "context" and "i18n" are reserved for cards and must not be used.
+							<br>
+							See this <a href="../../../index.html#/explore/extension/namedDataSection" target="_parent">sample</a>.
+							<br>
+							<b>Note:</b> This property is experimental.
+						</td>
+						<td>1.30</td>
+						<td>1.86</td>
+					</tr>
+					<tr>
+						<td>path</td>
+						<td>string</td>
+						<td>No</td>
+						<td>The context path. Default value is "/".</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>updateInterval</td>
+						<td>number</td>
+						<td>No</td>
+						<td>The interval in seconds on which the data will be updated.
+						</td>
+						<td>1.15.0</td>
+						<td>1.65</td>
+					</tr>
+				</table>
+			</div>
+
+			<p id="request">Request:</p>
+
+			<div class="tableWrapper">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Type</th>
+						<th>Required</th>
+						<th>Description</th>
+						<th>Schema Version</th>
+						<th>Since</th>
+					</tr>
+					<tr>
+						<td>mode</td>
+						<td>string</td>
+						<td>No</td>
+						<td>The mode of the request. Possible values are "cors", "no-cors", "same-origin". Default value
+							is "cors".
+						</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>url</td>
+						<td>string</td>
+						<td>Yes</td>
+						<td>The URL of the request. Relative paths like
+							"data.json", "./data.json" and "../data.json"
+							are going to be resolved relatively to the manifest base path.
+						</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>method</td>
+						<td>string</td>
+						<td>No</td>
+						<td>The HTTP method. Possible values are "GET", "POST". Default value is "GET".</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>parameters</td>
+						<td>Object</td>
+						<td>No</td>
+						<td>
+							The request parameters to be sent to the server.
+							If the HTTP method is "POST" the parameters will be put as key/value pairs into the body of
+							the request.
+							If the method doesn't have an entity body, such as the "GET" method, the data is appended to
+							the URL.<br><br>
+							Default encoding is <code>application/x-www-form-urlencoded</code>.
+							Also JSON is supported for the body encoding (see <a target="_parent"
+								href="../../../index.html#/explore/data/graphql">sample with GraphQL</a>). If you need
+							it add a header <code>Content-Type: application/json</code>"
+						</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>headers</td>
+						<td>Object</td>
+						<td>No</td>
+						<td>The HTTP headers of the request.</td>
+						<td>1.14.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>withCredentials</td>
+						<td>boolean</td>
+						<td>No</td>
+						<td>Indicates whether cross-site requests should be made using credentials.</td>
+						<td>1.17.0</td>
+						<td>1.71</td>
+					</tr>
+					<tr>
+						<td>batch</td>
+						<td>Object&lt;string,<a href="#batch">Batch</a>&gt;</td>
+						<td>No</td>
+						<td>
+							A map of requests, which should be batched together.<br>
+							If used the main request will be sent with content type multipart/mixed and its body will contain all requests specified in the map.<br>
+							Can be used for OData V2 and V4 batch requests.<br>
+							In the binding the result from each request can be accessed by the key of the corresponding request (see <a target="_parent"
+							href="../../../index.html#/explore/data/batchRequest">sample with OData batch request</a>).<br>
+							<b>Note:</b> This property is experimental.<br>
+						</td>
+						<td>1.33.0</td>
+						<td>1.90</td>
+					</tr>
+				</table>
+			</div>
+
+			<p id="batch">Batch (Experimental):</p>
+
+			<div class="tableWrapper">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Type</th>
+						<th>Required</th>
+						<th>Description</th>
+						<th>Schema Version</th>
+						<th>Since</th>
+					</tr>
+					<tr>
+						<td>url</td>
+						<td>string</td>
+						<td>Yes</td>
+						<td>Absolute or relative URL. If the URL contains Content-ID reference then the reference has to be specified as zero-based index of the referred request inside the change set.</td>
+						<td>1.33.0</td>
+						<td>1.90</td>
+					</tr>
+					<tr>
+						<td>method</td>
+						<td>string</td>
+						<td>Yes</td>
+						<td>The HTTP method. Only "GET", "POST", "PUT", "PATCH" and "DELETE" are allowed. Use capital letters only.</td>
+						<td>1.33.0</td>
+						<td>1.90</td>
+					</tr>
+					<tr>
+						<td>headers</td>
+						<td>Object</td>
+						<td>No</td>
+						<td>Map of request headers. RFC-2047 encoding rules are not supported. Nevertheless, non US-ASCII values can be used.</td>
+						<td>1.33.0</td>
+						<td>1.90</td>
+					</tr>
+					<tr>
+						<td>body</td>
+						<td>Object</td>
+						<td>No</td>
+						<td>Request body. If specified, oRequest.headers map must contain "Content-Type" header either without "charset" parameter or with "charset" parameter having value "UTF-8".</td>
+						<td>1.33.0</td>
+						<td>1.90</td>
+					</tr>
+				</table>
+			</div>
+
+			<p id="extension">Extension:</p>
+
+			<div class="tableWrapper">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Type</th>
+						<th>Required</th>
+						<th>Description</th>
+						<th>Schema Version</th>
+						<th>Since</th>
+					</tr>
+					<tr>
+						<td>method</td>
+						<td>string</td>
+						<td>Yes</td>
+						<td>The name of the Extension method, which returns a promise and resolves with JSON.
+						</td>
+						<td></td>
+						<td>1.79</td>
+					</tr>
+					<tr>
+						<td>args</td>
+						<td>array</td>
+						<td>No</td>
+						<td>The arguments with which the method will be called.</td>
+						<td></td>
+						<td>1.79</td>
+					</tr>
+				</table>
+			</div>
+
+			<h2 id="examples">
+				Examples
+			</h2>
+
+			<p>Card level data section with static JSON where the header and content sets their own context path:</p>
+			<pre class="prettyprint  lang-js">{
+	"sap.card": {
+		"type": "List",
+		"data": {
+			"json": {
+				"info": {
+					"header": "Some title"
+				},
+				"items": [
+					{
+						"name": "Item 1",
+						"description": "Item 1 description"
+					},
+					{
+						"name": "Item 2",
+						"description": "Item 2 description"
+					},
+					{
+						"name": "Item 3",
+						"description": "Item 3 description"
+					}
+				]
+			}
+		},
+		"header": {
+			"data": {
+				"path": "/info"
+			},
+			"title": "{header}"
+		},
+		"content": {
+			"data": {
+				"path": "/items"
+			},
+			"item": {
+				"title": "{name}",
+				"description": "{description}"
+			}
+		}
+	}
+}</pre>
+
+			<p>Content level data section with request and update interval:</p>
+
+			<p>The structure of the /api/items API response:</p>
+			<pre class="prettyprint  lang-js">{
+	"items": [
+		{
+			"name": "Item 1",
+			"description": "Item 1 description"
+		},
+		{
+			"name": "Item 2",
+			"description": "Item 2 description"
+		},
+		{
+			"name": "Item 3",
+			"description": "Item 3 description"
+		}
+	]
+}</pre>
+
+			<p>The manifest:</p>
+			<pre class="prettyprint  lang-js">{
+	"sap.card": {
+		"type": "List",
+		"header": {
+			"title": "Some title"
+		},
+		"content": {
+			"data": {
+				"request": {
+					"url": "../api/items"
+				},
+				"updateInterval": 300,
+				"path": "/items"
+			},
+			"item": {
+				"title": "{name}",
+				"description": "{description}"
+			}
+		}
+	}
+}</pre>
+			<a class="try-button" href="../../../index.html#/explore/data" target="_parent">Try it Out</a>
+		</div>
+		<div class="navigation">
+			<h4>Table of Contents</h4>
+			<div><a href="../../../index.html#/learn/features/data/overview" target="_parent">Overview</a></div>
+			<div><a href="../../../index.html#/learn/features/data/examples" target="_parent">Examples</a></div>
+		</div>
+	</div>
+</body>
+
+</html>

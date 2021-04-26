@@ -38,10 +38,10 @@ sap.ui.define([],
 				role: "dialog"
 			});
 		}
-		rm.write("><span id='", oControl.getId(), "-focfirst' tabIndex='0'></span><div id='", oControl.getId(), "-inner'>");
+		rm.write("><span id='", oControl.getId(), "-focfirst' tabindex='0'></span><div id='", oControl.getId(), "-inner'>");
 
 		rm.write("<header class='sapUiUfdShellOvrlyHead'>");
-		rm.write("<hr class='sapUiUfdShellOvrlyBrand'/>");
+		rm.write("<hr class='sapUiUfdShellOvrlyBrand'>");
 		rm.write("<div class='sapUiUfdShellOvrlyHeadCntnt'");
 		if (sap.ui.getCore().getConfiguration().getAccessibility()) {
 			rm.writeAttribute("role", "toolbar");
@@ -63,7 +63,7 @@ sap.ui.define([],
 		ShellOverlayRenderer.renderContent(rm, oControl);
 		rm.write("</div>");
 
-		rm.write("</div><span id='", oControl.getId(), "-foclast' tabIndex='0'></span></div>");
+		rm.write("</div><span id='", oControl.getId(), "-foclast' tabindex='0'></span></div>");
 	};
 
 	ShellOverlayRenderer.renderSearch = function(rm, oControl) {

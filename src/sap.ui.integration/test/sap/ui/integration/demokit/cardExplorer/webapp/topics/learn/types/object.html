@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>Object Card</title>
+	<meta http-equiv="Content-Type" content="text/html">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta charset="utf-8">
+	<script src="../../../scripts/boot.js"></script>
+</head>
+
+<body class="sapUiBody topicBody">
+	<div class="topic">
+		<div class="content">
+			<h1 id="overview">
+				Object Card
+			</h1>
+			<p>
+				This type of card can display information about any object in groups. Each group can contain as much
+				items as needed.
+				The Object Card header is coupled with the content, which means that the header cannot make separated
+				requests.
+			</p>
+			<h2 id="properties">Properties</h2>
+			<p>The Object Card contains an array of groups.</p>
+
+			<h4>Object Group properties</h4>
+
+			<div class="tableWrapper">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Type</th>
+						<th>Required</th>
+						<th>Description</th>
+						<th>Schema Version</th>
+						<th>Since</th>
+					</tr>
+					<tr>
+						<td>title</td>
+						<td>string</td>
+						<td>No</td>
+						<td>Defines language-dependent title of the object group.</td>
+						<td>1.15.0</td>
+						<td>1.64</td>
+					</tr>
+					<tr>
+						<td>items</td>
+						<td>array</td>
+						<td>Yes</td>
+						<td>Represents items of information.</td>
+						<td>1.15.0</td>
+						<td>1.64</td>
+					</tr>
+					<tr>
+						<td>visible</td>
+						<td>boolean</td>
+						<td>No</td>
+						<td>Determines the visibility of the group.</td>
+						<td>1.25.0</td>
+						<td>1.81</td>
+					</tr>
+				</table>
+			</div>
+
+			<h4>Object Group Item properties</h4>
+
+			<div class="tableWrapper">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Type</th>
+						<th>Required</th>
+						<th>Description</th>
+						<th>Schema Version</th>
+						<th>Since</th>
+					</tr>
+					<tr>
+						<td>icon</td>
+						<td><a href="#iconApi">Icon</a></td>
+						<td>No</td>
+						<td>Defines the icon of the item.</td>
+						<td>1.15.0</td>
+						<td>1.64</td>
+					</tr>
+					<tr>
+						<td>label</td>
+						<td>string</td>
+						<td>Yes</td>
+						<td>Defines the label of the item.</td>
+						<td>1.15.0</td>
+						<td>1.64</td>
+					</tr>
+					<tr>
+						<td>value</td>
+						<td>string</td>
+						<td>Yes</td>
+						<td>Represents the text, which is associated with the label.</td>
+						<td>1.15.0</td>
+						<td>1.64</td>
+					</tr>
+					<tr>
+						<td>visible</td>
+						<td>boolean</td>
+						<td>No</td>
+						<td>Determines the visibility of the item.</td>
+						<td>1.25.0</td>
+						<td>1.81</td>
+					</tr>
+					<tr>
+						<td>actions</td>
+						<td><a href="../../../index.html#/learn/features/cardActions" target="_parent">Actions[]</a></td>
+						<td>No</td>
+						<td>Defines actions that can be applied on the item.</td>
+						<td>1.31.0</td>
+						<td>1.87</td>
+					</tr>
+				</table>
+			</div>
+
+			<h4 id="iconApi">Icon Properties</h4>
+			<div class="tableWrapper">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Type</th>
+						<th>Required</th>
+						<th>Description</th>
+						<th>Schema Version</th>
+						<th>Since</th>
+					</tr>
+					<tr>
+						<td>src</td>
+						<td>string</td>
+						<td>No</td>
+						<td>Icon name or source URL</td>
+						<td>1.15.0</td>
+						<td>1.65</td>
+					</tr>
+					<tr>
+						<td>shape</td>
+						<td><a data-demokit-href="/api/sap.m.AvatarShape" target="_blank">sap.m.AvatarShape</a></td>
+						<td>No</td>
+						<td>The shape of the icon.</td>
+						<td>1.26.0</td>
+						<td>1.82</td>
+					</tr>
+					<tr>
+						<td>alt</td>
+						<td>string</td>
+						<td>No</td>
+						<td>Alternative text for the icon.</td>
+						<td>1.26.0</td>
+						<td>1.82</td>
+					</tr>
+					<tr>
+						<td>size</td>
+						<td>string</td>
+						<td>No</td>
+						<td>
+							One of "XS", "S" or "M". By default it is set to "XS".<br>
+							<b>Note:</b> This property is experimental and may change!
+						</td>
+						<td>1.26.0</td>
+						<td>1.82</td>
+					</tr>
+					<tr>
+						<td>backgroundColor</td>
+						<td><a data-demokit-href="/api/sap.m.AvatarColor" target="_blank">sap.m.AvatarColor</a></td>
+						<td>No</td>
+						<td>
+							By default it is set to "Transparent".<br>
+							<b>Note:</b> This property is experimental and may change!
+						</td>
+						<td>1.27.0</td>
+						<td>1.83</td>
+					</tr>
+				</table>
+			</div>
+
+			<h2 id="example">Example</h2>
+			<p>Define the type and data for the card:
+			</p>
+			<pre class="prettyprint lang-js">{
+	"sap.card": {
+		"type": "Object",
+		"data": {
+			"request": {
+				"url": "./employee.json"
+			}
+		}
+	}
+}</pre>
+			<p>
+				The content of the employee.json which we are requesting:
+			</p>
+			<pre class="prettyprint lang-js">{
+	"firstName": "Donna",
+	"lastName": "Moore",
+	"position": "Sales Executive",
+	"phone": "+1 202 555 5555",
+	"photo": "../images/Woman_avatar_01.png",
+	"manager": {
+		"firstName": "John",
+		"lastName": "Miller",
+		"photo": "../images/Woman_avatar_02.png"
+	},
+	"company": {
+		"name": "Company A",
+		"address": "481 West Street, Anytown OH 45066, USA",
+		"website": "www.company_a.example.com"
+	}
+}</pre>
+			<p>Define the header:</p>
+			<pre class="prettyprint lang-js">"header": {
+	"icon": {
+		"src": "{photo}"
+	},
+	"title": "{firstName} {lastName}",
+	"subTitle": "{position}"
+},</pre>
+			<p>Define the content in groups:</p>
+			<pre class="prettyprint lang-js">"content": {
+	"groups": [
+		{
+			"title": "Contact Details",
+			"items": [
+				{
+					"label": "First Name",
+					"value": "{firstName}"
+				},
+				{
+					"label": "Last Name",
+					"value": "{lastName}"
+				},
+				{
+					"label": "Phone",
+					"value": "{phone}",
+					"actions": [
+						{
+							"type": "Navigation",
+							"parameters": {
+								"url": "tel:{phone}"
+							}
+						}
+					]
+				},
+				{
+					"label": "Email",
+					"value": "{email}",
+					"actions": [
+						{
+							"type": "Navigation",
+							"parameters": {
+								"url": "mailto:{email}"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"title": "Company Details",
+			"items": [
+				{
+					"label": "Company Name",
+					"value": "{company/name}"
+				},
+				{
+					"label": "Address",
+					"value": "{company/address}"
+				},
+				{
+					"label": "Email",
+					"value": "{company/email}",
+					"actions": [
+						{
+							"type": "Navigation",
+							"parameters": {
+								"url": "mailto:{company/email}?subject={company/emailSubject}"
+							}
+						}
+					]
+				},
+				{
+					"label": "Website",
+					"value": "{company/website}",
+					"actions": [
+						{
+							"type": "Navigation",
+							"parameters": {
+								"url": "{company/url}",
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"title": "Organizational Details",
+			"items": [
+				{
+					"label": "Direct Manager",
+					"value": "{manager/firstName} {manager/lastName}",
+					"icon": {
+						"src": "{manager/photo}"
+					}
+				}
+			]
+		}
+	]
+}</pre>
+			<p>Here is the final manifest definition:</p>
+			<pre class="prettyprint lang-js">{
+	"sap.app": {
+		"id": "card.explorer.object.card",
+		"type": "card",
+		"i18n": "i18n/i18n.properties",
+		"applicationVersion": {
+			"version": "1.0.0"
+		}
+	},
+	"sap.card": {
+		"type": "Object",
+		"data": {
+			"request": {
+				"url": "./cardcontent/objectcontent/employee.json"
+			}
+		},
+		"header": {
+			"icon": {
+				"src": "{photo}"
+			},
+			"title": "{firstName} {lastName}",
+			"subTitle": "{position}"
+		},
+		"content": {
+			"groups": [
+				{
+					"title": "{{contactDetails}}",
+					"items": [
+						{
+							"label": "{{firstName}}",
+							"value": "{firstName}"
+						},
+						{
+							"label": "{{lastName}}",
+							"value": "{lastName}"
+						},
+						{
+							"label": "{{phone}}",
+							"value": "{phone}",
+							"actions": [
+								{
+									"type": "Navigation",
+									"parameters": {
+										"url": "tel:{phone}"
+									}
+								}
+							]
+						},
+						{
+							"label": "{{email}}",
+							"value": "{email}",
+							"actions": [
+								{
+									"type": "Navigation",
+									"parameters": {
+										"url": "mailto:{email}"
+									}
+								}
+							]
+						}
+					]
+				},
+				{
+					"title": "{{organizationalDetails}}",
+					"items": [
+						{
+							"label": "{{directManager}}",
+							"value": "{manager/firstName} {manager/lastName}",
+							"icon": {
+								"src": "{manager/photo}"
+							}
+						}
+					]
+				},
+				{
+					"title": "{{companyDetails}}",
+					"items": [
+						{
+							"label": "{{companyName}}",
+							"value": "{company/name}"
+						},
+						{
+							"label": "{{address}}",
+							"value": "{company/address}"
+						},
+						{
+							"label": "{{email}}",
+							"value": "{company/email}",
+							"actions": [
+								{
+									"type": "Navigation",
+									"parameters": {
+										"url": "mailto:{company/email}?subject={company/emailSubject}"
+									}
+								}
+							]
+						},
+						{
+							"label": "{{website}}",
+							"value": "{company/website}",
+							"actions": [
+								{
+									"type": "Navigation",
+									"parameters": {
+										"url": "{company/url}"
+									}
+								}
+							]
+						}
+					]
+				}
+			]
+		}
+	}
+ }</pre>
+			<p>Create the view to display the card:</p>
+			<pre class="prettyprint lang-xml">
+&lt;mvc:View xmlns:w="sap.ui.integration.widgets"&gt;
+	&lt;w:Card manifest="./manifest.json" width="400px" height="auto"/&gt;
+&lt;/mvc:View&gt;</pre>
+			<a class="try-button" href="../../../index.html#/explore/object" target="_parent">Try it Out</a>
+		</div>
+		<div class="navigation">
+			<h4>Table of Contents</h4>
+			<div><a href="#overview">Object Card</a></div>
+			<div><a href="#properties">Properties</a></div>
+			<div><a href="#example">Example</a></div>
+		</div>
+	</div>
+</body>
+
+</html>

@@ -1,13 +1,18 @@
 sap.ui.define([
-	'jquery.sap.global',
 	'sap/ui/core/Component',
 	'sap/ui/core/ComponentContainer',
 	'sap/ui/core/mvc/Controller',
-	'sap/ui/core/mvc/View'
-], function(jQuery, Component, ComponentContainer, Controller, View) {
+	'sap/ui/core/mvc/View',
+	'sap/ui/qunit/QUnitUtils'
+], function(Component, ComponentContainer, Controller, View, qutils) {
 
 	"use strict";
-	/*global QUnit, sinon, qutils */
+	/*global QUnit, sinon */
+
+	// create content div
+	var oDIV = document.createElement("div");
+	oDIV.id = "content";
+	document.body.appendChild(oDIV);
 
 	// Event handler functions
 	var iStandardSub2ControllerCalled = 0;
@@ -26,20 +31,36 @@ sap.ui.define([
 
 
 	// UI Construction
+	var oComp, oCompCont;
 
-	// load and start the customized application
-	var oComp = sap.ui.component({
-		name: "testdata.customizing.customer",
-		id: "theComponent"
-	});
-	var oCompCont = new ComponentContainer({
-		component: oComp
-	});
-	oCompCont.placeAt("content");
+	function createComponentAndContainer() {
+		// load and start the customized application
+		return Component.create({
+			name: "testdata.customizing.customer",
+			id: "theComponent",
+			manifest: false
+		}).then(function(_oComp) {
+			oComp = _oComp;
+			oCompCont = new ComponentContainer({
+				component: oComp
+			});
+			oCompCont.placeAt("content");
+			return oComp.getRootControl().loaded();
+		}).then(function() {
+			sap.ui.getCore().applyChanges();
+		});
+	}
 
+	function destroyComponentAndContainer() {
+		oComp.destroy();
+		oCompCont.destroy();
+	}
 
 	// TESTS
-	QUnit.module("CustomizingConfiguration");
+	QUnit.module("CustomizingConfiguration", {
+		before: createComponentAndContainer,
+		after: destroyComponentAndContainer
+	});
 
 	QUnit.test("CustomizingConfiguration available", function(assert) {
 		assert.expect(1);
@@ -82,29 +103,29 @@ sap.ui.define([
 	// View Replacement
 
 	QUnit.test("View Replacement", function(assert) {
-		assert.ok(jQuery.sap.domById("theComponent---mainView--sub1View--customTextInCustomSub1"), "Replacement XMLView should be rendered");
-		assert.ok(!jQuery.sap.domById("theComponent---mainView--sub1View--originalSapTextInSub1"), "Original XMLView should not be rendered");
+		assert.ok(document.getElementById("theComponent---mainView--sub1View--customTextInCustomSub1"), "Replacement XMLView should be rendered");
+		assert.ok(!document.getElementById("theComponent---mainView--sub1View--originalSapTextInSub1"), "Original XMLView should not be rendered");
 	});
 
 
 	// View Extension
 	QUnit.test("View Extension", function(assert) {
-		assert.ok(jQuery.sap.domById("theComponent---mainView--sub2View--customFrag1BtnWithCustAction"), "XMLView Extension should be rendered");
-		assert.ok(jQuery.sap.domById("buttonWithCustomerAction"), "JSView Extension should be rendered");
+		assert.ok(document.getElementById("theComponent---mainView--sub2View--customFrag1BtnWithCustAction"), "XMLView Extension should be rendered");
+		assert.ok(document.getElementById("buttonWithCustomerAction"), "JSView Extension should be rendered");
 
 		// extension within extension
-		assert.ok(jQuery.sap.domById("__jsview1--customerButton1"), "Extension within Extension Point should be rendered");
+		assert.ok(document.getElementById("__jsview1--customerButton1"), "Extension within Extension Point should be rendered");
 
 		// extension withing fragment
-		assert.ok(jQuery.sap.domById("theComponent---mainView--customFrag1Btn"), "Extension within Fragment without id should be rendered");
-		assert.ok(jQuery.sap.domById("theComponent---mainView--frag1--customFrag1Btn"), "Extension within Fragment should be rendered");
+		assert.ok(document.getElementById("theComponent---mainView--customFrag1Btn"), "Extension within Fragment without id should be rendered");
+		assert.ok(document.getElementById("theComponent---mainView--frag1--customFrag1Btn"), "Extension within Fragment should be rendered");
 
 		// check ID prefixing of views in extensions by checking their existence
-		assert.ok(jQuery.sap.domById("theComponent---mainView--sub2View--customSubSubView1"), "XMLView Extension should be rendered");
-		assert.ok(jQuery.sap.domById("theComponent---mainView--sub2View--customSubSubView1--customFrag1Btn"), "Button of XMLView Extension should be rendered");
+		assert.ok(document.getElementById("theComponent---mainView--sub2View--customSubSubView1"), "XMLView Extension should be rendered");
+		assert.ok(document.getElementById("theComponent---mainView--sub2View--customSubSubView1--customFrag1Btn"), "Button of XMLView Extension should be rendered");
 
 		// extension within html Control
-		assert.ok(jQuery.sap.domById("theComponent---mainView--sub2View--customFrag21Btn"), "Button of XMLView Extension inside html Control should be rendered");
+		assert.ok(document.getElementById("theComponent---mainView--sub2View--customFrag21Btn"), "Button of XMLView Extension inside html Control should be rendered");
 	});
 
 
@@ -157,19 +178,30 @@ sap.ui.define([
 	QUnit.test("Controller Extension (Code Extensibility)", function(assert) {
 
 		// check lifecycle methods
-		assert.equal(oLifecycleSpy.callCount, 9, "9 lifecycle methods should be called");
+		assert.equal(oLifecycleSpy.callCount, 15, "15 lifecycle methods should be called");
 		// check calling order
 		assert.equal(oLifecycleSpy.getCall(0).args[0], "Sub6 Controller onInit()", "1st lifecycle method to be called should be: Sub6 Controller onInit()");
-		assert.equal(oLifecycleSpy.getCall(1).args[0], "Sub6ControllerExtension Controller onInit()", "2nd lifecycle method to be called should be: Sub6ControllerExtension Controller onInit()");
-		assert.equal(oLifecycleSpy.getCall(2).args[0], "Sub6AnotherControllerExtension Controller onInit()", "3rd lifecycle method to be called should be: Sub6AnotherControllerExtension Controller onInit()");
+		assert.equal(oLifecycleSpy.getCall(1).args[0], "Sub6InstanceSpecificControllerExtension Controller onInit()", "2nd lifecycle method to be called should be: Sub6InstanceSpecificControllerExtension Controller onInit()");
 
-		assert.equal(oLifecycleSpy.getCall(3).args[0], "Sub6AnotherControllerExtension Controller onBeforeRendering()", "4th lifecycle method to be called should be: Sub6AnotherControllerExtension Controller onBeforeRendering()");
-		assert.equal(oLifecycleSpy.getCall(4).args[0], "Sub6ControllerExtension Controller onBeforeRendering()", "5th lifecycle method to be called should be: Sub6ControllerExtension Controller onBeforeRendering()");
-		assert.equal(oLifecycleSpy.getCall(5).args[0], "Sub6 Controller onBeforeRendering()", "6th lifecycle method to be called should be: Sub6 Controller onBeforeRendering()");
+		assert.equal(oLifecycleSpy.getCall(2).args[0], "Sub6 Controller onInit()", "Strich: 3rd lifecycle method to be called should be: Sub6ControllerExtension Controller onInit()");
+		assert.equal(oLifecycleSpy.getCall(3).args[0], "Sub6ControllerExtension Controller onInit()", "Strich: 4th lifecycle method to be called should be: Sub6ControllerExtension Controller onInit()");
+		assert.equal(oLifecycleSpy.getCall(4).args[0], "Sub6AnotherControllerExtension Controller onInit()", "Strich: 5th lifecycle method to be called should be: Sub6AnotherControllerExtension Controller onInit()");
 
-		assert.equal(oLifecycleSpy.getCall(6).args[0], "Sub6 Controller onAfterRendering()", "7th lifecycle method to be called should be: Sub6 Controller onAfterRendering()");
-		assert.equal(oLifecycleSpy.getCall(7).args[0], "Sub6ControllerExtension Controller onAfterRendering()", "8th lifecycle method to be called should be: Sub6ControllerExtension Controller onAfterRendering()");
-		assert.equal(oLifecycleSpy.getCall(8).args[0], "Sub6AnotherControllerExtension Controller onAfterRendering()", "9th lifecycle method to be called should be: Sub6AnotherControllerExtension Controller onAfterRendering()");
+		// on before rendering
+		assert.equal(oLifecycleSpy.getCall(5).args[0], "Sub6InstanceSpecificControllerExtension Controller onBeforeRendering()", "6th lifecycle method to be called should be: Sub6InstanceSpecificExtensionController onBeforeRendering()");
+		assert.equal(oLifecycleSpy.getCall(6).args[0], "Sub6 Controller onBeforeRendering()", "7th lifecycle method to be called should be: Sub6 Controller onBeforeRendering()");
+
+		assert.equal(oLifecycleSpy.getCall(7).args[0], "Sub6AnotherControllerExtension Controller onBeforeRendering()", "Strich: 8th lifecycle method to be called should be: Sub6AnotherControllerExtension Controller onBeforeRendering()");
+		assert.equal(oLifecycleSpy.getCall(8).args[0], "Sub6ControllerExtension Controller onBeforeRendering()", "Strich: 9th lifecycle method to be called should be: Sub6ControllerExtension Controller onBeforeRendering()");
+		assert.equal(oLifecycleSpy.getCall(9).args[0], "Sub6 Controller onBeforeRendering()", "Strich: 10th lifecycle method to be called should be: Sub6 Controller onBeforeRendering()");
+
+		// on after rendering
+		assert.equal(oLifecycleSpy.getCall(10).args[0], "Sub6 Controller onAfterRendering()", "11th lifecycle method to be called should be: Sub6 Controller onAfterRendering()");
+		assert.equal(oLifecycleSpy.getCall(11).args[0], "Sub6InstanceSpecificControllerExtension Controller onAfterRendering()", "12th lifecycle method to be called should be: Sub6InstanceSpecificControllerExtension Controller onAfterRendering()");
+
+		assert.equal(oLifecycleSpy.getCall(12).args[0], "Sub6 Controller onAfterRendering()", "Strich: 13th lifecycle method to be called should be: Sub6 Controller onAfterRendering()");
+		assert.equal(oLifecycleSpy.getCall(13).args[0], "Sub6ControllerExtension Controller onAfterRendering()", "Strich: 14th lifecycle method to be called should be: Sub6ControllerExtension Controller onAfterRendering()");
+		assert.equal(oLifecycleSpy.getCall(14).args[0], "Sub6AnotherControllerExtension Controller onAfterRendering()", "Strich: 15th lifecycle method to be called should be: Sub6AnotherControllerExtension Controller onAfterRendering()");
 
 	});
 
@@ -203,8 +235,6 @@ sap.ui.define([
 		beforeEach: function(assert) {
 
 			//First, destroy component, reset call collector array...
-			oComp.destroy();
-			oCompCont.destroy();
 			iStandardSub2ControllerCalled = 0;
 			iCustomSub2ControllerCalled = 0;
 			aLifeCycleCalls.length = 0; // clear call collection
@@ -223,8 +253,8 @@ sap.ui.define([
 						onInit: function() {
 							assert.equal(aLifeCycleCalls[0], "Sub2 Controller onInit()", "1st lifecycle method to be called should be: Sub2 Controller onInit()");
 							assert.equal(aLifeCycleCalls[1], "Sub2ControllerExtension Controller onInit()", "2nd lifecycle method to be called should be: Sub2ControllerExtension Controller onInit()");
-							aLifeCycleCalls.push("ControllerExtension onInit()");
-							assert.equal(Component.getOwnerIdFor(this.byId("standardBtnWithStandardAction")), this.getOwnerComponent().getId(), "Propagation of owner component to view creation works!");
+								aLifeCycleCalls.push("ControllerExtension onInit()");
+								assert.equal(Component.getOwnerIdFor(this.byId("standardBtnWithStandardAction")), this.getOwnerComponent().getId(), "Propagation of owner component to view creation works!");
 						},
 						onBeforeRendering: function() {
 							assert.equal(aLifeCycleCalls.length, 3, "ControllerExtension lifecycle method execution count is correct!");
@@ -278,9 +308,8 @@ sap.ui.define([
 
 			};
 
-		}
-
-
+		},
+		afterEach: destroyComponentAndContainer
 	});
 
 	QUnit.test("Register ExtensionProvider (sync)", function(assert) {
@@ -292,7 +321,7 @@ sap.ui.define([
 
 		// Extension Provider module - used for sap.ui.mvc.Controller ExtensionProvider Tests
 		var that = this;
-		sap.ui.define("sap/my/sync/ExtensionProvider", ['jquery.sap.global'], function(jQuery) {
+		sap.ui.predefine("sap/my/sync/ExtensionProvider", [], function() {
 			var ExtensionProvider = function() {};
 			ExtensionProvider.prototype.getControllerExtensions = that.getControllerExtensions;
 			return ExtensionProvider;
@@ -301,16 +330,7 @@ sap.ui.define([
 		//...and reinitialize - with registered ExtensionProvider
 		Controller.registerExtensionProvider("sap.my.sync.ExtensionProvider");
 
-		oComp = sap.ui.component({
-			name: "testdata.customizing.customer",
-			id: "theComponent"
-		});
-
-		oCompCont = new ComponentContainer({
-			component: oComp
-		});
-		oCompCont.placeAt("content");
-
+		return createComponentAndContainer();
 	});
 
 	QUnit.test("Register ExtensionProvider (async)", function(assert) {
@@ -332,11 +352,11 @@ sap.ui.define([
 
 		// Extension Provider module - used for sap.ui.mvc.Controller ExtensionProvider Tests
 		var that = this;
-		sap.ui.define("sap/my/async/ExtensionProvider", ['jquery.sap.global'], function(jQuery) {
+		sap.ui.predefine("sap/my/async/ExtensionProvider", [], function() {
 			var ExtensionProvider = function() {};
 			ExtensionProvider.prototype.getControllerExtensions = function(sControllerName, sComponentId) {
 				if ( !(sControllerName == "testdata.customizing.sap.Sub2") ){
-					return;
+					return [];
 				} else {
 					return new Promise(function(fnResolve, fnReject) {
 						setTimeout(function() {
@@ -351,15 +371,7 @@ sap.ui.define([
 		//...and reinitialize - with registered ExtensionProvider
 		Controller.registerExtensionProvider("sap.my.async.ExtensionProvider");
 
-		oComp = sap.ui.component({
-			name: "testdata.customizing.customer",
-			id: "theComponent"
-		});
-
-		oCompCont = new ComponentContainer({
-			component: oComp
-		});
-		oCompCont.placeAt("content");
+		return  createComponentAndContainer();
 
 	});
 

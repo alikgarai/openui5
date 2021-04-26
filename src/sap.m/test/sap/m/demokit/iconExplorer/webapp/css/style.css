@@ -29,7 +29,18 @@ html:not(.sapUiTheme-sap_hcb):not(.sapUiTheme-sap_hcw):not(.sapUiTheme-sap_beliz
 
 /* margin for clear icon in search field*/
 .sapUiDemoIconExplorer .inputClear{
-    margin-right: 2rem;
+	position: relative;
+	right: 2rem;
+}
+
+.sapContrastPlus .sapMInputBaseIcon:active {
+	background-color: #91c8f6;
+    color: #2f3c48;
+}
+
+/* remove focus for this icon */
+.sapUiDemoIconExplorer .inputClear .sapUiIcon:focus {
+	outline-width: 0 !important;
 }
 
 .sapUiDemoIconExplorer .HomeHeaderText {
@@ -47,6 +58,7 @@ html:not(.sapUiTheme-sap_hcb):not(.sapUiTheme-sap_hcw):not(.sapUiTheme-sap_beliz
 .sapUiDemoIconExplorer .BlockLayoutFirstRow {
 	position:relative;
 	width:100vw;
+	max-height: 444px; /* height of the background image */
 }
 .BlockLayoutFlex {
 	display: flex;
@@ -129,6 +141,7 @@ html:not(.sapUiTheme-sap_belize_hcb):not(.sapUiTheme-sap_belize_hcw) .demokitIni
 
 /* design for the grid tab cell */
 .sapUiDemoIconExplorer .gridLayoutCell {
+	display: block;
 	text-align: center;
 	padding: 0.5rem;
 	min-height: 100px;
@@ -139,6 +152,7 @@ html:not(.sapUiTheme-sap_belize_hcb):not(.sapUiTheme-sap_belize_hcw) .demokitIni
 
 /* design for the visual tab cell */
 .sapUiDemoIconExplorer .visualLayoutCell {
+	display: block;
 	text-align: center;
 	padding: 0.5rem;
 	min-height: 325px;

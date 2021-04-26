@@ -1,7 +1,10 @@
+/*global sinon QUnit */
 sap.ui.define([
 	'sap/ui/core/library',
-	'./AnyView.qunit'
-], function(coreLibrary, testsuite) {
+	'./AnyView.qunit',
+	'sap/ui/base/ManagedObject'
+], function(coreLibrary, testsuite, ManagedObject) {
+	"use strict";
 
 	var ViewType = coreLibrary.mvc.ViewType;
 
@@ -15,7 +18,56 @@ sap.ui.define([
 	});
 
 	testsuite(oConfig, "JSONView creation via JSON string", function() {
-		var json = '{	"Type": "sap.ui.core.JSONView",	"controllerName":"example.mvc.test",	"content": [{		"Type":"sap.ui.commons.Panel",		"id":"myPanel",		"content":[{			"Type":"sap.ui.commons.Button",			"id":"Button1",			"text":"Hello World!",			"press": "doIt"		},		{			"Type":"sap.ui.commons.Button",			"id":"Button2",			"text":"Hello"		},		{			"Type":"sap.ui.commons.Button",			"id":"ButtonX",			"text":"Another Hello",			"press": ".sap.doIt"		},		{			"Type":"sap.ui.core.mvc.JSONView",			"viewName":"example.mvc.test2",			"id":"MyJSONView"		},				{			"Type":"sap.ui.core.mvc.JSView",			"viewName":"example.mvc.test2",			"id":"MyJSView"		},				{			"Type":"sap.ui.core.mvc.XMLView",			"viewName":"example.mvc.test2",			"id":"MyXMLView"		},		{			"Type":"sap.ui.core.mvc.HTMLView",			"viewName":"example.mvc.test2",			"controllerName":"example.mvc.test",			"id":"MyHTMLView"		}]	}]}';
+		var json = JSON.stringify({
+			"Type": "sap.ui.core.JSONView",
+			"controllerName": "example.mvc.test",
+			"content": [
+				{
+					"Type": "sap.m.Panel",
+					"id": "myPanel",
+					"content": [
+						{
+							"Type": "sap.m.Button",
+							"id": "Button1",
+							"text": "Hello World!",
+							"press": "doIt"
+						},
+						{
+							"Type": "sap.m.Button",
+							"id": "Button2",
+							"text": "Hello"
+						},
+						{
+							"Type": "sap.m.Button",
+							"id": "ButtonX",
+							"text": "Another Hello",
+							"press": ".sap.doIt"
+						},
+						{
+							"Type": "sap.ui.core.mvc.JSONView",
+							"viewName": "example.mvc.test2",
+							"id": "MyJSONView"
+						},
+						{
+							"Type": "sap.ui.core.mvc.JSView",
+							"viewName": "example.mvc.test2",
+							"id": "MyJSView"
+						},
+						{
+							"Type": "sap.ui.core.mvc.XMLView",
+							"viewName": "example.mvc.test2",
+							"id": "MyXMLView"
+						},
+						{
+							"Type": "sap.ui.core.mvc.HTMLView",
+							"viewName": "example.mvc.test2",
+							"controllerName": "example.mvc.test",
+							"id": "MyHTMLView"
+						}
+					]
+				}
+			]
+		});
 		return sap.ui.jsonview({viewContent:json});
 	});
 
@@ -32,6 +84,39 @@ sap.ui.define([
 		assert.ok(typeof oBindingInfo.formatter === 'function', "formatter should have been resolved");
 		assert.ok(oBindingInfo.formatter(42) === 'formatted-42', "formatter should be the one form the controller"); // TODO test should involve instance
 		oView.destroy();
+	});
+
+	QUnit.test("JSONView: Aggregation Binding with value property", function(assert) {
+		var done = assert.async();
+		sap.ui.require(["sap/ui/table/Table"], function(Table) {
+			var oExtractBindingInfoSpy = sinon.spy(ManagedObject.prototype, "extractBindingInfo");
+
+			var json = JSON.stringify({
+				"Type": "sap.ui.core.mvc.JSONView",
+				"content": [
+					{
+						"Type": "sap.ui.table.Table",
+						"columns": [
+							{
+								"Type": "sap.ui.table.Column",
+								"template": {
+									"Type": "sap.m.DatePicker",
+									"value": {
+										"path": "Date",
+										"type": "sap.ui.model.type.String"
+									}
+								}
+							}
+						]
+					}
+				]
+			});
+
+			sap.ui.jsonview({ viewContent: json });
+			assert.equal(oExtractBindingInfoSpy.callCount, 7, "ManagedObject#extractBindingInfo called seven times");
+			assert.equal(oExtractBindingInfoSpy.getCall(5).returnValue, undefined, "ManagedObject#extractBindingInfo should return undefined");
+			done();
+		});
 	});
 
 });

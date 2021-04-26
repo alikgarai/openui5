@@ -3,33 +3,106 @@
  */
 
 sap.ui.define([
-		"jquery.sap.global",
-		"sap/ui/documentation/sdk/controller/BaseController",
-		"sap/ui/model/json/JSONModel",
-		"sap/ui/core/ResizeHandler",
-		"sap/ui/Device",
-		"sap/ui/core/Fragment",
-		"sap/ui/documentation/library",
-		"sap/ui/core/IconPool",
-		"sap/m/SplitAppMode",
-		"sap/m/MessageBox",
-		"sap/m/library",
-		"sap/base/Log"
-	], function (jQuery, BaseController, JSONModel, ResizeHandler, Device, Fragment, library, IconPool, SplitAppMode, MessageBox, mobileLibrary, Log) {
+	"sap/ui/events/KeyCodes",
+	"sap/ui/thirdparty/jquery",
+	"sap/ui/documentation/sdk/controller/BaseController",
+	"sap/ui/documentation/sdk/controller/util/SearchUtil",
+	"sap/ui/core/mvc/Controller",
+	"sap/ui/model/Filter",
+	"sap/ui/model/FilterOperator",
+	"sap/ui/model/json/JSONModel",
+	"sap/ui/core/ResizeHandler",
+	"sap/ui/Device",
+	"sap/ui/core/Fragment",
+	"sap/base/util/UriParameters",
+	"sap/ui/documentation/library",
+	"sap/ui/core/IconPool",
+	"sap/m/MessageBox",
+	"sap/m/library",
+	"sap/base/Log",
+	"sap/base/util/Version",
+	"sap/ui/core/syncStyleClass",
+	"sap/ui/core/Core",
+	"sap/ui/documentation/sdk/model/formatter",
+	"sap/m/ResponsivePopover",
+	"sap/ui/documentation/sdk/controller/util/Highlighter",
+	"sap/m/Button",
+	"sap/m/Toolbar",
+	"sap/ui/documentation/sdk/util/Resources",
+	'sap/base/util/LoaderExtensions'
+], function(
+	KeyCodes,
+	jQuery,
+	BaseController,
+	SearchUtil,
+	Controller,
+	Filter,
+	FilterOperator,
+	JSONModel,
+	ResizeHandler,
+	Device,
+	Fragment,
+	UriParameters,
+	library,
+	IconPool,
+	MessageBox,
+	mobileLibrary,
+	Log,
+	Version,
+	syncStyleClass,
+	Core,
+	globalFormatter,
+	ResponsivePopover,
+	Highlighter,
+	Button,
+	Toolbar,
+	ResourcesUtil,
+	LoaderExtensions
+) {
 		"use strict";
+
+		// shortcut for sap.m.SplitAppMode
+		var SplitAppMode = mobileLibrary.SplitAppMode;
+
+		var MAIN_WEB_PAGE_TITLE = "Demo Kit - \uFFFD SDK",
+			WEB_PAGE_TITLE = {
+				topic: "Documentation - " + MAIN_WEB_PAGE_TITLE,
+				api: "API Reference - " + MAIN_WEB_PAGE_TITLE,
+				controls: "Samples - " + MAIN_WEB_PAGE_TITLE,
+				demoapps: "Demo Apps - " + MAIN_WEB_PAGE_TITLE,
+				tools: "Tools - " + MAIN_WEB_PAGE_TITLE,
+				home: MAIN_WEB_PAGE_TITLE
+			};
 
 		// shortcut for sap.m.URLHelper
 		var URLHelper = mobileLibrary.URLHelper,
-			sNeoAppJsonPath = "neo-app.json",
-			ABOUT_TEXT = "About",
-			FEEDBACK_TEXT = "Feedback",
-			CHANGE_VERSION_TEXT = "Change version";
+			sNeoAppJsonPath = ResourcesUtil.getResourceOriginPath("/neo-app.json"), /* Load neo-app.json always from root URL */
+			sVersionOverviewJsonPath = ResourcesUtil.getResourceOriginPath("/versionoverview.json"), /* Load versionoverview.json always from root URL */
+			ABOUT_TEXT = "about",
+			FEEDBACK_TEXT = "feedback",
+			CHANGE_VERSION_TEXT = "change_version",
+			CHANGE_SETTINGS_TEXT = "settings",
+			CHANGE_COOKIE_PREFERENCES_TEXT = "cookie_preferences",
+			DEMOKIT_DEFAULT_LANGUAGE = "en",
+			DEMOKIT_APPEARANCE_KEY_LIGHT = "light",
+			DEMOKIT_APPEARANCE_KEY_DARK = "dark",
+			DEMOKIT_APPEARANCE_KEY_AUTO = "auto",
+			DEMOKIT_APPEARANCE = Object.create(null),
+			DEMOKIT_CONFIGURATION_LANGUAGE = "language",
+			DEMOKIT_CONFIGURATION_APPEARANCE = "appearance",
+			SITEMAP = "sitemap";
+
+		DEMOKIT_APPEARANCE[DEMOKIT_APPEARANCE_KEY_LIGHT] = "sap_fiori_3";
+		DEMOKIT_APPEARANCE[DEMOKIT_APPEARANCE_KEY_DARK] = "sap_fiori_3_dark";
+		DEMOKIT_APPEARANCE[DEMOKIT_APPEARANCE_KEY_AUTO] = "sap_fiori_3"; // fallback if window.matchMedia is not supported
 
 		return BaseController.extend("sap.ui.documentation.sdk.controller.App", {
+			formatter: globalFormatter,
+
 			onInit : function () {
 				BaseController.prototype.onInit.call(this);
 
-				var oViewModel = new JSONModel({
+				var	oViewModel = new JSONModel({
 					busy : false,
 					delay : 0,
 					bPhoneSize: false,
@@ -50,51 +123,59 @@ sap.ui.define([
 					"which versions are available. " +
 					"You can view the version-specific Demo Kit by adding the version number to the URL, e.g. " +
 					"<a href='https://openui5.hana.ondemand.com/1.52.4/'>https://openui5.hana.ondemand.com/1.52.4/</a>"
-				}),
-				oHeaderModel = new JSONModel({
-					bShowSubHeader: Device.system.phone
-				}),
-				sTabNavigationId;
+				});
+
+				var oComponent = this.getOwnerComponent();
 
 				this.MENU_LINKS_MAP = {
-					"Legal": "https://www.sap.com/corporate/en/legal/impressum.html",
-					"Privacy": "https://www.sap.com/corporate/en/legal/privacy.html",
-					"Terms of Use": "https://www.sap.com/corporate/en/legal/terms-of-use.html",
-					"Copyright": "https://www.sap.com/corporate/en/legal/copyright.html",
-					"Trademark": "https://www.sap.com/corporate/en/legal/trademark.html",
-					"Disclaimer": "https://help.sap.com/viewer/disclaimer",
-					"License": "LICENSE.txt"
+					"legal": "https://www.sap.com/corporate/en/legal/impressum.html",
+					"privacy": "https://www.sap.com/corporate/en/legal/privacy.html",
+					"terms_of_use": "https://www.sap.com/corporate/en/legal/terms-of-use.html",
+					"copyright": "https://www.sap.com/corporate/en/legal/copyright.html",
+					"trademark": "https://www.sap.com/corporate/en/legal/trademark.html",
+					"disclaimer": "https://help.sap.com/viewer/disclaimer",
+					"sitemap": "sitemap",
+					"license": "LICENSE.txt"
 				};
+
+				this.getOwnerComponent().loadVersionInfo().then(function () {
+					var sProduct;
+					if (this.getModel("versionData").getProperty("/isOpenUI5")) {
+						this.MENU_LINKS_MAP["Terms of Use"] = "TermsOfUse.txt";
+						sProduct = "OPENUI5";
+					} else {
+						sProduct = "SAPUI5";
+					}
+					MAIN_WEB_PAGE_TITLE = MAIN_WEB_PAGE_TITLE.replace("\uFFFD", sProduct);
+					Object.keys(WEB_PAGE_TITLE).forEach(function(sKey) {
+						WEB_PAGE_TITLE[sKey] = WEB_PAGE_TITLE[sKey].replace("\uFFFD", sProduct);
+					});
+				}.bind(this));
+
 				this.FEEDBACK_SERVICE_URL = "https://feedback-sapuisofiaprod.hana.ondemand.com:443/api/v2/apps/5bb7d7ff-bab9-477a-a4c7-309fa84dc652/posts";
-				this.OLD_DOC_LINK_SUFFIX = ".html";
 
 				// Cache view reference
+				this._oSupportedLangModel = new JSONModel();
+
+				this.setModel(this._oSupportedLangModel, "supportedLanguages");
+				this.setModel(new JSONModel(), "messagesData");
+
 				this._oView = this.getView();
 
 				this.setModel(oViewModel, "appView");
 
-				// set the global header visibility data
-				this.setModel(oHeaderModel, "headerView");
-
 				this.oHeader = this._oView.byId("headerToolbar");
 
-				sTabNavigationId = (Device.system.phone) ? "selectHeader" : "tabHeader";
-				this._oView.byId(sTabNavigationId).setStashed(false);
-				this.oTabNavigation = this._oView.byId(sTabNavigationId);
-
-				// the unstashed control is added as **last child** => correct its position in parent container
-				this.oHeader.removeContent(this.oTabNavigation);
-				this.oHeader.insertContent(this.oTabNavigation, 2);
-				if (Device.system.phone) {
-					// items in Select control can't be hidden via visible property
-					if (window['sap-ui-documentation-hideTopicSection']) {
-						this.byId("topicMasterTab").destroy();
-					}
-					if (window['sap-ui-documentation-hideApiSection']) {
-						this.byId("apiMasterTab").destroy();
-					}
-				}
 				this.oRouter = this.getRouter();
+
+				this._selectHeader = this._oView.byId("selectHeader");
+				this._tabHeader = this._oView.byId("tabHeader");
+
+				this._oConfigUtil = this.getOwnerComponent().getConfigUtil();
+				this._oCookieNames = this._oConfigUtil.COOKIE_NAMES;
+				this._bSupportsPrefersColorScheme = !!(window.matchMedia &&
+					(window.matchMedia('(prefers-color-scheme: dark)').matches ||
+					window.matchMedia('(prefers-color-scheme: light)').matches));
 
 				ResizeHandler.register(this.oHeader, this.onHeaderResize.bind(this));
 				this.oRouter.attachRouteMatched(this.onRouteChange.bind(this));
@@ -109,6 +190,51 @@ sap.ui.define([
 				this.byId("splitApp").attachEvent("afterMasterClose", function (oEvent) {
 					oViewModel.setProperty("/bIsShownMaster", false);
 				}, this);
+
+				this.bus = Core.getEventBus();
+
+				this._createConfigurationBasedOnURIInput();
+
+				this.getOwnerComponent().loadMessagesInfo().then(function (data) {
+					if (data) {
+						this._updateMessagesModel(data);
+					}
+
+				}.bind(this));
+
+				if (this._oConfigUtil.getCookieValue(this._oCookieNames.ALLOW_REQUIRED_COOKIES) === "1" && this._aConfiguration.length > 0) {
+					this._applyCookiesConfiguration(this._aConfiguration);
+				} else {
+					this._applyDefaultConfiguration(this._aConfiguration);
+				}
+
+				this.initSearch();
+
+				// open global search when ctrl + alt + F keys are pressed.
+				document.addEventListener("keydown", function(event) {
+					if (event.keyCode === KeyCodes.F && event.shiftKey && event.ctrlKey ) {
+						this.byId("searchControl")._toggleOpen(true);
+					}
+				}.bind(this));
+
+			oComponent.getCookiesManagement().enable(oComponent.getRootControl());
+
+			},
+
+			_updateMessagesModel: function(oMessagesData) {
+				var oMessageCookie = this._oConfigUtil.getCookieValue(this._oCookieNames["DEMOKIT_IMPORTANT_MESSAGES_READ"]),
+					iVisibleMessagesCount = 0;
+
+				oMessagesData.messages.length && oMessagesData.messages.forEach(function(message) {
+					message.isMessageVisible = (new Date(message.expire).getTime() - new Date()) > 0 &&
+						!oMessageCookie.includes(message.id);
+					message.isMessageVisible && iVisibleMessagesCount++;
+				});
+
+				oMessagesData.iVisibleMessagesCount = iVisibleMessagesCount;
+
+				this.getModel("messagesData").setData(oMessagesData);
+
 			},
 
 			onBeforeRendering: function() {
@@ -126,50 +252,9 @@ sap.ui.define([
 
 			onExit: function() {
 				Device.orientation.detachHandler(this._onOrientationChange, this);
-			},
-
-			_onTopicOldRouteMatched: function(sId) {
-				if (sId) {
-					sId = this._trimOldDocSuffix(sId);
+				if (this.highlighter) {
+					this.highlighter.destroy();
 				}
-				this.getRouter().navTo("topicId", {id: sId});
-			},
-
-			_onApiOldRouteMatched: function(sId) {
-
-				var sEntityType,
-					sEntityId,
-					aSplit;
-
-				if (sId) {
-
-					aSplit = sId.split("#");
-					if (aSplit.length === 2) {
-						sId = aSplit[0];
-						sEntityType = aSplit[1];
-
-						aSplit = sEntityType.split(":");
-						if (aSplit.length === 2) {
-							sEntityType = aSplit[0];
-							sEntityId = aSplit[1];
-						}
-					}
-
-					sId = this._trimOldDocSuffix(sId);
-
-					if (sEntityType === 'event') { // legacy keyword is singular
-						sEntityType = "events";
-					}
-				}
-
-				this.getRouter().navTo("apiId", {id: sId, entityType: sEntityType, entityId: sEntityId});
-			},
-
-			_trimOldDocSuffix: function(sLink) {
-				if (sLink && jQuery.sap.endsWith(sLink, this.OLD_DOC_LINK_SUFFIX)) {
-					sLink = sLink.slice(0, -this.OLD_DOC_LINK_SUFFIX.length);
-				}
-				return sLink;
 			},
 
 			onRouteChange: function (oEvent) {
@@ -182,22 +267,21 @@ sap.ui.define([
 					sTabId = this.oRouter.getRoute(sRouteName)._oConfig.target[0] + "Tab",
 					oTabToSelect = this._oView.byId(sTabId),
 					sKey = oTabToSelect ? oTabToSelect.getKey() : "home",
-					bPhone = Device.system.phone,
 					oViewModel = this.getModel("appView"),
-					oHeaderModel = this.getModel("headerView"),
+					bPhoneSize = oViewModel.getProperty("/bPhoneSize"),
+					bSearchMode = oViewModel.getProperty("/bSearchMode"),
+					bPhone = Device.system.phone,
 					bHasMaster = this.getOwnerComponent().getConfigUtil().hasMasterView(sRouteName),
 					oMasterView,
 					sMasterViewId;
 
-				this.oTabNavigation.setSelectedKey(sKey);
+				this._setHeaderSelectedKey(sKey);
 
-				// the *default* subHeader-visibility value is platform-dependent
-				// but can be later overwritten for specific views (in their respective controller),
-				// this is why we have to reset to the default before entering any specific view)
-				oHeaderModel.setProperty("/bShowSubHeader", bPhone); // reset to default subHeader visibility
 				oViewModel.setProperty("/bHasMaster", bHasMaster);
 
-				this._toggleTabHeaderClass();
+				if (bPhoneSize && !bSearchMode) {
+					this._selectHeader.setVisible(true);
+				}
 
 				if (bPhone && bHasMaster) { // on phone we need the id of the master view (for navigation)
 					oMasterView = this.getOwnerComponent().getConfigUtil().getMasterView(sRouteName);
@@ -208,11 +292,7 @@ sap.ui.define([
 				// hide master on route change
 				this.byId("splitApp").hideMaster();
 				oViewModel.setProperty("/bIsShownMaster", false);
-			},
-
-			onRouteNotFound: function () {
-				this.getRouter().myNavToWithoutHash("sap.ui.documentation.sdk.view.NotFound", "XML", false);
-				return;
+				this.appendPageTitle(null).appendPageTitle(WEB_PAGE_TITLE[sKey]);
 			},
 
 			toggleMaster: function(oEvent) {
@@ -251,26 +331,501 @@ sap.ui.define([
 
 				oEvent.preventDefault();
 				if (sKey && sKey !== "home") {
-					this.getRouter().navTo(sKey, {}, true);
+					this.getRouter().navTo(sKey, {});
 				} else {
-					this.getRouter().navTo("", {}, true);
-					this.oTabNavigation.setSelectedKey("home");
+					this.getRouter().navTo("welcome", {});
+
+					this._setHeaderSelectedKey("home");
 				}
 			},
 
 			handleMenuItemClick: function (oEvent) {
-				var sTargetText = oEvent.getParameter("item").getText(),
+				var sTargetText = oEvent.getParameter("item").getKey(),
 					sTarget = this.MENU_LINKS_MAP[sTargetText];
 
 				if (sTargetText === ABOUT_TEXT) {
 					this.aboutDialogOpen();
 				} else if (sTargetText === FEEDBACK_TEXT) {
 					this.feedbackDialogOpen();
+				} else if (sTargetText === CHANGE_SETTINGS_TEXT) {
+					this.settingsDialogOpen();
+				} else if (sTargetText === CHANGE_COOKIE_PREFERENCES_TEXT) {
+					this.getOwnerComponent().getCookiesManagement().cookieSettingsDialogOpen({ showCookieDetails: true }, this.getView());
 				} else if (sTargetText === CHANGE_VERSION_TEXT) {
 					this.onChangeVersionButtonPress();
+				} else if (DEMOKIT_APPEARANCE[sTargetText]) {
+					this._updateAppearance(sTargetText);
+				} else if (sTarget === SITEMAP) {
+					this.onSiteMapPress();
 				} else if (sTarget) {
 					URLHelper.redirect(sTarget, true);
 				}
+				this.sTarget = sTarget;
+			},
+
+			createSearchPopover: function() {
+				var PlacementType = mobileLibrary.PlacementType,
+					searchInput = this.getView().byId("searchControl"),
+					oPopover = new ResponsivePopover({
+					showArrow: false,
+					showHeader: false,
+					contentWidth: "600px",
+					placement: PlacementType.Vertical,
+					horizontalScrolling: false,
+					initialFocus: this.getView().byId("searchControl-searchField")
+				})
+					.addStyleClass("sapMSltPicker-CTX");
+
+				// implement the same <code>open</code> function as in the dialog
+				// to allow the controller open the search picker regardless its type (popover or dialog)
+				oPopover.open = function() {
+					oPopover.openBy(searchInput);
+				};
+
+				this.getView().addDependent(oPopover);
+
+				return oPopover;
+			},
+
+			createSearchPicker: function() {
+				var oPicker = Device.system.phone ? this.createSearchDialog() : this.createSearchPopover();
+				this.createSearchPickerContent().then(function(oContent) {
+					oPicker.addContent(oContent);
+				});
+				return oPicker;
+			},
+
+			createSearchDialog: function () {
+				var dialog,
+					originalValue,
+					dialogSearchField,
+					customHeader,
+					okButton,
+					closeButton,
+					bSearchRequested;
+
+				var oInput = this.getView().byId("searchControl");
+
+				// use sap.ui.require to avoid circular dependency between the SearchField and Suggest
+				dialogSearchField = new (sap.ui.require('sap/m/SearchField'))({
+					liveChange : function (oEvent) {
+						var value = oEvent.getParameter("newValue");
+						oInput._updateValue(value);
+						oInput.fireLiveChange({newValue: value});
+					},
+					search : function (oEvent) {
+						if (!oEvent.getParameter("clearButtonPressed")) {
+							dialog.close();
+							bSearchRequested = true;
+						}
+					}
+				});
+
+				closeButton = new Button({
+					icon : "sap-icon://decline",
+					press : function() {
+						dialog._oCloseTrigger = true;
+						dialog.close();
+						oInput._updateValue(originalValue);
+					}
+				});
+
+				customHeader = new Toolbar({
+					content: [dialogSearchField, closeButton]
+				});
+
+				okButton = new Button({
+					text : Core.getLibraryResourceBundle("sap.m").getText("MSGBOX_OK"),
+					press : function() {
+						dialog.close();
+					}
+				});
+
+				function moveCursorToEnd(el) {
+					if (typeof el.selectionStart == "number") {
+						el.selectionStart = el.selectionEnd = el.value.length;
+					} else if (typeof el.createTextRange != "undefined") {
+						el.focus();
+						var range = el.createTextRange();
+						range.collapse(false);
+						range.select();
+					}
+				}
+
+				dialog = new (sap.ui.require('sap/m/Dialog'))({
+					stretch: true,
+					customHeader: customHeader,
+					beginButton : okButton,
+					beforeClose: function () {
+						oInput._bSuggestionSuppressed = true;
+					},
+					beforeOpen: function() {
+						originalValue = oInput.getValue();
+						dialogSearchField._updateValue(originalValue);
+						bSearchRequested = false; // reset flag
+					},
+					afterOpen: function() {
+						var $input = dialogSearchField.$().find('input');
+						$input.focus();
+						moveCursorToEnd($input.get(0));
+					},
+					afterClose: function(oEvent) {
+						if (bSearchRequested) { // fire the search event if not cancelled
+							oInput.fireSearch({
+								query: oInput.getValue(),
+								clearButtonPressed: false
+							});
+						}
+					}
+				});
+
+				this.getView().addDependent(dialog);
+
+				return dialog;
+			},
+
+			createSearchPickerContent: function() {
+				return Fragment.load({
+					name: "sap.ui.documentation.sdk.view.GlobalSearchPicker",
+					controller: this
+				}).then(function(oContent) {
+
+					var oShortList =  Core.byId("shortList"),
+						oController = this,
+						sSearchQuery;
+
+					oShortList.addEventDelegate({
+						onAfterRendering: function() {
+							var oConfig = {
+								useExternalStyles: false,
+								shouldBeObserved: true,
+								isCaseSensitive: false
+							};
+
+							oController.highlighter = new Highlighter(oShortList.getDomRef(), oConfig);
+							sSearchQuery = oController.getModel("searchData").getProperty("/query");
+							sSearchQuery && oController.highlighter.highlight(sSearchQuery);
+							oShortList.removeEventDelegate(this);
+						}
+					});
+
+					return oContent;
+				}.bind(this));
+			},
+
+			initSearch: function() {
+				// set the search data to custom search`s suggestions
+				var oModel = this.getModel("searchData"),
+				oSectionToRoutesMap = {
+					"topics": ["topic", "topicId", "subTopicId"],
+					"entity": ["sample", "controlsMaster", "controls", "code", "entity"],
+					"apiref": ["api", "apiSpecialRoute", "apiId"]
+				};
+
+				// update current section on navigate
+				this.oRouter.attachRouteMatched(function() {
+					oModel.setProperty("/preferencedCategory", null);
+				});
+				Object.keys(oSectionToRoutesMap).forEach(function(sSectionKey) {
+					var aRoutes = oSectionToRoutesMap[sSectionKey];
+					aRoutes.forEach(function(sRoute) {
+						this.oRouter.getRoute(sRoute).attachPatternMatched(function() {
+							oModel.setProperty("/preferencedCategory", sSectionKey);
+						});
+					}.bind(this));
+				}.bind(this));
+			},
+
+			getSearchPickerTitle: function(oContext) {
+				var getMessageBundle = Core.getLibraryResourceBundle("sap.ui.documentation"),
+				sTitle;
+
+				switch (this.getModel("searchData").getProperty("/preferencedCategory")) {
+					case "topics":
+						sTitle =  getMessageBundle.getText("SEARCH_SUGGESTIONS_TITLE_DOCUMENTATION");
+						break;
+					case "apiref":
+						sTitle =  getMessageBundle.getText("SEARCH_SUGGESTIONS_TITLE_API_REFERENCE");
+						break;
+					case "entity":
+						sTitle =  getMessageBundle.getText("SEARCH_SUGGESTIONS_TITLE_SAMPLES");
+						break;
+					default:
+						sTitle =  getMessageBundle.getText("SEARCH_SUGGESTIONS_TITLE_ALL");
+				}
+
+				return sTitle;
+			},
+
+			onSearchResultsSummaryPress: function(oEvent) {
+				var sCategory = oEvent.oSource.data("category");
+				this.navToSearchResults(sCategory);
+			},
+
+			onSearchPickerItemPress: function(oEvent) {
+				var contextPath = oEvent.oSource.getBindingContextPath(),
+					oDataItem = this.getModel("searchData").getProperty(contextPath);
+				this.getRouter().parsePath(oDataItem.path);
+				this.oPicker.close();
+			},
+
+			/**
+			 * Updates the appearance of the Demo Kit depending of the incoming appearance keyword.
+			 * If the keyword is "auto" the appearance will be updated to light or dark depending on the
+			 * user's OS settings.
+			 * @param {string} sKey the appearance keyword
+			 * @private
+			 */
+			_updateAppearance: function(sKey) {
+				if (sKey === DEMOKIT_APPEARANCE_KEY_AUTO && this._bSupportsPrefersColorScheme) {
+					this._toggleLightOrDarkAppearance(window.matchMedia('(prefers-color-scheme: dark)').matches);
+					this._attachPrefersColorSchemeChangeListener();
+				} else {
+					Core.applyTheme(DEMOKIT_APPEARANCE[sKey]);
+				}
+
+				this._sLastKnownAppearanceKey = sKey;
+
+				this.bus.publish("themeChanged", "onDemoKitThemeChanged", {sThemeActive: DEMOKIT_APPEARANCE[sKey]});
+
+				if (this._oConfigUtil.getCookieValue(this._oCookieNames.ALLOW_REQUIRED_COOKIES) === "1") {
+					this._oConfigUtil.setCookie(DEMOKIT_CONFIGURATION_APPEARANCE, sKey);
+				}
+			},
+
+			/**
+			 * Toggles the appearance of the Demo Kit to light or dark depending on the incoming argument.
+			 * @param {boolean} bIsDark whether the new appearance should be dark
+			 * @private
+			 */
+			_toggleLightOrDarkAppearance: function (bIsDark) {
+				if (bIsDark) {
+					// dark mode
+					Core.applyTheme(DEMOKIT_APPEARANCE[DEMOKIT_APPEARANCE_KEY_DARK]);
+				} else {
+					// light mode or unsupported prefers-color-scheme
+					Core.applyTheme(DEMOKIT_APPEARANCE[DEMOKIT_APPEARANCE_KEY_LIGHT]);
+				}
+			},
+
+			/**
+			 * Attaches an event listener to the 'change' event of the prefers-color-scheme media.
+			 * Depending on the change and the last known appearance, the appearance of the Demo Kit is changed to light or dark.
+			 * @private
+			 */
+			_attachPrefersColorSchemeChangeListener: function() {
+				var that = this;
+
+				if (!this._bAttachedPrefersColorSchemeChangeListener) {
+					window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+						if (that._sLastKnownAppearanceKey === DEMOKIT_APPEARANCE_KEY_AUTO) {
+							that._toggleLightOrDarkAppearance(e.matches);
+							that.bus.publish("themeChanged", "onDemoKitThemeChanged", {
+								sThemeActive: DEMOKIT_APPEARANCE[e.matches ? DEMOKIT_APPEARANCE_KEY_DARK : DEMOKIT_APPEARANCE_KEY_LIGHT]
+							});
+						}
+					});
+					this._bAttachedPrefersColorSchemeChangeListener = true;
+				}
+			},
+
+			/**
+			 * Creates configuration for the application regarding the URI input.
+			 * @private
+			 */
+			_createConfigurationBasedOnURIInput: function () {
+				var oUriParams = UriParameters.fromQuery(window.location.search);
+				this._aConfiguration = [];
+
+				if (!(oUriParams.has('sap-ui-language') || oUriParams.has('sap-language'))) {
+					this._aConfiguration.push(DEMOKIT_CONFIGURATION_LANGUAGE);
+				}
+
+				if (!(oUriParams.has('sap-ui-theme') || oUriParams.has('sap-theme'))) {
+					this._aConfiguration.push(DEMOKIT_CONFIGURATION_APPEARANCE);
+				}
+			},
+
+			/**
+			 * Applies configuration for the application regarding the default values.
+			 * @private
+			 */
+			_applyDefaultConfiguration: function () {
+				this._aConfiguration.forEach(function(sConf){
+					if (sConf === DEMOKIT_CONFIGURATION_LANGUAGE) {
+						Core.getConfiguration().setLanguage(DEMOKIT_DEFAULT_LANGUAGE);
+					} else if (sConf === DEMOKIT_CONFIGURATION_APPEARANCE) {
+						this._updateAppearance(DEMOKIT_APPEARANCE_KEY_AUTO);
+					}
+				}, this);
+
+				this._oSupportedLangModel.setProperty("/selectedLang", Core.getConfiguration().getLanguage());
+			},
+
+			/**
+			 * Applies configuration for the application regarding the cookies.
+			 * @private
+			 */
+			_applyCookiesConfiguration: function () {
+				var sCookieValue, sConf, i;
+
+				for (i = 0; i < this._aConfiguration.length; i++) {
+					sConf = this._aConfiguration[i];
+					sCookieValue = this._oConfigUtil.getCookieValue(sConf);
+
+					if (sCookieValue !== "") {
+						if (sConf === DEMOKIT_CONFIGURATION_LANGUAGE) {
+							this._setSelectedLanguage(sCookieValue);
+						} else if (sConf === DEMOKIT_CONFIGURATION_APPEARANCE) {
+							this._updateAppearance(sCookieValue);
+						}
+
+						// If we have available value for the given cookie we remove it from the configuration array.
+						this._aConfiguration.splice(i, 1);
+						i--;
+					}
+				}
+
+				// If we still have configurations which are not set by their cookie values, we apply their default values.
+				if (this._aConfiguration.length > 0) {
+					this._applyDefaultConfiguration();
+				}
+			},
+
+			/*
+			 * Helper for function for preparing the data for the SupportedLangModel.
+			 * @private
+			 * @returns {Array[Object]} Array of objects containg the needed data for the SupportedLangModel
+			 */
+			_prepareSupportedLangModelData: function () {
+				return Core.getConfiguration().getLanguagesDeliveredWithCore().reduce(function(result, sLangAbbreviation) {
+					var langName,
+							sLang = sLangAbbreviation,
+							sLangRegion = sLangAbbreviation;
+
+					if (typeof sLangAbbreviation === "string" && sLangAbbreviation.length > 0) {
+
+						switch (sLangAbbreviation) {
+							case "sh": //Serbian
+								sLang = "sr_Latn";
+								break;
+							case "no": //Norwegian
+								sLang = "nb";	// Bokmål
+								break;
+							case "iw": // Israel
+								// Hebrew
+								sLang  = "he";
+								sLangRegion = "he";
+								break;
+							case "zh_TW": // Taiwan
+								// Chinese Traditional
+								sLangRegion = "zh_Hant";
+								break;
+							case "zh_CN": // People's Republic of China
+								// Chinese Simplified
+								sLangRegion = "zh_Hans";
+								break;
+						}
+
+						result.push(new Promise(function (resolve, reject) {
+							LoaderExtensions.loadResource("sap/ui/core/cldr/" + sLang + ".json",  {async: true})
+								.then(function(locale) {
+									langName = locale.languages[sLangRegion];
+
+									resolve({
+										"text": typeof langName === 'string' ? langName.charAt(0).toUpperCase() + langName.substring(1) : "Unknown",
+										"key": sLangAbbreviation
+									});
+								});
+						}));
+					}
+
+					return result;
+				}, []);
+			},
+
+			/**
+			 * Sets the selected language code abbreviation
+			 * @param {string} sLanguage language code abbreviation
+			 * @private
+			 */
+			_setSelectedLanguage: function(sLanguage) {
+				this._oSupportedLangModel.setProperty("/selectedLang", sLanguage);
+				Core.getConfiguration().setLanguage(sLanguage);
+				if (this._oConfigUtil.getCookieValue(this._oCookieNames.ALLOW_REQUIRED_COOKIES) === "1") {
+					this._oConfigUtil.setCookie(DEMOKIT_CONFIGURATION_LANGUAGE, sLanguage);
+				}
+			},
+
+			/**
+			 * Gets the selected language code abbreviation
+			 * @private
+			 * @returns {string} sLanguage language code abbreviation
+			 */
+			_getSelectedLanguage: function() {
+				return this._oSupportedLangModel.getProperty("/selectedLang");
+			},
+
+			/**
+			 * Opens the settings dialog
+			 * @public
+			 */
+			settingsDialogOpen: function () {
+				var oModel;
+
+				if (!this._oSettingsDialog) {
+					Fragment.load({
+						name: "sap.ui.documentation.sdk.view.globalSettingsDialog",
+						controller: this
+					}).then(function (oDialog) {
+						// connect dialog to the root view of this component (models, lifecycle)
+						this._oView.addDependent(oDialog);
+						this._oSettingsDialog = oDialog;
+						Core.byId("LanguageSelect").setSelectedKey(this._getSelectedLanguage());
+						this._oSettingsDialog.open();
+					}.bind(this));
+				} else {
+					this._oSettingsDialog.open();
+				}
+
+				if (!this._oSupportedLangModel.getProperty("/langs")) {
+					oModel = this._oSupportedLangModel;
+					oModel.setProperty("/selectBusy", true);
+					Promise.all(this._prepareSupportedLangModelData()).then(function (result) {
+						oModel.setProperty("/selectBusy", false);
+						oModel.setProperty("/langs", result);
+					});
+				}
+			},
+
+			/**
+			 * Closes the settings dialog
+			 * @public
+			 */
+			handleCloseAppSettings: function () {
+				this._oSettingsDialog.close();
+			},
+
+			/**
+			 * Saves settings from the settings dialog
+			 * @public
+			 */
+			handleSaveAppSettings: function () {
+				var sLanguage = Core.byId('LanguageSelect').getSelectedKey();
+
+				this._oSettingsDialog.close();
+
+				// handle settings change
+				this._applyAppConfiguration(sLanguage);
+			},
+
+			/**
+			 * Apply content configuration
+			 * @param {string} sLanguage language code abbreviation
+			 * @private
+			 */
+			_applyAppConfiguration: function(sLanguage){
+				this._setSelectedLanguage(sLanguage);
 			},
 
 			aboutDialogOpen: function () {
@@ -380,7 +935,7 @@ sap.ui.define([
 						that._oNotesView.getModel().setData(oRelNotes);
 						that._oNotesView.bindObject("/" + sVersion);
 					} else {
-						oDialogData.noDataMessage = "No changes for this library!";
+						oDialogData.noData = true;
 					}
 					oDialogData.library = sLibrary;
 					oDialogModel.setData(oDialogData);
@@ -410,17 +965,27 @@ sap.ui.define([
 
 			onChangeVersionDialogSearch: function (oEvent) {
 				var sSearchedValue = oEvent.getParameter("newValue"),
-					oFilter = new sap.ui.model.Filter("version", sap.ui.model.FilterOperator.Contains, sSearchedValue),
-					oBinding = sap.ui.getCore().byId("versionList").getBinding("items");
+					oFilter = new Filter("version", FilterOperator.Contains, sSearchedValue),
+					oBinding = Core.byId("versionList").getBinding("items");
 
 				oBinding.filter([oFilter]);
 			},
 
+			onLogoIconPress: function () {
+				this.oRouter.navTo("welcome", {});
+			},
+
+			onSiteMapPress: function () {
+				this.oRouter.navTo("sitemap", {});
+			},
+
 			onVersionItemPress: function (oEvent) {
 				var oSelectedItem = oEvent.getParameter("listItem"),
-					sSelectedVersion = oSelectedItem ? oSelectedItem.getTitle() : null;
+					oCustomData = oSelectedItem.getCustomData()[0];
 
-				sSelectedVersion && this._changeVersionURL(sSelectedVersion);
+				if (oCustomData && oCustomData.getKey() === "path") {
+					window.location.href = oCustomData.getValue(); // Domain relative redirect
+				}
 			},
 
 			getVersionSwitchDialog: function () {
@@ -439,7 +1004,7 @@ sap.ui.define([
 			 * @returns {number}
 			 */
 			versionSwitchCustomComparator: function (sGroupTitleA, sGroupTitleB) {
-				return jQuery.sap.Version(sGroupTitleA).compareTo(jQuery.sap.Version(sGroupTitleB));
+				return Version(sGroupTitleA).compareTo(Version(sGroupTitleB));
 			},
 
 			/**
@@ -471,32 +1036,16 @@ sap.ui.define([
 				return oChangeVersionDialogModel;
 			},
 
-			_changeVersionURL: function (sVersion) {
-				var sHref = window.location.href,
-					sOrigin = window.location.origin,
-					rPattern = /\d\.\d{2}\.\d{1,2}/, // Matches x.xx.x && x.xx.xx
-					bURLVersionExists = sHref.match(rPattern) !== null,
-					sNewHref;
-
-				// Version should be inserted after the location origin
-				// E.g: https://ui5.sap.com/1.50.5/#/api/sap.f.DynamicPage
-				// If there was already a version in the URL, just replace it with the new one
-				if (bURLVersionExists) {
-					sNewHref = sHref.replace(rPattern, sVersion);
-				} else {
-					sNewHref = sOrigin + "/" + sVersion + sHref.slice(sOrigin.length);
-				}
-
-				window.location.href = sNewHref;
-			},
-
 			/**
 			 * Opens a dialog to give feedback on the demo kit
 			 */
 			feedbackDialogOpen: function () {
 				var that = this;
+				var oResourceBundle;
 
 				if (!this._oFeedbackDialog) {
+					oResourceBundle = this.getModel("i18n").getResourceBundle();
+
 					this._oFeedbackDialog = new sap.ui.xmlfragment("feedbackDialogFragment", "sap.ui.documentation.sdk.view.FeedbackDialog", this);
 					this._oView.addDependent(this._oFeedbackDialog);
 
@@ -509,23 +1058,28 @@ sap.ui.define([
 					this._oFeedbackDialog.ratingBar = [
 						{
 							button : Fragment.byId("feedbackDialogFragment", "excellent"),
-							status : "Excellent"
+							status : "Excellent",
+							displayStatus: oResourceBundle.getText("FEEDBACK_DIALOG_STATUS_EXCELLENT")
 						},
 						{
 							button : Fragment.byId("feedbackDialogFragment", "good"),
-							status : "Good"
+							status : "Good",
+							displayStatus: oResourceBundle.getText("FEEDBACK_DIALOG_STATUS_GOOD")
 						},
 						{
 							button : Fragment.byId("feedbackDialogFragment", "average"),
-							status : "Average"
+							status : "Average",
+							displayStatus: oResourceBundle.getText("FEEDBACK_DIALOG_STATUS_AVERAGE")
 						},
 						{
 							button : Fragment.byId("feedbackDialogFragment", "poor"),
-							status : "Poor"
+							status : "Poor",
+							displayStatus: oResourceBundle.getText("FEEDBACK_DIALOG_STATUS_POOR")
 						},
 						{
 							button : Fragment.byId("feedbackDialogFragment", "veryPoor"),
-							status : "Very Poor"
+							status : "Very Poor",
+							displayStatus: oResourceBundle.getText("FEEDBACK_DIALOG_STATUS_VERY_POOR")
 						}
 					];
 					this._oFeedbackDialog.reset = function () {
@@ -557,7 +1111,7 @@ sap.ui.define([
 				}
 				this._oFeedbackDialog.updateContextData();
 				if (!this._oFeedbackDialog.isOpen()) {
-					jQuery.sap.syncStyleClass("sapUiSizeCompact", this.getView(), this._oFeedbackDialog);
+					syncStyleClass("sapUiSizeCompact", this.getView(), this._oFeedbackDialog);
 					this._oFeedbackDialog.open();
 				}
 			},
@@ -566,7 +1120,8 @@ sap.ui.define([
 			 * Event handler for the send feedback button
 			 */
 			onFeedbackDialogSend: function() {
-				var data = {};
+				var data = {},
+					oResourceBundle = this.getModel("i18n").getResourceBundle();
 
 				if (this._oFeedbackDialog.contextCheckBox.getSelected()) {
 					data = {
@@ -602,7 +1157,9 @@ sap.ui.define([
 				}).
 				done(
 					function () {
-						MessageBox.success("Your feedback has been sent.", {title: "Thank you!"});
+						MessageBox.success(oResourceBundle.getText("FEEDBACK_DIALOG_TEXT_SUCCESS"), {
+							title: oResourceBundle.getText("FEEDBACK_DIALOG_TITLE_SUCCESS")
+						});
 						this._oFeedbackDialog.reset();
 						this._oFeedbackDialog.close();
 						this._oFeedbackDialog.setBusy(false);
@@ -611,7 +1168,9 @@ sap.ui.define([
 				fail(
 					function (oRequest, sStatus, sError) {
 						var sErrorDetails = sError; // + "\n" + oRequest.responseText;
-						MessageBox.error("An error occurred sending your feedback:\n" + sErrorDetails, {title: "Sorry!"});
+						MessageBox.error(oResourceBundle.getText("FEEDBACK_DIALOG_TEXT_ERROR") + sErrorDetails, {
+							title: oResourceBundle.getText("FEEDBACK_DIALOG_TITLE_ERROR")
+						});
 						this._oFeedbackDialog.setBusy(false);
 					}.bind(this)
 				);
@@ -657,19 +1216,19 @@ sap.ui.define([
 						} else {
 							switch (oRatingBarElement.status) {
 								case "Excellent":
-									setRatingStatus("Success", oRatingBarElement.status, 5);
+									setRatingStatus("Success", oRatingBarElement.displayStatus, 5);
 									break;
 								case "Good":
-									setRatingStatus("Success", oRatingBarElement.status, 4);
+									setRatingStatus("Success", oRatingBarElement.displayStatus, 4);
 									break;
 								case "Average":
-									setRatingStatus("None", oRatingBarElement.status, 3);
+									setRatingStatus("None", oRatingBarElement.displayStatus, 3);
 									break;
 								case "Poor":
-									setRatingStatus("Warning", oRatingBarElement.status, 2);
+									setRatingStatus("Warning", oRatingBarElement.displayStatus, 2);
 									break;
 								case "Very Poor":
-									setRatingStatus("Error", oRatingBarElement.status, 1);
+									setRatingStatus("Error", oRatingBarElement.displayStatus, 1);
 							}
 						}
 					}
@@ -688,41 +1247,106 @@ sap.ui.define([
 			},
 
 			onSearch : function (oEvent) {
-				var sQuery = oEvent.getParameter("query");
+				var sQuery = encodeURIComponent( oEvent.getParameter("query") );
 				if (!sQuery) {
 					return;
 				}
 				this.getRouter().navTo("search", {searchParam: sQuery}, false);
+				this.oPicker.close();
+			},
+
+			navToSearchResults : function (sCategory) {
+				var sQuery = this.getModel("searchData").getProperty("/query"),
+					oRouterParams = {searchParam: sQuery};
+
+				if (!sQuery) {
+					return;
+				}
+
+				if (sCategory) {
+					oRouterParams["?options"] = {
+						category: sCategory
+					};
+				}
+
+				this.getRouter().navTo("search", oRouterParams, true);
+				this.oPicker.close();
+			},
+
+			onSearchLiveChange: function(oEvent) {
+				var oModel = this.getModel("searchData"),
+				sQuery = oEvent.getParameter("newValue"),
+				sPreferencedCategory = oModel.getProperty("/preferencedCategory"),
+				bIncludeDeprecated = oModel.getProperty("/includeDeprecated");
+
+				if (!this.oPicker) {
+					this.oPicker = this.createSearchPicker();
+				}
+
+				if (!this.oPicker.isOpen()) {
+					this.oPicker.open();
+				}
+
+				if (this.highlighter) {
+					this.highlighter.highlight(sQuery);
+				}
+
+				oModel.setProperty("/query",sQuery);
+				SearchUtil.search(sQuery, {
+					preferencedCategory: sPreferencedCategory,
+					includeDeprecated: bIncludeDeprecated
+				}).then(function(result) {
+					oModel.setProperty("/matches", result.matches);
+				});
 			},
 
 			onHeaderResize: function (oEvent) {
 				var iWidth = oEvent.size.width,
-					bPhoneSize = Device.system.phone || iWidth < Device.media._predefinedRangeSets[Device.media.RANGESETS.SAP_STANDARD_EXTENDED].points[0];
+					bPhoneSize = Device.system.phone || iWidth < Device.media._predefinedRangeSets[Device.media.RANGESETS.SAP_STANDARD_EXTENDED].points[0],
+					oViewModel = this.getModel("appView"),
+					bSearchMode = oViewModel.getProperty("/bSearchMode");
 
-				this.getModel("appView").setProperty("/bPhoneSize", bPhoneSize);
+				// Check for a change in "bPhoneSize" property in order to
+				// reduce number of method calls
+				if (bPhoneSize !== oViewModel.getProperty("/bPhoneSize")) {
+					oViewModel.setProperty("/bPhoneSize", bPhoneSize);
+					this._updateVersionSwitchVisibility();
+					this._tabHeader.setVisible(!bPhoneSize);
+					this._selectHeader.setVisible(bPhoneSize);
+				}
 
-				this._toggleTabHeaderClass();
-				this._updateVersionSwitchVisibility();
+				// The select should be first set to visible on phone size, and after that
+				// set to false if search is opened for correct calculation of the search width.
+				if (bSearchMode) {
+					this._selectHeader.setVisible(false);
+				}
 			},
 
 			_onOrientationChange: function() {
 				this.getModel("appView").setProperty("/bLandscape", Device.orientation.landscape);
-
-				this._toggleTabHeaderClass();
 			},
 
 			onToggleSearchMode : function(oEvent) {
 				var bSearchMode = oEvent.getParameter("isOpen"),
-				oViewModel = this.getModel("appView");
-
+				oViewModel = this.getModel("appView"),
+				bPhoneSize = oViewModel.getProperty("/bPhoneSize");
 				oViewModel.setProperty("/bSearchMode", bSearchMode);
 
-				this._toggleTabHeaderClass();
-
 				if (bSearchMode) {
-					jQuery.sap.delayedCall(0, this, function () {
+					// Init is called *before* the user entered a search term
+					// in order to start the download of the search index
+					// in the *earliest* point in time
+					SearchUtil.init();
+
+					setTimeout(function () {
 						this._oView.byId("searchControl").getAggregation("_searchField").getFocusDomRef().focus();
-					});
+					}.bind(this), 0);
+
+					if (bPhoneSize) {
+						this._selectHeader.setVisible(false);
+					}
+				} else if (bPhoneSize) {
+					this._selectHeader.setVisible(true);
 				}
 			},
 
@@ -758,50 +1382,90 @@ sap.ui.define([
 				});
 			},
 
-			_requestVersionInfo: function () {
-				Promise.resolve(jQuery.ajax(sNeoAppJsonPath)).then(
-					// Success
-					function(oNeoAppJson) {
-						var oVersionModel = this.getModel("versionData"),
-							bIsInternal = oVersionModel.getProperty("/isInternal"),
-							bIsSnapshotVersion = oVersionModel.getProperty("/isSnapshotVersion");
+			_processVersionOverview: function(oVersionOverviewJson) {
+				var aVersions = oVersionOverviewJson.versions,
+					aResult = [];
 
-						if (!(oNeoAppJson && oNeoAppJson.routes)) {
-							Log.warning("No versions were found");
-							return;
-						}
-
-						// Current version would be displayed for a second time as the last element,
-						// therefore we should skip it to avoid duplicate items in the dialog.
-						oNeoAppJson.routes.pop();
-
-						this._aNeoAppVersions = oNeoAppJson.routes;
-
-						// Store needed data
-						if (!bIsInternal && !bIsSnapshotVersion) {
-							this._aNeoAppVersions = this._aNeoAppVersions.filter(function(oRoute) {
-								return oRoute.target.version.indexOf("-beta") === -1;
-							});
-						}
-
-						this._aNeoAppVersions = this._aNeoAppVersions.map(function(oRoute) {
-							var oVersion = jQuery.sap.Version(oRoute.target.version),
-								oVersionSummary = {};
-
-							// Add the following properties, in order use them for grouping later
-							oVersionSummary.patchVersion = oVersion.getPatch(); // E.g: Extract 5 from "1.52.5"
-							oVersionSummary.groupTitle = oVersion.getMajor() + "." + oVersion.getMinor(); // E.g: Extract "1.52" from "1.52.5"
-							oVersionSummary.version = oVersion.toString();
-
-							return oVersionSummary;
+				if (Array.isArray(aVersions)) {
+					aVersions = aVersions.filter(function(oVersion) {
+						return !!oVersion.hidden;
+					}).forEach(function(oVersion) {
+						var aHiddenVersions = oVersion.hidden.split(",").map(function(sVersion) {
+							return sVersion.trim();
 						});
 
-						// Make version select visible
-						this._updateVersionSwitchVisibility();
+						aResult = aResult.concat(aHiddenVersions);
+					});
+				}
+
+				return aResult;
+			},
+
+			_processNeoAppJSON: function(oNeoAppJson) {
+				var oVersionModel = this.getModel("versionData"),
+					bIsInternal = oVersionModel.getProperty("/isInternal"),
+					bIsSnapshotVersion = oVersionModel.getProperty("/isSnapshotVersion"),
+					aRoutes = [];
+
+				if (!(oNeoAppJson && oNeoAppJson.routes)) {
+					Log.warning("No versions were found");
+					return;
+				}
+
+				aRoutes = oNeoAppJson.routes;
+
+				// Current version would be displayed for a second time as the last element,
+				// therefore we should skip it to avoid duplicate items in the dialog.
+				aRoutes.pop();
+
+				// Store needed data
+				if (!bIsInternal && !bIsSnapshotVersion) {
+					aRoutes = aRoutes.filter(function(oRoute) {
+						return oRoute.target.version.indexOf("-beta") === -1;
+					});
+				}
+
+				aRoutes = aRoutes.map(function(oRoute) {
+					var oVersion = Version(oRoute.target.version),
+						oVersionSummary = {};
+
+					// Add the following properties, in order use them for grouping later
+					oVersionSummary.patchVersion = oVersion.getPatch(); // E.g: Extract 5 from "1.52.5"
+					oVersionSummary.groupTitle = oVersion.getMajor() + "." + oVersion.getMinor(); // E.g: Extract "1.52" from "1.52.5"
+					oVersionSummary.version = oVersion.toString();
+					oVersionSummary.path = oRoute.path;
+
+					return oVersionSummary;
+				});
+
+				return aRoutes;
+			},
+
+			_requestVersionInfo: function () {
+				Promise.all([
+						jQuery.ajax(sNeoAppJsonPath),
+						jQuery.ajax(sVersionOverviewJsonPath)
+					]).then(
+					// Success
+					function(oValues) {
+						var aNeoAppVersions = this._processNeoAppJSON(oValues[0]),
+							aHiddenValues = this._processVersionOverview(oValues[1]);
+
+						if (Array.isArray(aNeoAppVersions)) {
+							aNeoAppVersions = aNeoAppVersions.filter(function(oVersion) {
+								return aHiddenValues.indexOf(oVersion.version) === -1;
+							});
+
+							this._aNeoAppVersions = aNeoAppVersions;
+							// Make version select visible
+							this._updateVersionSwitchVisibility();
+						} else {
+							Log.warning("No multi-version environment detected");
+						}
 					}.bind(this),
 					// Error
 					function() {
-						Log.warning("No neo-app.json was detected");
+						Log.warning("No neo-app.json or versionoverview.json was detected");
 					}
 				);
 			},
@@ -828,28 +1492,24 @@ sap.ui.define([
 				return parser.pathname + parser.hash + parser.search;
 			},
 
-			_isToggleButtonVisible: function() {
-				var oViewModel = this.getModel("appView"),
-					bHasMaster = oViewModel.getProperty("/bHasMaster"),
-					bPhoneSize = oViewModel.getProperty("/bPhoneSize"),
-					bLandscape = oViewModel.getProperty("/bLandscape"),
-					bSearchMode = oViewModel.getProperty("/bSearchMode");
-
-				return bHasMaster && (bPhoneSize || !bLandscape) && !bSearchMode;
+			_setHeaderSelectedKey: function(sKey) {
+				this._selectHeader.setSelectedKey(sKey);
+				this._tabHeader.setSelectedKey(sKey);
 			},
 
-			_toggleTabHeaderClass: function() {
-				var th = this.byId("tabHeader");
-				if (th.getMetadata().getName() === "sap.ui.core._StashedControl") {
-					return;
-				}
-				if (this._isToggleButtonVisible()) {
-					th.addStyleClass("tabHeaderNoLeftMargin");
-				} else {
-					th.removeStyleClass("tabHeaderNoLeftMargin");
-				}
-			}
+			onCloseImportantMessage: function (oEvent) {
+				var aMessageCookie = this._oConfigUtil.getCookieValue(this._oCookieNames["DEMOKIT_IMPORTANT_MESSAGES_READ"])
+						.split(",").filter(function(id) { return id !== ''; }),
+					oCustomData = oEvent.getSource().getCustomData().find(function(oCustomData) {
+						return oCustomData.getKey() === "messageID";
+					}),
+					oId = oCustomData.getValue();
 
+				aMessageCookie.push(oId);
+				this._oConfigUtil.setCookie(this._oCookieNames["DEMOKIT_IMPORTANT_MESSAGES_READ"], aMessageCookie.join(","));
+
+				this._updateMessagesModel(this.getModel("messagesData").getData());
+			}
 		});
 	}
 );

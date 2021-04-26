@@ -2,13 +2,21 @@
  * ${copyright}
  */
 
+/* globals Map */
+
 // Provides class sap.ui.core.ResizeHandler
-sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jquery.sap.script'],
-	function(jQuery, BaseObject/* , jQuerySap1, jQuerySap */) {
+sap.ui.define([
+	'sap/ui/base/Object',
+	"sap/base/Log",
+	"sap/ui/util/ActivityDetection",
+	"sap/ui/core/IntervalTrigger",
+	"sap/ui/thirdparty/jquery"
+],
+	function(BaseObject, Log, ActivityDetection, IntervalTrigger, jQuery) {
 	"use strict";
 
 	// local logger, by default only logging errors
-	var log = jQuery.sap.log.getLogger("sap.ui.core.ResizeHandler", jQuery.sap.log.Level.ERROR);
+	var log = Log.getLogger("sap.ui.core.ResizeHandler", Log.Level.ERROR);
 
 	/**
 	 * Reference to the Core (implementation view, not facade)
@@ -38,14 +46,15 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 			this.aResizeListeners = [];
 			this.aSuspendedDomRefs = [];
 			this.bRegistered = false;
+			this.mCallbacks = new Map();
 
 			this.iIdCounter = 0;
 
 			this.fDestroyHandler = this.destroy.bind(this);
 
-			jQuery(window).bind("unload", this.fDestroyHandler);
+			jQuery(window).on("unload", this.fDestroyHandler);
 
-			jQuery.sap.act.attachActivate(initListener, this);
+			ActivityDetection.attachActivate(initListener, this);
 		}
 
 	});
@@ -53,14 +62,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 	function clearListener(){
 		if (this.bRegistered) {
 			this.bRegistered = false;
-			sap.ui.getCore().detachIntervalTimer(this.checkSizes, this);
+			IntervalTrigger.removeListener(this.checkSizes, this);
 		}
 	}
 
 	function initListener(){
 		if (!this.bRegistered && this.aResizeListeners.length > 0) {
 			this.bRegistered = true;
-			sap.ui.getCore().attachIntervalTimer(this.checkSizes, this);
+			IntervalTrigger.addListener(this.checkSizes, this);
 		}
 	}
 
@@ -72,8 +81,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 	 * @private
 	 */
 	ResizeHandler.prototype.destroy = function(oEvent) {
-		jQuery.sap.act.detachActivate(initListener, this);
-		jQuery(window).unbind("unload", this.fDestroyHandler);
+		ActivityDetection.detachActivate(initListener, this);
+		jQuery(window).off("unload", this.fDestroyHandler);
 		oCoreRef = null;
 		this.aResizeListeners = [];
 		this.aSuspendedDomRefs = [];
@@ -90,6 +99,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 	 */
 	ResizeHandler.prototype.attachListener = function(oRef, fHandler){
 		var bIsControl = BaseObject.isA(oRef, 'sap.ui.core.Control'),
+			bIsJQuery = oRef instanceof jQuery, // actually, jQuery objects are not allowed as oRef, as per the API documentation. But this happens in the wild.
 			oDom = bIsControl ? oRef.getDomRef() : oRef,
 			iWidth = oDom ? oDom.offsetWidth : 0,
 			iHeight = oDom ? oDom.offsetHeight : 0,
@@ -104,7 +114,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 			dbg = String(oRef);
 		}
 
-		this.aResizeListeners.push({sId: sId, oDomRef: bIsControl ? null : oRef, oControl: bIsControl ? oRef : null, fHandler: fHandler, iWidth: iWidth, iHeight: iHeight, dbg: dbg});
+		this.aResizeListeners.push({sId: sId, oDomRef: bIsControl ? null : oRef, oControl: bIsControl ? oRef : null, bIsJQuery: bIsJQuery, fHandler: fHandler, iWidth: iWidth, iHeight: iHeight, dbg: dbg});
 		log.debug("registered " + dbg);
 
 		initListener.call(this);
@@ -115,7 +125,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 	/**
 	 * Detaches listener from resize event.
 	 *
-	 * @param {string} Registration-ID returned from attachListener
+	 * @param {string} sId Registration-ID returned from attachListener
 	 * @private
 	 */
 	ResizeHandler.prototype.detachListener = function(sId){
@@ -149,7 +159,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 				var bCtrl = !!oResizeListener.oControl,
 					oDomRef = bCtrl ? oResizeListener.oControl.getDomRef() : oResizeListener.oDomRef;
 
-				if ( oDomRef && jQuery.contains(document.documentElement, oDomRef) && !this._isSuspended(oDomRef)) { //check that domref is still active and not suspended
+				oDomRef = oResizeListener.bIsJQuery ? oDomRef[0] : oDomRef;
+
+				if (oDomRef && document.documentElement.contains(oDomRef) && !this._isSuspended(oDomRef)) { //check that domref is still active and not suspended
 
 					var iOldWidth = oResizeListener.iWidth,
 						iOldHeight = oResizeListener.iHeight,
@@ -183,7 +195,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 			ResizeHandler._keepActive = false;
 		}
 
-		if (!jQuery.sap.act.isActive() && !ResizeHandler._keepActive) {
+		if (!ActivityDetection.isActive() && !ResizeHandler._keepActive) {
 			clearListener.call(this);
 		}
 	};
@@ -207,7 +219,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 	 * <li><code>oEvent.control</code>: The control which was given during registration of the event handler (if present)</li>
 	 * </ul>
 	 *
-	 * @param {DOMRef|sap.ui.core.Control} oRef The control or the DOM reference for which the given event handler should be registered (beside the window)
+	 * @param {Element|sap.ui.core.Control} oRef The control or the DOM reference for which the given event handler should be registered (beside the window)
 	 * @param {function} fHandler
 	 *             The event handler which should be called whenever the size of the given reference is changed.
 	 *             The event object is passed as first argument to the event handler. See the description of this function for more details about the available parameters of this event.
@@ -268,7 +280,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 		}
 
 		// Check if the dom ref is valid within the document
-		if (!oDomRef || !jQuery.contains(document.documentElement, oDomRef)) {
+		if (!document.documentElement.contains(oDomRef)) {
 			return false;
 		}
 
@@ -303,11 +315,22 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 		// Remove the dom ref and execute listeners again
 		oResizeHandler.aSuspendedDomRefs.splice(iIndex, 1);
 		oResizeHandler.checkSizes();
+
+		// inform interested parties
+		var aCallbacks = oResizeHandler.mCallbacks.get(oDomRef);
+		if (aCallbacks) {
+			for (var i = 0; i < aCallbacks.length; i++) {
+				aCallbacks[i]();
+			}
+			oResizeHandler.mCallbacks.delete(oDomRef);
+		}
+
 		return true;
 	};
 
 	/**
-	 * Checks if the given DOM reference is a child (or exact match) of a DOM area that is suspended from observation for resize changes
+	 * Checks if the given DOM reference is a child (or exact match) of a DOM area that is suspended from observation for size changes.
+	 * This instance method is an internal shortcut.
 	 * @param {Element} oDomRef the DOM reference
 	 * @return {boolean} Whether the <code>oDomRef</code> is suspended
 	 * @private
@@ -317,11 +340,40 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/base/Object', 'jquery.sap.act', 'jqu
 			oNextSuspendedDomRef;
 		for (var i = 0; i < aSuspendedDomRefs.length; i++) {
 			oNextSuspendedDomRef = aSuspendedDomRefs[i];
-			if (oNextSuspendedDomRef === oDomRef || jQuery.contains(oNextSuspendedDomRef, oDomRef)) {
-				return true;
+			if (oNextSuspendedDomRef.contains(oDomRef)) {
+				return oNextSuspendedDomRef;
 			}
 		}
 		return false;
+	};
+
+	/**
+	 * Checks if the given DOM reference is a child (or exact match) of a DOM area that is suspended from observation for size changes
+	 *
+	 * @param {Element} oDomRef the DOM reference.
+	 * @param {function} [fnCallback] a callback function to be called once the DOM node is resumed which was found to be the primary
+	 *        reason for oDomRef to be suspended. Note that isSuspended() may still be true when other DOM nodes are still suspended.
+	 *        Also note that each isSuspended() call registers the callback, but only if it was not found to be already registered.
+	 * @return {boolean} Whether the <code>oDomRef</code> is suspended
+	 * @private
+	 */
+	ResizeHandler.isSuspended = function(oDomRef, fnCallback) {
+		if (!oCoreRef || !oCoreRef.oResizeHandler) {
+			return false;
+		}
+		var oHandler = oCoreRef.oResizeHandler;
+		var vSuspended = oHandler._isSuspended(oDomRef);
+		if (fnCallback && vSuspended) { // DOM node causing the suspension
+			var aCallbacks = oHandler.mCallbacks.get(vSuspended);
+			if (!aCallbacks) {
+				aCallbacks = [];
+				oHandler.mCallbacks.set(vSuspended, aCallbacks);
+			}
+			if (aCallbacks.indexOf(fnCallback) === -1) {
+				aCallbacks.push(fnCallback);
+			}
+		}
+		return !!vSuspended;
 	};
 
 	return ResizeHandler;

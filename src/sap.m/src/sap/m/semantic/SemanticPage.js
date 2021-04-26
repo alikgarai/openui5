@@ -3,7 +3,6 @@
  */
 
 sap.ui.define([
-	'jquery.sap.global',
 	'sap/m/semantic/SegmentedContainer',
 	'sap/m/semantic/SemanticConfiguration',
 	'sap/m/Button',
@@ -19,10 +18,11 @@ sap.ui.define([
 	'sap/ui/core/Control',
 	'sap/ui/core/library',
 	'sap/m/library',
-	"./SemanticPageRenderer"
+	"./SemanticPageRenderer",
+	"sap/base/Log",
+	"sap/ui/thirdparty/jquery"
 ],
 function(
-    jQuery,
 	SegmentedContainer,
 	SemanticConfiguration,
 	Button,
@@ -38,7 +38,9 @@ function(
 	Control,
 	coreLibrary,
 	library,
-	SemanticPageRenderer
+	SemanticPageRenderer,
+	Log,
+	jQuery
 ) {
 	"use strict";
 
@@ -271,6 +273,7 @@ function(
 				 */
 				navButtonPress: {}
 			},
+			dnd: { draggable: false, droppable: true },
 			designtime: "sap/m/designtime/semantic/SemanticPage.designtime"
 		}
 	});
@@ -281,7 +284,7 @@ function(
 		this._currentMode = SemanticConfiguration._PageMode.display;
 		this._getPage().setCustomHeader(this._getInternalHeader());
 		this._getPage().setFooter(new OverflowToolbar(this.getId() + "-footer"));
-		this._getPage().setLandmarkInfo(new PageAccessibleLandmarkInfo());
+		this.setLandmarkInfo(new PageAccessibleLandmarkInfo());
 		this._getPage().setShowHeader(false);
 	};
 
@@ -782,7 +785,7 @@ function(
 
 			var oHeader = this._getInternalHeader();
 			if (!oHeader) {
-				jQuery.sap.log.error("missing page header", this);
+				Log.error("missing page header", this);
 				return null;
 			}
 
@@ -808,7 +811,7 @@ function(
 
 			var oFooter = this._getPage().getFooter();
 			if (!oFooter) {
-				jQuery.sap.log.error("missing page footer", this);
+				Log.error("missing page footer", this);
 				return null;
 			}
 
@@ -859,7 +862,7 @@ function(
 
 		if ((typeof iSortIndex1 === 'undefined') ||
 				(typeof iSortIndex2 === 'undefined')) {
-			jQuery.sap.log.warning("sortIndex missing", this);
+			Log.warning("sortIndex missing", this);
 			return null;
 		}
 

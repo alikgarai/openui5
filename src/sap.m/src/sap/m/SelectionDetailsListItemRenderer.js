@@ -1,14 +1,10 @@
 /*!
  * ${copyright}
  */
-sap.ui.define([
-	"jquery.sap.global",
-	"sap/ui/core/Renderer",
-	"sap/m/ListItemBaseRenderer"
-], function(jQuery, Renderer, ListItemBaseRenderer) {
+sap.ui.define(["sap/ui/core/Renderer", "sap/m/ListItemBaseRenderer"], function(Renderer, ListItemBaseRenderer) {
 	"use strict";
 
-	var TAG_WHITELIST = {
+	var TAG_INCLUDELIST = {
 		"svg": {
 			attributes: ["width", "height", "focusable", "preserveAspectRatio"]
 		},
@@ -23,14 +19,14 @@ sap.ui.define([
 
 	try {
 		var oParser = new DOMParser();
-		bIsDOMParserSupported = oParser.parseFromString("<svg />", "text/html") !== null;
+		bIsDOMParserSupported = oParser.parseFromString("<svg/>", "text/html") !== null;
 	} catch (ex) {
 		bIsDOMParserSupported = false;
 	}
 
 	var fnParseSvgString;
 
-	// Most browsers support DOMParser for text/html. Sadly our voter job uses phantomjs. This is a fix for phantomjs.
+	// Most browsers support DOMParser for text/html. Sadly our voter job uses p-h-a-n-t-o-m-j-s. This is a fix for p-h-a-n-t-o-m-j-s.
 	if (bIsDOMParserSupported) {
 		fnParseSvgString = function (sString) {
 			var oParser = new DOMParser(),
@@ -63,7 +59,7 @@ sap.ui.define([
 			return true;
 		}
 		var sTagName = oNode.tagName.toLowerCase(),
-			oTag = TAG_WHITELIST[sTagName],
+			oTag = TAG_INCLUDELIST[sTagName],
 			bTagsValid;
 		if (!oTag) {
 			return false;

@@ -1,3 +1,4 @@
+/*global QUnit,sinon*/
 sap.ui.define([
 	"sap/ui/core/dnd/DragAndDrop",
 	"sap/ui/core/dnd/DragInfo",
@@ -6,11 +7,11 @@ sap.ui.define([
 	"jquery.sap.global",
 	"sap/ui/core/Control",
 	"sap/ui/core/Element",
-	"sap/ui/core/UIArea"
-], function(DragAndDrop, DragInfo, DropInfo, DragDropInfo, jQuery, Control, Element, UIArea) {
+	"sap/ui/core/UIArea",
+	"sap/ui/core/Core",
+	"sap/ui/Device"
+], function(DragAndDrop, DragInfo, DropInfo, DragDropInfo, jQuery, Control, Element, UIArea, Core, Device) {
 	"use strict";
-
-	/*global QUnit,sinon*/
 
 	var DivControl = Control.extend("sap.ui.core.dnd.test.DivControl", {
 		metadata: {
@@ -18,14 +19,29 @@ sap.ui.define([
 				elementTag: {type: "string", defaultValue: "div"}
 			}
 		},
-		renderer: function(rm, oControl) {
-			rm.write("<div><" + oControl.getElementTag());
-			rm.writeControlData(oControl);
-			rm.writeAttribute("tabindex", 0);
-			rm.addStyle("width", "100px");
-			rm.addStyle("height", "50px");
-			rm.writeStyles();
-			rm.write("></" + oControl.getElementTag() + "></div>");
+		renderer: {
+			apiVersion: 2,
+			render: function(rm, oControl) {
+				var sElementTag = oControl.getElementTag(),
+					bIsVoid = /^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i.test(sElementTag);
+
+				rm.openStart("div").openEnd();
+					if ( bIsVoid ) {
+						rm.voidStart(sElementTag, oControl);
+					} else {
+						rm.openStart(sElementTag, oControl);
+					}
+					rm.attr("tabindex", 0);
+					rm.style("width", "100px");
+					rm.style("height", "50px");
+					if ( bIsVoid ) {
+						rm.voidEnd();
+					} else {
+						rm.openEnd();
+						rm.close(sElementTag);
+					}
+				rm.close("div");
+			}
 		},
 		getDragGhost: function() {
 			return this.getDomRef().cloneNode(true);
@@ -34,6 +50,7 @@ sap.ui.define([
 
 	var DragAndDropControl = Control.extend("sap.ui.core.dnd.test.DragAndDropControl", {
 		metadata: {
+			dnd: true,
 			properties : {
 				showNoData : {type : "boolean", defaultValue : false}
 			},
@@ -56,42 +73,43 @@ sap.ui.define([
 				}
 			}
 		},
-		renderer: function(rm, oControl) {
-			var aTopItems = oControl.getTopItems();
-			var aBottomItems = oControl.getBottomItems();
-			var i;
+		renderer: {
+			apiVersion: 2,
+			render: function(rm, oControl) {
 
-			rm.write("<div");
-			rm.writeControlData(oControl);
-			rm.writeAttribute("tabindex", 0);
-			rm.write(">");
+				var aTopItems = oControl.getTopItems();
+				var aBottomItems = oControl.getBottomItems();
+				var i;
 
-			rm.write("<div");
-			rm.writeAttribute("id", oControl.getId() + "-topItems");
-			rm.write(">");
+				rm.openStart("div", oControl).attr("tabindex", 0).openEnd();
+					rm.openStart("div", oControl.getId() + "-topItems").openEnd();
+					if (!aTopItems.length) {
+						rm.openStart("div", oControl.getId() + "-topNoData")
+							.openEnd()
+							.text("No top items")
+							.close("div");
+					} else {
+						for (i = 0; i < aTopItems.length; i++) {
+							rm.renderControl(aTopItems[i]);
+						}
+					}
+					rm.close("div");
 
-			if (!aTopItems.length) {
-				rm.write('<div id="' + oControl.getId() + '-topNoData">No top items</div>"');
-			} else {
-				for (i = 0; i < aTopItems.length; i++) {
-					rm.renderControl(aTopItems[i]);
-				}
+					rm.openStart("div", oControl.getId() + "-bottomItems").openEnd();
+					if (!aBottomItems.length) {
+						rm.openStart("div", oControl.getId() + "-bottomNoData")
+							.openEnd()
+							.text("No bottom items")
+							.close("div");
+					} else {
+						for (i = 0; i < aBottomItems.length; i++) {
+							rm.renderControl(aBottomItems[i]);
+						}
+					}
+					rm.close("div");
+
+				rm.close("div");
 			}
-			rm.write("</div>");
-
-			rm.write("<div");
-			rm.writeAttribute("id", oControl.getId() + "-bottomItems");
-			rm.write(">");
-			if (!aBottomItems.length) {
-				rm.write('<div id="' + oControl.getId() + '-bottomNoData">No bottom items</div>"');
-			} else {
-				for (i = 0; i < aBottomItems.length; i++) {
-					rm.renderControl(aBottomItems[i]);
-				}
-			}
-			rm.write("</div>");
-
-			rm.write("</div>");
 		}
 	});
 
@@ -144,8 +162,8 @@ sap.ui.define([
 					})
 				]
 			});
-			this.oControl.placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
+			this.oControl.addStyleClass("sapUiScrollDelegate").placeAt("qunit-fixture");
+			Core.applyChanges();
 		},
 		afterEach: function() {
 			this.oControl.destroy();
@@ -165,17 +183,43 @@ sap.ui.define([
 		this.oControl.addTopItem(new DivControl({elementTag: "input"}));
 		this.oControl.addTopItem(new DivControl({elementTag: "textarea"}));
 		this.oControl.addDragDropConfig(new DragDropInfo({sourceAggregation: "topItems"}));
-		sap.ui.getCore().applyChanges();
+		Core.applyChanges();
 
 		oEvent = createjQueryDragEventDummy("dragstart", this.oControl.getTopItems()[0]);
 		oEvent.target.focus();
 		DragAndDrop.preprocessEvent(oEvent);
 		assert.equal(oEvent.dragSession, null, "No drag session was created for an input element");
+		assert.ok(oEvent.isDefaultPrevented(), "Drag is not started for the input element");
 
 		oEvent = createjQueryDragEventDummy("dragstart", this.oControl.getTopItems()[1]);
 		oEvent.target.focus();
 		DragAndDrop.preprocessEvent(oEvent);
 		assert.equal(oEvent.dragSession, null, "No drag session was created for a textarea element");
+	});
+
+	QUnit.test("Text input elements - Workaround for a bug in Firefox", function(assert) {
+		var oBrowserStub = sinon.stub(Device, "browser");
+		var that = this;
+		var sBrowser = "firefox";
+
+		oBrowserStub.value({firefox: true});
+		that.oControl.destroyTopItems();
+		that.oControl.addTopItem(new DivControl({elementTag: "input"}));
+		that.oControl.addTopItem(new DivControl({elementTag: "textarea"}));
+		that.oControl.addDragDropConfig(new DragDropInfo());
+		Core.applyChanges();
+
+		assert.ok(that.oControl.getDomRef().draggable, sBrowser + " - Ancestor is draggable before mousedown");
+
+		["input", "textarea"].forEach(function(sSelectableElementTagName) {
+			that.oControl.$().find(sSelectableElementTagName).trigger("mousedown");
+			assert.notOk(that.oControl.getDomRef().draggable, sBrowser + " - Ancestor is not draggable after mousedown to allow text selection");
+
+			that.oControl.$().find(sSelectableElementTagName).trigger("mouseup");
+			assert.ok(that.oControl.getDomRef().draggable, sBrowser + " - Ancestor is draggable again after mouseup to allow drag and drop again");
+		});
+
+		oBrowserStub.restore();
 	});
 
 	QUnit.test("Draggable elements without control id", function(assert) {
@@ -223,6 +267,9 @@ sap.ui.define([
 		DragAndDrop.preprocessEvent(oEvent);
 		assert.ok(oEvent.dragSession != null, "dragstart: A new drag session was created");
 
+		DragAndDrop.postprocessEvent(oEvent);
+		assert.ok(jQuery("html").hasClass("sapUiDnDNoScrolling"), "scrolling of the html element is blocked");
+
 		oEvent = createjQueryDragEventDummy("dragstart", this.oControl, true);
 		oEvent.target.dataset.sapUiRelated = this.oControl.getId();
 		DragAndDrop.preprocessEvent(oEvent);
@@ -235,6 +282,9 @@ sap.ui.define([
 		oEvent = createjQueryDragEventDummy("dragend", this.oControl, false);
 		DragAndDrop.preprocessEvent(oEvent);
 		assert.ok(oEvent.dragSession === oDragSession, "dragend: Drag session was preserved");
+
+		DragAndDrop.postprocessEvent(oEvent);
+		assert.notOk(jQuery("html").hasClass("sapUiDnDNoScrolling"), "scrolling of the html element is retained");
 
 		DragAndDrop.postprocessEvent(oEvent); // Postprocessing "dragend" event. Drag session should be destroyed.
 		oEvent = createjQueryDragEventDummy("dragenter", this.oControl, false);
@@ -256,7 +306,7 @@ sap.ui.define([
 				]
 			});
 			this.oControl.placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
+			Core.applyChanges();
 		},
 		afterEach: function() {
 			this.oControl.destroy();
@@ -352,24 +402,13 @@ sap.ui.define([
 	});
 
 	QUnit.test("Simulated longdragover", function(assert) {
-		var done = assert.async();
 		var oEventTarget;
-		var oControlADomRef = this.oControl.getTopItems()[0].getDomRef();
-		var oControlBDomRef = this.oControl.getTopItems()[1].getDomRef();
 		var oOnLongDragOverSpy = sinon.spy(function(oEvent) {
 			oOnLongDragOverSpy._oEventTarget = oEvent.target;
 		});
 		var iLastLongDragoverCount = 0;
 		var oEvent;
-
-		function executeDelayed(iDelayInMs, fn) {
-			return new Promise(function(resolve) {
-				window.setTimeout(function() {
-					fn();
-					resolve();
-				}, iDelayInMs);
-			});
-		}
+		var oDateNowStub = sinon.stub(Date, "now");
 
 		function assertLongdragover(iMsSinceDragEnter) {
 			var iCallCount = Math.floor(iMsSinceDragEnter / 1000);
@@ -390,59 +429,32 @@ sap.ui.define([
 		oEvent.target.focus();
 		DragAndDrop.preprocessEvent(oEvent); // Create drag session.
 
-		oEventTarget = oControlADomRef;
-		oEventTarget.focus();
+		function setTime(iTimeInMs) {
+			oDateNowStub.returns(iTimeInMs);
+		}
+
+		setTime(0);
+		oEventTarget = this.oControl.getTopItems()[0].getDomRef();
 		oEventTarget.dispatchEvent(createNativeDragEventDummy("dragenter"));
 		assertLongdragover(0);
-		executeDelayed(500, function() {
-			assertLongdragover(500);
-		}).then(executeDelayed.bind(this, 600, function() {
-			assertLongdragover(1100);
-		})).then(executeDelayed.bind(this, 400, function() {
-			assertLongdragover(1500);
-		})).then(executeDelayed.bind(this, 600, function() {
-			assertLongdragover(2100);
-		})).then(executeDelayed.bind(this, 400, function() {
-			assertLongdragover(2500);
-		})).then(executeDelayed.bind(this, 1, function() {
-			oEventTarget = oControlBDomRef;
-			oEventTarget.dispatchEvent(createNativeDragEventDummy("dragenter"));
-			oOnLongDragOverSpy.reset();
-		})).then(executeDelayed.bind(this, 600, function() {
-			assertLongdragover(600);
-		})).then(executeDelayed.bind(this, 500, function() {
-			assertLongdragover(1100);
-		})).then(done);
-
-		// PhantomJS does not allow this. Keep it in case PhantomJS will be replaced someday, it is a lot faster.
-		//var oDateNowStub = sinon.stub(Date, "now");
-		//
-		//function setTime(iTimeInMs) {
-		//	oDateNowStub.returns(iTimeInMs);
-		//}
-		//
-		//setTime(0);
-		//oEventTarget = oControlADomRef;
-		//oEventTarget.dispatchEvent(createNativeDragEventDummy("dragenter"));
-		//assertLongdragover(0);
-		//setTime(999);
-		//assertLongdragover(999);
-		//setTime(1000);
-		//assertLongdragover(1000);
-		//setTime(1999);
-		//assertLongdragover(1999);
-		//setTime(2000);
-		//assertLongdragover(2000);
-		//oEventTarget = oControlBDomRef;
-		//setTime(2999);
-		//oEventTarget.dispatchEvent(createNativeDragEventDummy("dragenter"));
-		//oOnLongDragOverSpy.reset();
-		//assertLongdragover(0);
-		//setTime(3000);
-		//assertLongdragover(1);
-		//setTime(3999);
-		//assertLongdragover(1000);
-		//oDateNowStub.restore();
+		setTime(999);
+		assertLongdragover(999);
+		setTime(1000);
+		assertLongdragover(1000);
+		setTime(1999);
+		assertLongdragover(1999);
+		setTime(2000);
+		assertLongdragover(2000);
+		oEventTarget = this.oControl.getTopItems()[1].getDomRef();
+		setTime(2999);
+		oEventTarget.dispatchEvent(createNativeDragEventDummy("dragenter"));
+		oOnLongDragOverSpy.reset();
+		assertLongdragover(0);
+		setTime(3000);
+		assertLongdragover(1);
+		setTime(3999);
+		assertLongdragover(1000);
+		oDateNowStub.restore();
 	});
 
 	QUnit.module("Between Indicator", {
@@ -458,7 +470,7 @@ sap.ui.define([
 				]
 			});
 			this.oControl.placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
+			Core.applyChanges();
 		},
 		afterEach: function() {
 			this.oControl.destroy();
@@ -539,6 +551,15 @@ sap.ui.define([
 		assert.strictEqual($Indicator.height(), oDiv2.$().height() , "Indicator's height is equal to dropped item's height.");
 		assert.strictEqual(mIndicatorOffset.top, mTargetOffset.top , "Indicator's top position is equal to dropped item's top position.");
 		assert.strictEqual(mIndicatorOffset.left, mTargetOffset.left + oDiv2.$().width(), "Indicator's left position is equal to dropped item's right position.");
+		assert.strictEqual(oEvent.dragSession.getDropPosition(), "After", "Drop position is set correctly");
+
+		// act for the RTL mode
+		sinon.stub(sap.ui.getCore().getConfiguration(), "getRTL").callsFake(function() {
+			return true;
+		});
+
+		oDiv2.$().trigger(oEvent);
+		assert.strictEqual(oEvent.dragSession.getDropPosition(), "Before", "Drop position is set correctly for the RTL mode");
 
 		// drop
 		oDiv2.$().trigger("drop");
@@ -563,7 +584,7 @@ sap.ui.define([
 				]
 			});
 			this.oControl.placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
+			Core.applyChanges();
 		},
 		afterEach: function() {
 			this.oControl.destroy();
@@ -653,7 +674,7 @@ sap.ui.define([
 			});
 
 			this.oContainer.placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
+			Core.applyChanges();
 
 			this.oTargetDomRef = this.oTargetControl.getDomRef();
 			this.oSourceDomRef = this.oSourceControl.getDomRef();
@@ -771,7 +792,7 @@ sap.ui.define([
 			});
 
 			this.oContainer.placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
+			Core.applyChanges();
 
 			this.oTargetDomRef = this.oTargetControl.getDomRef();
 			this.oSourceDomRef = this.oSourceControl.getDomRef();
@@ -825,4 +846,5 @@ sap.ui.define([
 		this.oTargetDomRef.dispatchEvent(createNativeDragEventDummy("drop"));
 		assert.ok(this.fnDropSpy.calledOnce, "drop event is called once.");
 	});
+
 });

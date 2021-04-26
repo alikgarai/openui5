@@ -3,14 +3,18 @@
  */
 
 // Provides utility class sap.ui.core.BlockLayerUtils
-sap.ui.define(['jquery.sap.global'], function(jQuery) {
+sap.ui.define([
+	'sap/ui/events/jquery/EventTriggerHook',
+	"sap/base/Log",
+	"sap/ui/thirdparty/jquery"
+], function(EventTriggerHook, Log, jQuery) {
 	"use strict";
 
 	/**
 	 * @alias sap.ui.core.BlockLayerUtils
 	 * @static
 	 * @private
-	 * @sap-restricted sap.ui.core.Control
+	 * @ui5-restricted sap.ui.core.Control
 	 */
 	var BlockLayerUtils = {},
 		aPreventedEvents = ["focusin", "focusout", "keydown", "keypress", "keyup", "mousedown", "touchstart", "touchmove", "mouseup", "touchend", "click"],
@@ -32,7 +36,7 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 	 * @param  {sap.ui.core.Control} oControl The specified control to block
 	 * @param  {string} sBlockedLayerId The block layer ID
 	 * @param  {string} sBlockedSection The block section ID
-	 * @returns {object|undefined} The block-state object containing the parent and block layer DOM or undefined if no control instance is provided.
+	 * @returns {object|undefined} The block-state object containing the parent and block layer DOM or <code>undefined</code> if no valid control instance is provided.
 	 *
 	 * @static
 	 * @private
@@ -51,14 +55,14 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 			// if no blocked section/control DOM could be retrieved -> the control is not part of the dom anymore
 			// this might happen in certain scenarios when e.g. a dialog is closed faster than the busyIndicatorDelay
 			if (!oParentDomRef) {
-				jQuery.sap.log.warning("BlockLayer could not be rendered. The outer Control instance is not valid anymore or was not rendered yet.");
+				Log.warning("BlockLayer could not be rendered. The outer Control instance is not valid anymore or was not rendered yet.");
 				return;
 			}
-			//Check if DOM Element where the busy indicator is supposed to be placed can handle content
+			// Check if DOM Element where the busy indicator is supposed to be placed can handle content
 			sTag = oParentDomRef.tagName;
 
 			if (rForbiddenTags.test(sTag)) {
-				jQuery.sap.log.warning("BusyIndicator cannot be placed in elements with tag '" + sTag + "'.");
+				Log.warning("BusyIndicator cannot be placed in elements with tag '" + sTag + "'.");
 				return;
 			}
 
@@ -79,7 +83,7 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 
 			fnHandleInteraction.call(oBlockState, true);
 		} else {
-			jQuery.sap.log.warning("BlockLayer couldn't be created. No Control instance given.");
+			Log.warning("BlockLayer couldn't be created. No Control instance given.");
 		}
 
 		return oBlockState;
@@ -112,11 +116,15 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 	 * @private
 	 */
 	BlockLayerUtils.addAriaAttributes = function(oDOM) {
+		var oResourceBundle = sap.ui.getCore().getLibraryResourceBundle("sap.ui.core");
+
 		oDOM.setAttribute("role", "progressbar");
 		oDOM.setAttribute("aria-valuemin", "0");
 		oDOM.setAttribute("aria-valuemax", "100");
+		oDOM.setAttribute("aria-valuetext", oResourceBundle.getText("BUSY_VALUE_TEXT"));
 		oDOM.setAttribute("alt", "");
-		oDOM.setAttribute("tabIndex", "0");
+		oDOM.setAttribute("tabindex", "0");
+		oDOM.setAttribute("title", oResourceBundle.getText("BUSY_TEXT"));
 	};
 
 	/**
@@ -186,7 +194,7 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 
 				this._aSuppressHandler = registerInteractionHandler.call(this, this._fnSuppressDefaultAndStopPropagationHandler);
 			} else {
-				jQuery.sap.log.warning("fnHandleInteraction called with bEnabled true, but no DOMRef exists!");
+				Log.warning("fnHandleInteraction called with bEnabled true, but no DOMRef exists!");
 			}
 		} else {
 			if (this.oTabbableBefore) {
@@ -214,7 +222,7 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 
 			if (bTargetIsBlockLayer && oEvent.type === 'keydown' && oEvent.keyCode === 9) {
 				// Special handling for "tab" keydown: redirect to next element before or after busy section
-				jQuery.sap.log.debug("Local Busy Indicator Event keydown handled: " + oEvent.type);
+				Log.debug("Local Busy Indicator Event keydown handled: " + oEvent.type);
 				oTabbable = oEvent.shiftKey ? this.oTabbableBefore : this.oTabbableAfter;
 				oTabbable.setAttribute("tabindex", -1);
 				// ignore execution of focus handler
@@ -226,11 +234,11 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 
 			} else if (bTargetIsBlockLayer && (oEvent.type === 'mousedown' || oEvent.type === 'touchstart')) {
 				// Do not "preventDefault" to allow to focus busy indicator
-				jQuery.sap.log.debug("Local Busy Indicator click handled on busy area: " + oEvent.target.id);
+				Log.debug("Local Busy Indicator click handled on busy area: " + oEvent.target.id);
 				oEvent.stopImmediatePropagation();
 
 			} else {
-				jQuery.sap.log.debug("Local Busy Indicator Event Suppressed: " + oEvent.type);
+				Log.debug("Local Busy Indicator Event Suppressed: " + oEvent.type);
 				oEvent.preventDefault();
 				oEvent.stopImmediatePropagation();
 			}
@@ -259,6 +267,7 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 			var oBlockSpan = document.createElement("span");
 
 			oBlockSpan.setAttribute("tabindex", 0);
+			oBlockSpan.classList.add("sapUiBlockLayerTabbable");
 			oBlockSpan.addEventListener('focusin', fnRedirectFocus);
 
 			return oBlockSpan;
@@ -267,8 +276,8 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 		/**
 		 * Create a tabbable span for the block section of the control with according focus handling.
 		 *
+		 * @param {object} oBlockSpan The span element's DOM node
 		 * @param {function} fnRedirectFocus Focus handling function
-		 * @returns {object} The span element's DOM node
 		 * @private
 		 */
 		function removeTabbable(oBlockSpan, fnRedirectFocus) {
@@ -280,6 +289,9 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 
 		/**
 		 * Register event handler to suppress event within busy section
+		 *
+		 * @param {function} fnHandler The handler function
+		 * @returns {function[]} The suppress handlers
 		 */
 		function registerInteractionHandler(fnHandler) {
 			var aSuppressHandler = [],
@@ -292,16 +304,18 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 					capture: true,
 					passive: false
 				});
-				aSuppressHandler.push(jQuery.sap._suppressTriggerEvent(aPreventedEvents[i], oParentDOM, oBlockLayerDOM));
+				aSuppressHandler.push(EventTriggerHook.suppress(aPreventedEvents[i], oParentDOM, oBlockLayerDOM));
 			}
 			//for jQuery triggered events we also need the keydown handler
-			this.$blockLayer.bind('keydown', fnHandler);
+			this.$blockLayer.on('keydown', fnHandler);
 
 			return aSuppressHandler;
 		}
 
 		/**
 		 * Deregister event handler to suppress event within busy section
+		 *
+		 * @param {function} fnHandler The handler function
 		 */
 		function deregisterInteractionHandler(fnHandler) {
 			var i,
@@ -320,15 +334,15 @@ sap.ui.define(['jquery.sap.global'], function(jQuery) {
 			if (this._aSuppressHandler) {
 				for (i = 0; i < this._aSuppressHandler.length; i++) {
 					// this part should be done even no DOMRef exists
-					jQuery.sap._releaseTriggerEvent(this._aSuppressHandler[i]);
+					EventTriggerHook.release(this._aSuppressHandler[i]);
 				}
 			}
 			if (oBlockLayerDOM) {
-				this.$blockLayer.unbind('keydown', fnHandler);
+				this.$blockLayer.off('keydown', fnHandler);
 			}
 		}
 	}
 
 	return BlockLayerUtils;
 
-}, /* bExport= */ true);
+});

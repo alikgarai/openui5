@@ -3,8 +3,24 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global", "sap/ui/fl/changeHandler/HideControl", "sap/ui/fl/changeHandler/UnhideControl", "sap/ui/fl/changeHandler/StashControl", "sap/ui/fl/changeHandler/UnstashControl", "sap/ui/fl/changeHandler/MoveElements", "sap/ui/fl/changeHandler/MoveControls", "sap/ui/fl/changeHandler/PropertyChange", "sap/ui/fl/changeHandler/PropertyBindingChange"
-], function(jQuery, HideControl, UnhideControl, StashControl, UnstashControl, MoveElements, MoveControls, PropertyChange, PropertyBindingChange) {
+	"sap/ui/fl/changeHandler/HideControl",
+	"sap/ui/fl/changeHandler/UnhideControl",
+	"sap/ui/fl/changeHandler/StashControl",
+	"sap/ui/fl/changeHandler/UnstashControl",
+	"sap/ui/fl/changeHandler/MoveElements",
+	"sap/ui/fl/changeHandler/MoveControls",
+	"sap/ui/fl/changeHandler/PropertyChange",
+	"sap/ui/fl/changeHandler/PropertyBindingChange"
+], function(
+	HideControl,
+	UnhideControl,
+	StashControl,
+	UnstashControl,
+	MoveElements,
+	MoveControls,
+	PropertyChange,
+	PropertyBindingChange
+) {
 	"use strict";
 
 	/**
@@ -44,16 +60,15 @@ sap.ui.define([
 			changeType: "moveControls",
 			changeHandler: MoveControls
 		},
-		propertyChange : {
+		propertyChange: {
 			changeType: "propertyChange",
 			changeHandler: PropertyChange
 		},
-		propertyBindingChange : {
+		propertyBindingChange: {
 			changeType: "propertyBindingChange",
 			changeHandler: PropertyBindingChange
 		}
 	};
 
 	return SimpleChanges;
-
 }, true);

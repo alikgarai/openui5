@@ -4,13 +4,13 @@
 
 //Provides control sap.ui.unified.Calendar.
 sap.ui.define([
-	'jquery.sap.global',
 	'sap/ui/unified/calendar/CalendarUtils',
 	'sap/ui/unified/calendar/CalendarDate',
 	'sap/ui/unified/calendar/Month',
 	'sap/ui/unified/library',
-	"./DatesRowRenderer"
-], function(jQuery, CalendarUtils, CalendarDate, Month, library, DatesRowRenderer) {
+	"./DatesRowRenderer",
+	"sap/ui/thirdparty/jquery"
+], function(CalendarUtils, CalendarDate, Month, library, DatesRowRenderer, jQuery) {
 	"use strict";
 
 	/*
@@ -78,10 +78,21 @@ sap.ui.define([
 
 	};
 
+	DatesRow.prototype._setAriaRole = function(sRole){
+		this._ariaRole = sRole;
+
+		return this;
+	};
+
+	DatesRow.prototype._getAriaRole = function(){
+
+		return this._ariaRole ? this._ariaRole : "gridcell";
+	};
+
 	/*
 	 * Sets a start date.
 	 * @param {Date} oStartDate A JavaScript date
-	 * @return {sap.ui.unified.calendar.DatesRow} <code>this</code> for method chaining
+	 * @return {this} <code>this</code> for method chaining
 	 */
 	DatesRow.prototype.setStartDate = function(oStartDate){
 
@@ -90,7 +101,7 @@ sap.ui.define([
 		var iYear = oStartDate.getFullYear();
 		CalendarUtils._checkYearInValidRange(iYear);
 
-		this.setProperty("startDate", oStartDate, true);
+		this.setProperty("startDate", oStartDate);
 		this._oStartDate = CalendarDate.fromLocalJSDate(oStartDate, this.getPrimaryCalendarType());
 
 		if (this.getDomRef()) {
@@ -128,7 +139,7 @@ sap.ui.define([
 	 * So set this properties before setting the date.
 	 *
 	 * @param {object} oDate JavaScript date object for start date.
-	 * @returns {sap.ui.unified.calendar.DatesRow} <code>this</code> to allow method chaining
+	 * @returns {this} <code>this</code> to allow method chaining
 	 * @public
 	 */
 	DatesRow.prototype.setDate = function(oDate){
@@ -152,7 +163,7 @@ sap.ui.define([
 	 * So set this properties before setting the date.
 	 *
 	 * @param {object} oDate JavaScript date object for focused date.
-	 * @returns {sap.ui.unified.calendar.DatesRow} <code>this</code> to allow method chaining
+	 * @returns {this} <code>this</code> to allow method chaining
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -166,6 +177,12 @@ sap.ui.define([
 		Month.prototype.displayDate.apply(this, arguments);
 
 		return this;
+
+	};
+
+	DatesRow.prototype._setTopPosition = function(iTop){
+
+		this._iTopPosition = iTop;
 
 	};
 
@@ -188,7 +205,7 @@ sap.ui.define([
 	 *
 	 * @protected
 	 * @param {int} iFirstDayOfWeek The first day of the week
-	 * @returns {sap.ui.unified.calendar.DatesRow} <code>this</code> to allow method chaining
+	 * @returns {this} <code>this</code> to allow method chaining
 	 */
 	DatesRow.prototype.setFirstDayOfWeek = function(iFirstDayOfWeek){
 

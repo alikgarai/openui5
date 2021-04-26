@@ -7,19 +7,24 @@ sap.ui.define([
     "./library",
     "sap/ui/Device",
     "sap/ui/core/Control",
+	"sap/ui/core/library",
     "sap/m/ToggleButton",
     "sap/m/Button",
-    "./DynamicPageHeaderRenderer"
+    "./DynamicPageHeaderRenderer",
+	"sap/ui/core/InvisibleMessage"
 ], function(
     library,
 	Device,
 	Control,
+	CoreLibrary,
 	ToggleButton,
 	Button,
-	DynamicPageHeaderRenderer
+	DynamicPageHeaderRenderer,
+	InvisibleMessage
 ) {
 		"use strict";
 
+		var InvisibleMessageMode = CoreLibrary.InvisibleMessageMode;
 		/**
 		 * Constructor for a new <code>DynamicPageHeader</code>.
 		 *
@@ -66,8 +71,19 @@ sap.ui.define([
 					/**
 					 * Determines whether the header is pinnable.
 					 */
-					pinnable: {type: "boolean", group: "Appearance", defaultValue: true}
+					pinnable: {type: "boolean", group: "Appearance", defaultValue: true},
+
+					/**
+					 * Determines the background color of the <code>DynamicPageHeader</code>.
+					 *
+					 * <b>Note:</b> The default value of <code>backgroundDesign</code> property is null.
+					 * If the property is not set, the color of the background is <code>@sapUiObjectHeaderBackground</code>,
+					 * which depends on the specific theme.
+					 * @since 1.58
+					*/
+					backgroundDesign : {type: "sap.m.BackgroundDesign", group: "Appearance"}
 				},
+				defaultAggregation: "content",
 				aggregations: {
 
 					/**
@@ -106,7 +122,6 @@ sap.ui.define([
 			LABEL_EXPANDED: DynamicPageHeader._getResourceBundle().getText("EXPANDED_HEADER"),
 			LABEL_COLLAPSED: DynamicPageHeader._getResourceBundle().getText("SNAPPED_HEADER"),
 			LABEL_PINNED: DynamicPageHeader._getResourceBundle().getText("PIN_HEADER"),
-			LABEL_UNPINNED: DynamicPageHeader._getResourceBundle().getText("UNPIN_HEADER"),
 			TOOLTIP_COLLAPSE_BUTTON: DynamicPageHeader._getResourceBundle().getText("COLLAPSE_HEADER_BUTTON_TOOLTIP"),
 			STATE_TRUE: "true",
 			STATE_FALSE: "false"
@@ -115,11 +130,16 @@ sap.ui.define([
 		/*************************************** Lifecycle members ******************************************/
 		DynamicPageHeader.prototype.init = function() {
 			this._bShowCollapseButton = true;
+			this._oInvisibleMessage = null;
 		};
 
 		DynamicPageHeader.prototype.onAfterRendering = function () {
 			this._initARIAState();
 			this._initPinButtonARIAState();
+
+			if (!this._oInvisibleMessage) {
+				this._oInvisibleMessage = InvisibleMessage.getInstance();
+			}
 		};
 
 		/*************************************** Private members ******************************************/
@@ -216,21 +236,6 @@ sap.ui.define([
 		};
 
 		/**
-		 * Updates <code>DynamicPageHeader</code> pin/unpin button ARIA attributes values according to the pinned/unpinned state.
-		 * @param {Boolean} bPinned determines if the <code>DynamicPageHeader</code> is pinned or unpinned
-		 * @private
-		 */
-		DynamicPageHeader.prototype._updateARIAPinButtonState = function (bPinned) {
-			var oPinBtn = this._getPinButton();
-
-			if (bPinned) {
-				oPinBtn.setTooltip(DynamicPageHeader.ARIA.LABEL_UNPINNED);
-			} else {
-				oPinBtn.setTooltip(DynamicPageHeader.ARIA.LABEL_PINNED);
-			}
-		};
-
-		/**
 		 * Lazily retrieves the <code>DynamicPageHeader</code> pin/unpin button.
 		 * @returns {sap.m.ToggleButton}
 		 * @private
@@ -288,7 +293,7 @@ sap.ui.define([
 		 * @private
 		 */
 		DynamicPageHeader.prototype._getShowCollapseButton = function () {
-			return this._bShowCollapseButton;
+			return this._bShowCollapseButton && !!this.getContent().length;
 		};
 
 		/**
@@ -305,7 +310,8 @@ sap.ui.define([
 		 * @private
 		 */
 		DynamicPageHeader.prototype._focusCollapseButton = function () {
-			this._getCollapseButton().$().focus();
+			this._getCollapseButton().$().trigger("focus");
+			this._oInvisibleMessage.announce(this._getCollapseButton().getTooltip(), InvisibleMessageMode.Polite);
 		};
 
 		/**
@@ -313,7 +319,7 @@ sap.ui.define([
 		 * @private
 		 */
 		DynamicPageHeader.prototype._focusPinButton = function () {
-			this._getPinButtonJQueryRef().focus();
+			this._getPinButtonJQueryRef().trigger("focus");
 		};
 
 		/**

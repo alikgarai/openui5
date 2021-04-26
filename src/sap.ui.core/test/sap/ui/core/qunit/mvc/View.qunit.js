@@ -5,8 +5,9 @@ sap.ui.define([
 	"sap/ui/core/util/XMLPreprocessor",
 	"sap/ui/model/json/JSONModel",
 	"sap/ui/core/library",
-	"./testdata/TestPreprocessor"
-], function(View, XMLView, XMLPreprocessor, JSONModel, coreLibrary, TestPreprocessor) {
+	"./testdata/TestPreprocessor",
+	"sap/base/Log"
+], function(View, XMLView, XMLPreprocessor, JSONModel, coreLibrary, TestPreprocessor, Log) {
 	"use strict";
 
 	var ViewType = coreLibrary.mvc.ViewType;
@@ -30,7 +31,7 @@ sap.ui.define([
 
 	QUnit.module("sap.ui.core.mvc.View#runPreprocessor(sync)", {
 		beforeEach: function() {
-			this.mock = sinon.mock(sap.ui.core.util.XMLPreprocessor);
+			this.mock = sinon.mock(XMLPreprocessor);
 			this.expectProcess = this.mock.expects("process");
 			this._mPreprocessors = jQuery.extend(true, {}, View._mPreprocessors);
 			View.PreprocessorType = { "Foo": "foo" };
@@ -208,7 +209,7 @@ sap.ui.define([
 					}]
 				}
 			}),
-			logSpy = this.spy(jQuery.sap.log, "debug");
+			logSpy = this.spy(Log, "debug");
 
 		try {
 			oView.runPreprocessor("xml", oSource, true);
@@ -222,7 +223,7 @@ sap.ui.define([
 
 	QUnit.module("sap.ui.core.mvc.View#runPreprocessor (async)", {
 		beforeEach: function() {
-			this.mock = sinon.mock(sap.ui.core.util.XMLPreprocessor);
+			this.mock = sinon.mock(XMLPreprocessor);
 			this.expectProcess = this.mock.expects("process");
 			this._mPreprocessors = jQuery.extend(true, {}, View._mPreprocessors);
 			View.PreprocessorType = { "Foo": "foo" };
@@ -437,8 +438,7 @@ sap.ui.define([
 				'<mvc:View xmlns:mvc="sap.ui.core.mvc"/>'
 			].join('');
 			this.oPreprocessor = function(vSource, sCaller, mSettings) {
-				jQuery.sap.log.debug("[TEST] " + mSettings.message, sCaller);
-				assert.ok(true, "Preprocessor executed");
+				assert.ok(true, "Preprocessor executed with message: '" + mSettings.message + "' from '" + sCaller + "'");
 				return new Promise(function(resolve) {
 					resolve(vSource);
 				});
@@ -553,8 +553,7 @@ sap.ui.define([
 		var done = assert.async();
 		var oLocalPreprocessor = function(vSource, sCaller, mSettings) {
 			// async test part
-			jQuery.sap.log.debug("[TEST] " + mSettings.message, sCaller);
-			assert.ok(true, "Local preprocessor executed");
+			assert.ok(true, "Local Preprocessor executed with message: '" + mSettings.message + "' from '" + sCaller + "'");
 			return new Promise(function(resolve) {
 				resolve(vSource);
 			});
@@ -656,7 +655,7 @@ sap.ui.define([
 		assert.expect(4);
 		var done = assert.async();
 
-		var logSpy = sinon.spy(jQuery.sap.log, "debug");
+		var logSpy = sinon.spy(Log, "debug");
 
 		// call via init
 		var oView = sap.ui.xmlview({
@@ -683,9 +682,9 @@ sap.ui.define([
 				componentId: undefined,
 				id: "dummy",
 				name: undefined,
-				sync: false
+				sync: true
 			};
-		assert.deepEqual(oView.getPreprocessorInfo(), oPreprocessorInfo);
+		assert.deepEqual(oView.getPreprocessorInfo(true), oPreprocessorInfo);
 		oView.destroy();
 	});
 
@@ -703,7 +702,7 @@ sap.ui.define([
 			assert: assert.ok.bind(assert)
 		};
 
-		XMLView.registerPreprocessor("controls", "test.sap.ui.core.qunit.mvc.testdata.TestPreprocessor", true, mSettings);
+		XMLView.registerPreprocessor("controls", "test-resources.sap.ui.core.qunit.mvc.testdata.TestPreprocessor", true, mSettings);
 
 		// call via init
 		var oView = sap.ui.xmlview({
@@ -849,7 +848,7 @@ sap.ui.define([
 				"</mvc:View>"
 			].join("");
 
-			sap.ui.define("test/viewFactory/Component", [
+			sap.ui.predefine("test/viewFactory/Component", [
 				"sap/ui/core/Component"
 			], function(Component) {
 				return Component.extend("test.viewFactory.component", {
@@ -864,18 +863,135 @@ sap.ui.define([
 				});
 			});
 
-			var TestViewFactoryComponent = sap.ui.require("test/viewFactory/Component");
-			var oComponent = new TestViewFactoryComponent();
+			sap.ui.require(["test/viewFactory/Component"], function(TestViewFactoryComponent) {
+				var oComponent = new TestViewFactoryComponent();
 
-			oComponent.runAsOwner(function() {
-				View.create({
-					type: ViewType.XML,
-					definition: sDefinition
-				}).then(function(oView) {
-					assert.strictEqual(Component.getOwnerComponentFor(oView), oComponent, "View should be created with component as owner");
-					done();
+				oComponent.runAsOwner(function() {
+					View.create({
+						type: ViewType.XML,
+						definition: sDefinition
+					}).then(function(oView) {
+						assert.strictEqual(Component.getOwnerComponentFor(oView), oComponent, "View should be created with component as owner");
+						done();
+					});
 				});
 			});
 		});
+	});
+
+	QUnit.module("Typed Views", {
+		beforeEach: function() {
+			this.oAfterInitSpy = sinon.spy(View.prototype, "fireAfterInit");
+		},
+		afterEach: function() {
+			this.oAfterInitSpy.restore();
+		}
+	});
+
+	QUnit.test("Created via sap.ui.view", function(assert) {
+		assert.expect(2);
+
+		var oTypedView = sap.ui.view({
+			type: "JS",
+			viewName: "module:testdata/mvc/TypedView"
+		});
+		assert.ok(oTypedView.isA("testdata.mvc.TypedView"), "Views is a typed view");
+		assert.ok(oTypedView.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+		oTypedView.destroy();
+	});
+
+	QUnit.test("Created via constructor", function(assert) {
+		assert.expect(2);
+		var done = assert.async();
+
+		sap.ui.require([
+			"testdata/mvc/TypedView"
+		], function(TypedView) {
+			var oTypedView = new TypedView();
+			assert.ok(oTypedView.isA("testdata.mvc.TypedView"), "Views is a typed view");
+			assert.ok(oTypedView.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+			oTypedView.destroy();
+			done();
+		}, function() {
+			assert.ok(false, "loading the view class failed");
+			done();
+		});
+	});
+
+	QUnit.test("Sync typed Views embedded in XMLView", function(assert) {
+		assert.expect(6);
+
+		var oXMLView = sap.ui.xmlview({
+			viewName : "testdata.mvc.XMLViewEmbeddingSyncTypedViews"
+		});
+		var oPanel = oXMLView.getContent()[0];
+		var oTypedView1 = oPanel.getContent()[0];
+		assert.ok(oTypedView1, "embedded view without async flag has been created");
+		assert.ok(oTypedView1.isA("testdata.mvc.TypedView"), "embedded view is a typed view");
+		assert.ok(oTypedView1.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+		var oTypedView2 = oPanel.getContent()[1];
+		assert.ok(oTypedView2, "embedded view with async=false flag has been created");
+		assert.ok(oTypedView2.isA("testdata.mvc.TypedView"), "embedded view is a typed view");
+		// Depending on the loading state of sap.m.Panel, the control might or might not be there
+		assert.ok(oTypedView2.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+
+		oXMLView.destroy();
+	});
+
+	QUnit.test("Created via View.create", function(assert) {
+		assert.expect(3);
+
+		return View.create({
+			viewName : "module:testdata/mvc/TypedView"
+		}).then(function(oTypedView) {
+			assert.equal(this.oAfterInitSpy.callCount, 1, "AfterInit event fired before resolving");
+			assert.ok(oTypedView.isA("testdata.mvc.TypedView"), "Views is a typed view");
+			assert.ok(oTypedView.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+			oTypedView.destroy();
+		}.bind(this));
+	});
+
+	QUnit.test("Async and sync typed Views embedded in XMLView", function(assert) {
+		return XMLView.create({
+			viewName : "testdata.mvc.XMLViewEmbeddingTypedViews"
+		}).then(function(oXMLView) {
+			assert.expect(22);
+			assert.equal(this.oAfterInitSpy.callCount, 7, "AfterInit event fired before resolving");
+
+			var oPanel = oXMLView.getContent()[0];
+			var oTypedView1 = oPanel.getContent()[0];
+			assert.ok(oTypedView1, "embedded view without async=true flag has been created");
+			assert.ok(oTypedView1.isA("testdata.mvc.TypedView"), "embedded view is a typed view");
+			assert.ok(oTypedView1.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+
+			var oTypedView2 = oPanel.getContent()[1];
+			assert.ok(oTypedView2, "embedded view with async=false flag has been created");
+			assert.ok(oTypedView2.isA("testdata.mvc.TypedView"), "embedded view is a typed view");
+			// Note: the async factory should wait for async child views
+			assert.ok(oTypedView2.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+
+			var oTypedView3 = oPanel.getContent()[2];
+			assert.ok(oTypedView3, "embedded view with async=false flag has been created");
+			assert.ok(oTypedView3.isA("testdata.mvc.TypedView"), "embedded view is a typed view");
+			assert.ok(oTypedView3.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+
+			var oTypedView4 = oPanel.getContent()[3];
+			assert.ok(oTypedView4, "embedded view with async=true flag has been created");
+			assert.ok(oTypedView4.isA("testdata.mvc.TypedView"), "embedded view is a typed view");
+			assert.ok(oTypedView4.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+
+			var oTypedView5 = oPanel.getContent()[4];
+			assert.ok(oTypedView5, "embedded view with async=true flag has been created");
+			assert.ok(oTypedView5.isA("testdata.mvc.TypedViewWithRenderer"), "embedded view is a typed view");
+			assert.ok(oTypedView5.byId("myPanel").isA("sap.m.Panel"), "Content created successfully");
+			assert.equal(oTypedView5.getMetadata().getRendererName(), "testdata.mvc.TypedViewWithRendererRenderer", "Own Renderer set correctly");
+
+			var oView6 = oPanel.getContent()[5];
+			assert.ok(oView6, "embedded view with async=true flag has been created");
+			assert.ok(oView6.isA("sap.ui.core.mvc.JSView"), "embedded view is js view");
+			assert.ok(oView6.byId("Label1").isA("sap.m.Label"), "Content created successfully");
+			assert.equal(oView6.getMetadata().getRendererName(), "sap.ui.core.mvc.JSViewRenderer", "Renderer set correctly");
+			oXMLView.destroy();
+		}.bind(this));
 	});
 });

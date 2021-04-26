@@ -1,21 +1,104 @@
-.sapUiDtContextMenu.sapMPopover {
-	padding-left: 0.5rem;
-	padding-right: 0.5rem;
+/******************************************************************
+	Style of the DT Contextmenu - base Theme
+*******************************************************************/
+@_sap_ui_dt_ContextMenu_BoxShadow: @sapUiUx3ToolPopupShadow; //0px 6px 12px 0px fade(black, 30);
+@_sap_ui_dt_ContextMenu_FocusColor: @sapUiContentFocusColor; //#000
+
+.sapUiDtContextMenu {
+
+	.sapMPopoverScroll {
+		margin-right: 0 !important;
+	}
+
+	button {
+
+		&.sapMBtn {
+			padding-left: 0.0625rem; //1px
+			padding-right: 0.0625rem; //1px
+		}
+
+		.sapMBtnInner {
+			text-shadow: none;
+			display: block;
+		}
+
+		.sapMBtnText {
+			text-align: start;
+		}
+
+		.sapMBtn:focus > .sapMFocusable,
+		&.sapMBtn:focus > .sapMFocusable {
+			border: 0.0625rem dotted @_sap_ui_dt_ContextMenu_FocusColor; //1px
+			outline: none;
+		}
+
+		&.sapMBtn.sapMBtnDisabled {
+			opacity: 0.5;
+		}
+	}
+
+	&.sapMPopover, .sapMPopover {
+		opacity: 0;
+		min-width: 0;
+		transition: box-shadow .25s;
+		box-shadow: @_sap_ui_dt_ContextMenu_BoxShadow;
+		padding: 0.1875rem; //3px
+
+		&.sapUiDtContextMenuVisible {
+			opacity: 1;
+		}
+	}
+
+	&.sapMPopoverArr, .sapMPopoverArr {
+		bottom: -0.5rem; //8px
+		left: 0.75rem !important; //12px
+
+		&:after {
+			box-shadow: none;
+			width: 0.75rem; //12px
+			height: 0.75rem; //12px
+		}
+
+		&.sapMPopoverArrUp {
+			top: -0.5rem; //8px
+		}
+	}
+
+	&.sapUiDtContextMenuRightArrow {
+		&.sapMPopoverArr, .sapMPopoverArr {
+			left: unset !important;
+			right: 0.75rem !important; //12px
+		}
+	}
 }
 
-.sapUiDtContextMenu .sapMPopoverScroll {
-	margin-right: 0px !important;
+.sapUiSizeCozy {
+
+	.sapUiDtContextMenu {
+
+		&.sapMPopoverArr, .sapMPopoverArr {
+			left: 1.375rem !important; //16px
+		}
+		button.sapMBtn {
+			margin-left: 0.125rem; //2px
+			margin-right: 0.125rem; //2px
+		}
+		&.sapUiDtContextMenuRightArrow {
+			&.sapMPopoverArr, .sapMPopoverArr {
+				left: unset !important;
+				right: 1.375rem !important; //16px
+			}
+		}
+	}
+
 }
 
-.sapUiDtContextMenu .sapMBtnInner {
-	text-align: left;
+// Special handling for IE and EDGE Browsers
+html[data-sap-ui-browser^="ie"] .sapUiDtContextMenu button.sapMBtn:focus .sapMBtnFocusDiv,
+html[data-sap-ui-browser^="ed"] .sapUiDtContextMenu button.sapMBtn:focus .sapMBtnFocusDiv {
+	border: none;
 }
-
-.sapUiDtContextMenu.sapMPopover {
-	min-width: 0px;
-}
-
-.sapUiDtContextMenu.sapMPopover.sapUiSizeCompact {
-	padding-left: 0.2rem;
-	padding-right: 0.2rem;
+// because the Button-Control sets a specific rule for IE, we have to define the display here again
+html[data-sap-ui-browser*='ie'] .sapUiDtContextMenu button .sapMBtnInner {
+	display: block;
 }

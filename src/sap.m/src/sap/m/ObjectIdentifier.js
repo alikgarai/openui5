@@ -5,6 +5,8 @@
 // Provides control sap.m.ObjectIdentifier.
 sap.ui.define([
 	'./library',
+	'./Link',
+	'./Text',
 	'sap/ui/core/Control',
 	'sap/ui/core/IconPool',
 	'sap/ui/core/InvisibleText',
@@ -15,6 +17,8 @@ sap.ui.define([
 ],
 function(
 	library,
+	Link,
+	Text,
 	Control,
 	IconPool,
 	InvisibleText,
@@ -30,7 +34,8 @@ function(
 	// shortcut for sap.ui.core.TextDirection
 	var TextDirection = coreLibrary.TextDirection;
 
-
+	// shortcut for sap.m.EmptyIndicator
+	var EmptyIndicatorMode = library.EmptyIndicatorMode;
 
 	/**
 	 * Constructor for a new ObjectIdentifier.
@@ -39,7 +44,9 @@ function(
 	 * @param {object} [mSettings] Initial settings for the new control
 	 *
 	 * @class
-	 * The ObjectIdentifier is a display control that enables the user to easily identify a specific object. The ObjectIdentifier title is the key identifier of the object and additional text and icons can be used to further distinguish it from other objects.
+	 * The ObjectIdentifier is a display control that enables the user to easily identify a specific object. The ObjectIdentifier title is the key identifier of the object and additional text can be used to further distinguish it from other objects.
+	 *
+     * <b>Note:</b> This control should not be used with {@link sap.m.Label} or in Forms along with {@link sap.m.Label}.
 	 * @extends sap.ui.core.Control
 	 * @version ${version}
 	 *
@@ -99,7 +106,14 @@ function(
 			 * Specifies the element's text directionality with enumerated options. By default, the control inherits text direction from the DOM.
 			 * @since 1.28.0
 			 */
-			textDirection : {type : "sap.ui.core.TextDirection", group : "Appearance", defaultValue : TextDirection.Inherit}
+			textDirection : {type : "sap.ui.core.TextDirection", group : "Appearance", defaultValue : TextDirection.Inherit},
+
+			/**
+			 * Specifies if an empty indicator should be displayed when there is no text.
+			 *
+			 * @since 1.89
+			 */
+			emptyIndicatorMode: { type: "sap.m.EmptyIndicatorMode", group: "Appearance", defaultValue: EmptyIndicatorMode.Off }
 		},
 		aggregations : {
 
@@ -138,7 +152,8 @@ function(
 			 * Association to controls / IDs, which label this control (see WAI-ARIA attribute aria-labelledby).
 			 */
 			ariaLabelledBy: {type: "sap.ui.core.Control", multiple: true, singularName: "ariaLabelledBy"}
-		}
+		},
+		dnd: { draggable: true, droppable: false }
 	}});
 
 
@@ -152,7 +167,6 @@ function(
 
 		if (sap.ui.getCore().getConfiguration().getAccessibility()) {
 			ObjectIdentifier.OI_ARIA_ROLE = oLibraryResourceBundle.getText("OI_ARIA_ROLE");
-			this._createAriaInfoTextControl();
 		}
 	};
 
@@ -176,11 +190,6 @@ function(
 		if (this._notesIcon) {
 			this._notesIcon.destroy();
 			this._notesIcon = null;
-		}
-
-		if (this._oAriaCustomRole) {
-			this._oAriaCustomRole.destroy();
-			this._oAriaCustomRole = null;
 		}
 	};
 
@@ -256,67 +265,27 @@ function(
 	 * @private
 	 */
 	ObjectIdentifier.prototype._getTitleControl = function() {
-		var oTitleControl = this.getAggregation("_titleControl");
+		var oTitleControl = this.getAggregation("_titleControl"),
+			sId = this.getId(),
+			sTitle = ManagedObject.escapeSettingsValue(this.getProperty("title"));
 
 		if (!oTitleControl) {
 			// Lazy initialization
 			if (this.getProperty("titleActive")) {
-				oTitleControl = new sap.m.Link({
-					id : this.getId() + "-link",
-					text: ManagedObject.escapeSettingsValue(this.getProperty("title")),
+				oTitleControl = new Link({
+					id : sId + "-link",
+					text: sTitle,
 					//Add a custom hidden role "ObjectIdentifier" with hidden text
-					ariaLabelledBy: this._oAriaCustomRole
+					ariaLabelledBy: InvisibleText.getStaticId("sap.m", "OI_ARIA_ROLE")
 				});
+				oTitleControl.addAssociation("ariaLabelledBy", sId + "-text", true);
 			} else {
-				oTitleControl = new sap.m.Text({
-					id : this.getId() + "-txt",
-					text: ManagedObject.escapeSettingsValue(this.getProperty("title"))
+				oTitleControl = new Text({
+					id : sId + "-txt",
+					text: sTitle
 				});
 			}
 			this.setAggregation("_titleControl", oTitleControl, true);
-		}
-
-		oTitleControl.setVisible(!!this.getTitle());
-
-		return oTitleControl;
-	};
-
-	/**
-	 * Updates the text of the title control and re-renders it if present in the DOM.
-	 * @param {boolean} bIsTitleActive Update title control with the respect to the current 'titleActive' property value
-	 *
-	 * @private
-	 */
-	ObjectIdentifier.prototype._updateTitleControl = function(bIsTitleActive) {
-		var oRm,
-			oTitleControl = this._getTitleControl();
-
-		if (bIsTitleActive && oTitleControl instanceof sap.m.Text) {
-			this.destroyAggregation("_titleControl", true);
-			oTitleControl = new sap.m.Link({
-				id : this.getId() + "-link",
-				text: ManagedObject.escapeSettingsValue(this.getProperty("title")),
-				//Add a custom hidden role "ObjectIdentifier" with hidden text
-				ariaLabelledBy: this._oAriaCustomRole
-			});
-			this.setAggregation("_titleControl", oTitleControl, true);
-		} else if (!bIsTitleActive && oTitleControl instanceof sap.m.Link) {
-			this.destroyAggregation("_titleControl", true);
-			oTitleControl = new sap.m.Text({
-				id : this.getId() + "-txt",
-				text: ManagedObject.escapeSettingsValue(this.getProperty("title"))
-			});
-			this.setAggregation("_titleControl", oTitleControl, true);
-		}
-
-		// check if we have "-title" div rendered and if so rerender the Title inside it
-		if (this.$("title").length) {
-			oTitleControl.setProperty("text", this.getProperty("title"), true);
-
-			oRm = sap.ui.getCore().createRenderManager();
-			oRm.renderControl(oTitleControl);
-			oRm.flush(this.$("title")[0]);
-			oRm.destroy();
 		}
 
 		return oTitleControl;
@@ -332,14 +301,13 @@ function(
 		var oTextControl = this.getAggregation("_textControl");
 
 		if (!oTextControl) {
-			oTextControl = new sap.m.Text({
+			oTextControl = new Text({
 				text: ManagedObject.escapeSettingsValue(this.getProperty("text"))
 			});
 			this.setAggregation("_textControl", oTextControl, true);
 		}
 
 		oTextControl.setTextDirection(this.getTextDirection());
-		oTextControl.setVisible(!!this.getText());
 
 		return oTextControl;
 	};
@@ -350,19 +318,14 @@ function(
 	 * Default value is empty/undefined.
 	 * @public
 	 * @param {string} sTitle New value for property title
-	 * @returns {sap.m.ObjectIdentifier} this to allow method chaining
+	 * @returns {this} this to allow method chaining
 	 */
 	ObjectIdentifier.prototype.setTitle = function (sTitle) {
-		//always suppress rerendering because title div is rendered
-		//if text is empty or not
-		var oTitleControl = this._getTitleControl();
-		oTitleControl.setProperty("text", sTitle, false);
-		oTitleControl.setVisible(!!oTitleControl.getText());
-		this.setProperty("title", sTitle, true);
-		this.$("text").toggleClass("sapMObjectIdentifierTextBellow",
-				!!this.getProperty("text") && !!this.getProperty("title"));
+		if (sTitle) {
+			this._getTitleControl().setProperty("text", sTitle);
+		}
 
-		return this;
+		return this.setProperty("title", sTitle);
 	};
 
 	/**
@@ -370,19 +333,14 @@ function(
 	 * Default value is empty/undefined.
 	 * @public
 	 * @param {string} sText New value for property text
-	 * @returns {sap.m.ObjectIdentifier} this to allow method chaining
+	 * @returns {this} this to allow method chaining
 	 */
-	ObjectIdentifier.prototype.setText = function (sText) {
-		//always suppress rerendering because text div is rendered
-		//if text is empty or not
-		this.setProperty("text", sText, true);
+	ObjectIdentifier.prototype.setText = function(sText) {
+		if (sText) {
+			this._getTextControl().setProperty("text", sText);
+		}
 
-		var oTextControl = this._getTextControl();
-		oTextControl.setProperty("text", sText, false);
-		this.$("text").toggleClass("sapMObjectIdentifierTextBellow",
-				!!this.getProperty("text") && !!this.getProperty("title"));
-
-		return this;
+		return this.setProperty("text", sText);
 	};
 
 	/**
@@ -390,17 +348,18 @@ function(
 	 * Default value is false.
 	 * @public
 	 * @param {boolean} bValue new value for property titleActive
-	 * @returns {sap.m.ObjectIdentifier} this to allow method chaining
+	 * @returns {this} this to allow method chaining
 	 */
 	ObjectIdentifier.prototype.setTitleActive = function(bValue) {
-		var bPrevValue = this.getProperty("titleActive");
+		var bPrevValue = this.getTitleActive();
 
-		// Return if the new value is the same as the old one
+		this.setProperty("titleActive", bValue);
+
 		if (bPrevValue != bValue) {
-			this.setProperty("titleActive", bValue, true);
-			// If the title is already rendered, then the title control has to be updated and rerendered
-			this._updateTitleControl(bValue);
+			this.destroyAggregation("_titleControl");
+			this._getTitleControl();
 		}
+
 		return this;
 	};
 
@@ -478,21 +437,35 @@ function(
 		return Control.prototype.removeAssociation.apply(this, arguments);
 	};
 
-
 	/**
-	 * Creates additional aria hidden text with the role of the control.
-	 * @returns {sap.ui.core.InvisibleText} The additional aria hidden text with the role of the control
-	 * @private
+	 * @see sap.ui.core.Control#getAccessibilityInfo
+	 * @returns {Object} Current accessibility state of the control
+	 * @protected
 	 */
-	ObjectIdentifier.prototype._createAriaInfoTextControl = function () {
+	ObjectIdentifier.prototype.getAccessibilityInfo = function() {
+		// first get accessibility info from the title control, which can be Text or Link
+		var oTitleInfo = this.getAggregation("_titleControl")
+			? this.getAggregation("_titleControl").getAccessibilityInfo()
+			: {
+				type: "",
+				description: ""
+			},
+			oType = (ObjectIdentifier.OI_ARIA_ROLE + " " + (oTitleInfo.type || "")).trim();
 
-		if (!this._oAriaCustomRole) {
-			this._oAriaCustomRole = new InvisibleText(this.getId() + "-oIHiddenText", { text: ObjectIdentifier.OI_ARIA_ROLE});
+		// add ObjectIdentifier type to the title type
+		if (this.getTitle() || this.getText()) {
+			oTitleInfo.type = oType;
 		}
+		// add ObjectIdentifier text to the description of the title
+		oTitleInfo.description = oTitleInfo.description + " " + this.getText();
 
-		return this._oAriaCustomRole;
+		// return the modified Object containing all needed information about the control
+		return oTitleInfo;
 	};
 
+	ObjectIdentifier.prototype._hasTopRow = function() {
+		return this.getTitle() || this.getBadgeNotes() || this.getBadgePeople() || this.getBadgeAttachments();
+	};
 
 	return ObjectIdentifier;
 

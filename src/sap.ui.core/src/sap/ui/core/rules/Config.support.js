@@ -6,10 +6,12 @@
  */
 sap.ui.define([
 	"jquery.sap.global",
-	"sap/ui/support/library"
+	"sap/ui/support/library",
+	"sap/ui/core/mvc/XMLView"
 ], function(
 	jQuery,
-	SupportLib) {
+	SupportLib,
+	XMLView) {
 	"use strict";
 
 	// shortcuts
@@ -28,27 +30,69 @@ sap.ui.define([
 		audiences: [Audiences.Application],
 		categories: [Categories.Performance],
 		enabled: true,
-		minversion: "1.32",
+		minversion: "1.58",
 		title: "Preload Configuration",
 		description: "Checks whether the preload configuration was set correctly to async",
-		resolution: "Add \"data-sap-ui-preload=\"async\"\" to script tag that includes \"sap-ui-core.js\"",
-		resolutionurls: [{
-			text: "Performance: Speed Up Your App",
-			href: "https://sapui5.hana.ondemand.com/#docs/guide/408b40efed3c416681e1bd8cdd8910d4.html"
-		}],
-		check: function(oIssueManager, oCoreFacade) {
-			// Check for FLP scenario
-			var oUshellLib = sap.ui.getCore().getLoadedLibraries()["sap.ushell"];
-
-			if (sap.ui.getCore().getConfiguration().getPreload() !== "async" && !oUshellLib) {
-				oIssueManager.addIssue({
-					severity: Severity.High,
-					details: "Preloading libraries asynchronously improves the application performance massively.",
-					context: {
-						id: "WEBPAGE"
-					}
-				});
+		resolution: "Please execute this rule to get a specific solution based on the application's preload mode configuration.",
+		resolutionurls: [
+			{
+				text: "Performance: Speed Up Your App",
+				href: "https://sapui5.hana.ondemand.com/#/topic/408b40efed3c416681e1bd8cdd8910d4"
+			},
+			{
+				text: "Best Practices for Loading Modules Asynchronously",
+				href: "https://openui5.hana.ondemand.com/#/topic/00737d6c1b864dc3ab72ef56611491c4#loio00737d6c1b864dc3ab72ef56611491c4"
+			},
+			{
+				text: "Is Your Application Ready for Asynchronous Loading?",
+				href: "https://sapui5.hana.ondemand.com/#/topic/493a15aa978d4fe9a67ea9407166eb01"
 			}
+		]
+	};
+
+	oPreloadAsyncCheck.check = function(oIssueManager, oCoreFacade) {
+		// Check for debug mode
+		var bIsDebug = sap.ui.getCore().getConfiguration().getDebug();
+		if (bIsDebug) {
+			return;
+		}
+		// Check for FLP scenario
+		var oUshellLib = sap.ui.getCore().getLoadedLibraries()["sap.ushell"];
+		if (oUshellLib) {
+			return;
+		}
+
+		var vPreloadMode = sap.ui.getCore().getConfiguration().getPreload(),
+			bLoaderIsAsync = sap.ui.loader.config().async;
+
+		var sDetails = "It is recommended to use the configuration option " +
+			"'data-sap-ui-async=\"true\"' instead of 'data-sap-ui-preload=\"async\"'. " +
+			"With this option single modules and preload files will be loaded asynchronously. " +
+			"Note: Enabling this behaviour requires intensive testing of the application.";
+
+		// "data-sap-ui-preload" attribute is set to async and could be replaced with "data-sap-ui-async" (recommended).
+		if (vPreloadMode === "async" && !bLoaderIsAsync) {
+			oPreloadAsyncCheck.resolution = "Please replace 'data-sap-ui-preload=\"async\"' with 'data-sap-ui-async=\"true\"' " +
+				"in the bootstrap script, as it implicitly sets the loading behaviour of preload files to be asynchronous.";
+			oIssueManager.addIssue({
+				severity: Severity.High,
+				details: sDetails,
+				context: {
+					id: "WEBPAGE"
+				}
+			});
+		// "data-sap-ui-preload" attribute is set to any value, but not async.
+		} else if (vPreloadMode !== "async" && !bLoaderIsAsync) {
+			oPreloadAsyncCheck.resolution = "Please configure 'data-sap-ui-async=\"true\"' in the bootstrap script, " +
+				"as it implicitly sets the loading behaviour of preload files to be asynchronous. " +
+				"In case you have already configured the 'data-sap-ui-preload' option, you should remove it.";
+			oIssueManager.addIssue({
+				severity: Severity.High,
+				details: sDetails,
+				context: {
+					id: "WEBPAGE"
+				}
+			});
 		}
 	};
 
@@ -69,7 +113,7 @@ sap.ui.define([
 			"For more information, see the SAPUI5 developer guide.",
 		resolutionurls: [{
 			text: "Documentation: Cache Buster for SAPUI5 Application Resources",
-			href: "https://sapui5.hana.ondemand.com/#docs/guide/4cfe7eff3001447a9d4b0abeaba95166.html"
+			href: "https://sapui5.hana.ondemand.com/#/topic/4cfe7eff3001447a9d4b0abeaba95166"
 		}],
 		check: function(oIssueManager, oCoreFacade, oScope) {
 			var sUI5ICFNode = "/sap/bc/ui5_ui5/";
@@ -114,69 +158,80 @@ sap.ui.define([
 		enabled: true,
 		minversion: "1.34",
 		title: "Library Usage",
-		description: "Checks whether there are unused loaded libraries",
+		description: "Checks whether there are unused loaded libraries. This rule only works on global execution scope.",
 		resolution: "Adapt your application descriptor and your application coding to improve the performance",
 		resolutionurls: [{
 			text: 'Documentation: Descriptor Dependencies to Libraries and Components',
 			href: 'https://openui5.hana.ondemand.com/#/topic/8521ad1955f340f9a6207d615c88d7fd'
 		}],
 		check: function(oIssueManager, oCoreFacade, oScope) {
-
-			//1. Ignore libraries with instantiated elements
-			var mLibraries = sap.ui.getCore().getLoadedLibraries();
-			oScope.getElements().forEach(function(oElement) {
-				var sElementLib = oElement.getMetadata().getLibraryName();
-				if (mLibraries[sElementLib]) {
-					delete mLibraries[sElementLib];
-				}
-			});
-
-			// 2. Ignore libraries with declared modules
-			// Alternative: More exact, but request-dependent solution would be loading and evaluating the resources.json file for each library
-			var aDeclaredModules = jQuery.sap.getAllDeclaredModules();
-			Object.keys(mLibraries).forEach(function(sLibrary) {
-				var sLibraryWithDot = sLibrary + ".";
-				for (var i = 0; i < aDeclaredModules.length; i++) {
-					// Ignore library types and library enum files
-					var sDeclaredModule = aDeclaredModules[i];
-					if (sDeclaredModule.indexOf(sLibraryWithDot) === 0 &&
-						mLibraries[sLibrary].types.indexOf(sDeclaredModule) === -1 &&
-						sDeclaredModule.lastIndexOf(".library") !== sDeclaredModule.length - ".library".length &&
-						sDeclaredModule.lastIndexOf(".library-preload") !== sDeclaredModule.length - ".library-preload".length &&
-						sDeclaredModule.lastIndexOf(".flexibility") !== sDeclaredModule.length - ".flexibility".length &&
-						sDeclaredModule.lastIndexOf(".support") !== sDeclaredModule.length - ".support".length) {
-						delete mLibraries[sLibrary];
-						break;
-					}
-				}
-			});
-
-			// 3. Remove unused library dependent unused libraries
-			var aUnusedLibrary = Object.keys(mLibraries);
-			Object.keys(mLibraries).forEach(function(sLibrary) {
-				mLibraries[sLibrary].dependencies.forEach(function(oDependency) {
-					var iIndex = aUnusedLibrary.indexOf(oDependency);
-					if (iIndex > -1) {
-						aUnusedLibrary.splice(iIndex, 1);
+			if (oScope.getType() === "global") {
+				//1. Ignore libraries with instantiated elements
+				var mLibraries = sap.ui.getCore().getLoadedLibraries();
+				oScope.getElements().forEach(function(oElement) {
+					var sElementLib = oElement.getMetadata().getLibraryName();
+					if (mLibraries[sElementLib]) {
+						delete mLibraries[sElementLib];
 					}
 				});
-			});
 
-			aUnusedLibrary.forEach(function(sUnusedLibrary) {
-				// There are apps which use modules with default lib (empty string)
-				if (sUnusedLibrary){
-					oIssueManager.addIssue({
-						severity: Severity.Medium,
-						details: "The library '" + sUnusedLibrary + "' has been loaded, but not used so far in the analyzed scope of the application. There are two options to solve this issue: \n" +
-							"1. If the library is needed at later state in your application, you can make use of lazy library loading (see resolution section)." +
-							" Please be aware that if this lazy flag isn't used correctly this might lead to a performance decrease. \n" +
-							"2. If the library has been loaded by accident and is never used in the application, you should remove the library from the bootstrap or application descriptor.",
-						context: {
-							id: "WEBPAGE"
+				// 2. Ignore libraries with declared modules
+				// Alternative: More exact, but request-dependent solution would be loading and evaluating the resources.json file for each library
+
+				// support rules can get loaded within a ui5 version which does not have module "sap/base/util/LoaderExtensions" yet
+				// therefore load the jQuery.sap.getAllDeclaredModules fallback if not available
+				var LoaderExtensions = sap.ui.require("sap/base/util/LoaderExtensions");
+				var aDeclaredModules;
+				if (LoaderExtensions) {
+					aDeclaredModules = LoaderExtensions.getAllRequiredModules();
+				} else {
+					// TODO: migration not possible. jQuery.sap.getAllDeclaredModules is deprecated.
+					aDeclaredModules = jQuery.sap.getAllDeclaredModules();
+				}
+				Object.keys(mLibraries).forEach(function(sLibrary) {
+					var sLibraryWithDot = sLibrary + ".";
+					for (var i = 0; i < aDeclaredModules.length; i++) {
+						// Ignore library types and library enum files
+						var sDeclaredModule = aDeclaredModules[i];
+						if (sDeclaredModule.indexOf(sLibraryWithDot) === 0 &&
+							mLibraries[sLibrary].types.indexOf(sDeclaredModule) === -1 &&
+							sDeclaredModule.lastIndexOf(".library") !== sDeclaredModule.length - ".library".length &&
+							sDeclaredModule.lastIndexOf(".library-preload") !== sDeclaredModule.length - ".library-preload".length &&
+							sDeclaredModule.lastIndexOf(".flexibility") !== sDeclaredModule.length - ".flexibility".length &&
+							sDeclaredModule.lastIndexOf(".support") !== sDeclaredModule.length - ".support".length) {
+							delete mLibraries[sLibrary];
+							break;
+						}
+					}
+				});
+
+				// 3. Remove unused library dependent unused libraries
+				var aUnusedLibrary = Object.keys(mLibraries);
+				Object.keys(mLibraries).forEach(function(sLibrary) {
+					mLibraries[sLibrary].dependencies.forEach(function(oDependency) {
+						var iIndex = aUnusedLibrary.indexOf(oDependency);
+						if (iIndex > -1) {
+							aUnusedLibrary.splice(iIndex, 1);
 						}
 					});
-				}
-			});
+				});
+
+				aUnusedLibrary.forEach(function(sUnusedLibrary) {
+					// There are apps which use modules with default lib (empty string)
+					if (sUnusedLibrary){
+						oIssueManager.addIssue({
+							severity: Severity.Medium,
+							details: "The library '" + sUnusedLibrary + "' has been loaded, but not used so far in the analyzed scope of the application. There are two options to solve this issue: \n" +
+								"1. If the library is needed at later state in your application, you can make use of lazy library loading (see resolution section)." +
+								" Please be aware that if this lazy flag isn't used correctly this might lead to a performance decrease. \n" +
+								"2. If the library has been loaded by accident and is never used in the application, you should remove the library from the bootstrap or application descriptor.",
+							context: {
+								id: "WEBPAGE"
+							}
+						});
+					}
+				});
+			}
 		}
 	};
 
@@ -329,6 +384,57 @@ sap.ui.define([
 		}
 	};
 
+	var oModelPreloadAndEarlyRequests = {
+		id: "modelPreloadAndEarlyRequests",
+		audiences: [Audiences.Application],
+		categories: [Categories.Performance],
+		enabled: true,
+		minversion: "1.53",
+		title: "OData V4 model preloading and no earlyRequests",
+		description: "Manifest model preload is useless if V4 ODataModel earlyRequests is false",
+		resolution: "Set manifest parameter models[<Model Name>].settings.earlyRequests to true",
+		resolutionurls: [{
+			text: 'Documentation: Manifest Model Preload',
+			href: 'https://openui5.hana.ondemand.com/#/topic/26ba6a5c1e5c417f8b21cce1411dba2c'
+		}, {
+			text: 'API: V4 ODataModel, parameter earlyRequests',
+			href: 'https://openui5.hana.ondemand.com/api/sap.ui.model.odata.v4.ODataModel'
+		}],
+		check: function(oIssueManager, oCoreFacade, oScope) {
+			var mComponents = oCoreFacade.getComponents();
+
+			Object.keys(mComponents).forEach(function(sComponentId) {
+				var oManifest = mComponents[sComponentId].getManifest(),
+					mDataSources = oManifest['sap.app'].dataSources,
+					mModels = oManifest['sap.ui5'].models || {};
+
+				Object.keys(mModels).forEach(function(sModel) {
+					var mDataSource,
+						mModel = mModels[sModel];
+
+					if (mModel.dataSource) {
+						mDataSource = mDataSources[mModel.dataSource];
+					}
+					if (mModel.type === "sap.ui.model.odata.v4.ODataModel"
+						|| mDataSource && mDataSource.type === "OData" && mDataSource.settings
+							 && mDataSource.settings.odataVersion === "4.0") {
+						if (mModel.preload === true
+							&& !(mModel.settings && mModel.settings.earlyRequests === true)) {
+							oIssueManager.addIssue({
+								severity: Severity.High,
+								details: "Set sap.ui5.models['" + sModel + "'].settings" +
+									".earlyRequests in manifest to true",
+								context: {
+									id: sComponentId
+								}
+							});
+						}
+					}
+				});
+			});
+		}
+	};
+
 	var oAsynchronousXMLViews = {
 		id: "asynchronousXMLViews",
 		audiences: [Audiences.Application],
@@ -346,16 +452,14 @@ sap.ui.define([
 			href: "https://openui5.hana.ondemand.com/#/topic/68d0e58857a647d49470d9f92dd859bd"
 		}, {
 			text: "Documentation: UI Adaptation at Runtime: Enable Your App",
-			href: "https://sapui5.hana.ondemand.com/#docs/guide/f1430c0337534d469da3a56307ff76af.html"
+			href: "https://sapui5.hana.ondemand.com/#/topic/f1430c0337534d469da3a56307ff76af"
 		}],
 		check: function(oIssueManager, oCoreFacade, oScope) {
 			var mComponents = oCoreFacade.getComponents();
 			var mComponentsRoutingSync = {};
 
 			// 1. Collect XML views in analyzed scope
-			var aSyncXMLViews = oScope.getElements().filter(function(oControl) {
-				return oControl.getMetadata().getName() === "sap.ui.core.mvc.XMLView";
-			}).filter(function(oXMLView) {
+			var aSyncXMLViews = oScope.getElementsByClassName(XMLView).filter(function(oXMLView) {
 				return oXMLView.oAsyncState === undefined;
 			});
 
@@ -413,6 +517,7 @@ sap.ui.define([
 		oLazyComponents,
 		oReuseComponents,
 		oModelPreloading,
+		oModelPreloadAndEarlyRequests,
 		oAsynchronousXMLViews
 	];
 }, true);

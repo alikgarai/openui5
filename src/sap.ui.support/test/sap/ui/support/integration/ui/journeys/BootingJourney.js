@@ -1,7 +1,8 @@
 /*global QUnit*/
 
 sap.ui.define([
-	"sap/ui/test/opaQunit"
+	"sap/ui/test/opaQunit",
+	"../SupportAssistantOpaConfig"
 ], function (opaTest) {
 	"use strict";
 
@@ -11,7 +12,8 @@ sap.ui.define([
 
 	opaTest("Should see the toolbar of the Support Assistant", function (Given, When, Then) {
 
-		Given.iStartMyApp();
+		Given.iDeletePersistedData()
+			.and.iStartMyApp();
 
 		Then.onTheMainPage.iShouldSeeTheToolbar();
 	});

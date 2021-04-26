@@ -3,7 +3,7 @@
 <head>
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta name="viewport" content="width=device-width,initial-scale=1">
-	<title></title>
+	<title>ToolPage Accessibility</title>
 
 	<style>
 		html,
@@ -14,6 +14,9 @@
 	<script src="shared-config.js"></script>
 	<script
 			src="../../../../resources/sap-ui-core.js"
+			data-sap-ui-resourceroots='{
+				"qunit.internal.acc": "../../../../test-resources/sap/ui/core/qunit/internal/acc"
+			}'
 			id="sap-ui-bootstrap"
 			data-sap-ui-libs="sap.tnt, sap.m">
 	</script>
@@ -28,14 +31,14 @@
 					title: 'Child Item 1',
 					key: 'page1'
 				}, {
-					title: 'Child Item 2 (Disabled)',
+					title: 'Item 2 (Disabled)',
 					enabled: false
 				}, {
 					title: 'Child Item 3',
 					key: 'page2'
 				}]
 			}, {
-				title: 'Root Item 2 (Disabled)',
+				title: 'Item 2 (Disabled)',
 				icon: 'sap-icon://building',
 				enabled: false
 			}, {
@@ -371,6 +374,6 @@
 
 	</script>
 </head>
-<body id="body" class="sapUiBody" role="application">
+<body id="body" class="sapUiBody">
 </body>
 </html>

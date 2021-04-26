@@ -1,22 +1,25 @@
-/*global sinon */
-
+/*global QUnit */
 sap.ui.define([
 	'sap/ui/core/mvc/Controller',
 	'sap/ui/core/mvc/XMLView',
 	'sap/ui/core/mvc/ControllerExtension',
 	'sap/ui/core/mvc/OverrideExecution'
 ], function(Controller, XMLView, ControllerExtension, OverrideExecution) {
-	"use-strict";
+	"use strict";
 
 	var mAllPublicMethods = {
-		"byId":{"public":true, "final":false, "reloadNeeded": false},
+		"byId":{"public":true, "final":true, "reloadNeeded": false},
 		"callbackMethod":{"public":true, "final":false, "reloadNeeded": false},
 		"getLifecycleCalls":{"public":true, "final":false, "reloadNeeded": false},
 		"getLifecycleCallsFromArray":{"public":true, "final":false, "reloadNeeded": false},
-		"getView":{"public":true, "final":false, "reloadNeeded": false},
+		"getView":{"public":true, "final":true, "reloadNeeded": false},
 		"publicMethod":{"public":true, "final":false, "reloadNeeded": false},
 		"publicWithCallbackMethod":{"public":true, "final":false, "reloadNeeded": false},
 		"extension1.byId":{"public":true,"final":true,"reloadNeeded":true},
+		"extension1.onInit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension1.onExit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension1.onBeforeRendering":{"public":true,"final":false,"reloadNeeded":true},
+		"extension1.onAfterRendering":{"public":true,"final":false,"reloadNeeded":true},
 		"extension1.callingPublicAndPrivateMethod":{"public":true,"final":false,"reloadNeeded":true},
 		"extension1.finalMethod":{"public":true,"final":true,"reloadNeeded":true},
 		"extension1.checkInterface":{"public":true,"final":false,"reloadNeeded":true},
@@ -29,6 +32,10 @@ sap.ui.define([
 		"extension1.publicMethod":{"public":true,"final":false,"reloadNeeded":true},
 		"extension1.publicMethodToOverride":{"public":true,"final":false,"reloadNeeded":true},
 		"extension2.byId":{"public":true,"final":true,"reloadNeeded":true},
+		"extension2.onInit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension2.onExit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension2.onBeforeRendering":{"public":true,"final":false,"reloadNeeded":true},
+		"extension2.onAfterRendering":{"public":true,"final":false,"reloadNeeded":true},
 		"extension2.callingPublicAndPrivateMethod":{"public":true,"final":false,"reloadNeeded":true},
 		"extension2.finalMethod":{"public":true,"final":true,"reloadNeeded":true},
 		"extension2.checkInterface":{"public":true,"final":false,"reloadNeeded":true},
@@ -41,6 +48,12 @@ sap.ui.define([
 		"extension2.publicMethod":{"public":true,"final":false,"reloadNeeded":true},
 		"extension2.publicMethodToOverride":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt1.byId":{"public":true,"final":true,"reloadNeeded":true},
+		"extension.example.ProviderExt1.onInit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt1.onExit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt1.onBeforeRendering":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt1.onAfterRendering":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt1.publicMethod":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt1.publicMethodToOverride":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt1.callingPublicAndPrivateMethod":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt1.finalMethod":{"public":true,"final":true,"reloadNeeded":true},
 		"extension.example.ProviderExt1.checkInterface":{"public":true,"final":false,"reloadNeeded":true},
@@ -51,8 +64,12 @@ sap.ui.define([
 		"extension.example.ProviderExt1.myAfter":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt1.myBefore":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt2.byId":{"public":true,"final":true,"reloadNeeded":true},
-		"extension.example.ProviderExt1.publicMethod":{"public":true,"final":false,"reloadNeeded":true},
-		"extension.example.ProviderExt1.publicMethodToOverride":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt2.onInit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt2.onExit":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt2.onBeforeRendering":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt2.onAfterRendering":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt2.publicMethod":{"public":true,"final":false,"reloadNeeded":true},
+		"extension.example.ProviderExt2.publicMethodToOverride":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt2.callingPublicAndPrivateMethod":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt2.finalMethod":{"public":true,"final":true,"reloadNeeded":true},
 		"extension.example.ProviderExt2.checkInterface":{"public":true,"final":false,"reloadNeeded":true},
@@ -61,9 +78,7 @@ sap.ui.define([
 		"extension.example.ProviderExt2.getLifecycleCallsFromArray":{"public":true,"final":false,"reloadNeeded":true},
 		"extension.example.ProviderExt2.getView":{"public":true,"final":true,"reloadNeeded":true},
 		"extension.example.ProviderExt2.myAfter":{"public":true,"final":false,"reloadNeeded":true},
-		"extension.example.ProviderExt2.myBefore":{"public":true,"final":false,"reloadNeeded":true},
-		"extension.example.ProviderExt2.publicMethod":{"public":true,"final":false,"reloadNeeded":true},
-		"extension.example.ProviderExt2.publicMethodToOverride":{"public":true,"final":false,"reloadNeeded":true}
+		"extension.example.ProviderExt2.myBefore":{"public":true,"final":false,"reloadNeeded":true}
 
 	};
 
@@ -80,7 +95,11 @@ sap.ui.define([
 		"getView",
 		"getBase",
 		"myBefore",
-		"myAfter"
+		"myAfter",
+		"onInit",
+		"onExit",
+		"onBeforeRendering",
+		"onAfterRendering"
 	];
 
 	//controller extension
@@ -152,6 +171,11 @@ sap.ui.define([
 
 	//base controller
 	var BaseController = Controller.extend("example.BaseController", {
+		metadata: {
+			/*methods: {
+
+			}*/
+		},
 		mLifecycle: {init:0, exit: 0, beforeRendering: 0, afterRendering: 0},
 		aLifecycle: [0,0,0,0],
 		_increaseLifecycleCall: function(sName) {
@@ -266,7 +290,7 @@ sap.ui.define([
 				},
 				"extension1": {
 					publicMethodToOverride: function() {
-						assert.strictEqual(this.getMetadata().getName(), "example.ProviderExt1", "Context of override function set to ProviderExt1 extension");
+						QUnit.config.current.assert.strictEqual(this.getMetadata().getName(), "example.ProviderExt1", "Context of override function set to ProviderExt1 extension");
 						return "overridden by ProviderExt1";
 					}
 				}
@@ -335,11 +359,11 @@ sap.ui.define([
 				extension: {
 					"example.ProviderExt1": {
 						publicMethodToOverride: function() {
-							assert.strictEqual(this.getMetadata().getName(), "example.ProviderExt2", "Context of override function set to ProviderExt2 extension");
+							QUnit.config.current.assert.strictEqual(this.getMetadata().getName(), "example.ProviderExt2", "Context of override function set to ProviderExt2 extension");
 							return "overridden by ProviderExt2";
 						},
 						finalMethod: function() {
-							assert.ok(false, "Original method flagged final. Never should happen");
+							QUnit.config.current.assert.ok(false, "Original method flagged final. Never should happen");
 						}
 					}
 				},
@@ -368,8 +392,8 @@ sap.ui.define([
 						});
 					});
 				} else {
-					var Ext1 = sap.ui.requireSync(["example/ProviderExt1"]);
-					var Ext2 = sap.ui.requireSync(["example/ProviderExt2"]);
+					var Ext1 = sap.ui.requireSync("example/ProviderExt1");
+					var Ext2 = sap.ui.requireSync("example/ProviderExt2");
 					return [Ext1, Ext2];
 				}
 			}
@@ -377,21 +401,30 @@ sap.ui.define([
 		return ExtensionProvider;
 	}, true);
 
+	Controller.registerExtensionProvider("example.ExtensionProvider");
+
+	/* ------------------------------------------------------------------------------------------------- */
+	QUnit.module("Basic Class Building");
+
+	QUnit.test("Special handling of 'override'", function(assert) {
+		assert.strictEqual(ControllerExt1.prototype.override, undefined, "override member of class info must not be copied to prototype");
+	});
+
 	/* ------------------------------------------------------------------------------------------------- */
 	QUnit.module("Direct Member Extension", {
 		beforeEach: function() {
 			var oXMLContent = [
-				'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m">',
+				'<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" controllerName="example.BaseController">',
 				'  <Button id="btn1"></Button>',
 				'  <Button id="example.btn2"></Button>',
 				'</mvc:View>'
 			].join('');
 
-			this.view = sap.ui.xmlview({
-				viewContent: oXMLContent,
-				controller: new BaseController()
-			});
-
+			return XMLView.create({
+				definition: oXMLContent
+			}).then(function(oView) {
+				this.view = oView;
+			}.bind(this));
 		},
 		afterEach: function() {
 			this.view.destroy();
@@ -457,8 +490,8 @@ sap.ui.define([
 	QUnit.test("Override checks", function(assert) {
 		var oController = this.view.getController(),
 			oExtension = oController.extension1;
-		assert.strictEqual(oController.publicWithCallbackMethod(), "callbackOfControllerExt1", "controller.publicWithCallbackMethod returns 'callbackOfControllerExt1'");
-		assert.strictEqual(oExtension.getBase().publicWithCallbackMethod(), "callbackOfControllerExt1", "extension.getBase().publicWithCallbackMethod returns 'callbackOfControllerExt1'");
+		assert.strictEqual(oController.publicWithCallbackMethod(), "callbackOfProviderExt2", "controller.publicWithCallbackMethod returns 'callbackOfProviderExt2'");
+		assert.strictEqual(oExtension.getBase().publicWithCallbackMethod(), "callbackOfProviderExt2", "extension.getBase().publicWithCallbackMethod returns 'callbackOfProviderExt2'");
 		assert.strictEqual(oExtension.finalMethod(), "I am final", "Shouldn't be overridden by extension2");
 	});
 
@@ -473,11 +506,12 @@ sap.ui.define([
 				'</mvc:View>'
 			].join('');
 
-			this.view = sap.ui.xmlview({
-				viewContent: oXMLContent,
+			return XMLView.create({
+				definition: oXMLContent,
 				controller: new BaseController()
-			});
-
+			}).then(function(oView) {
+				this.view = oView;
+			}.bind(this));
 		},
 		afterEach: function() {
 			//jQuery.sap.setObject("sample.ExtensionProvider", null);
@@ -573,24 +607,22 @@ sap.ui.define([
 
 	QUnit.test("public methods checks", function(assert) {
 		var oController = this.view.getController();
-		assert.ok(jQuery.sap.equal(oController.getPublicMethods(true), mAllPublicMethods), "Public Methods exposed correctly");
+		assert.deepEqual(oController.getPublicMethods(), mAllPublicMethods, "Public Methods exposed correctly");
 	});
 
 	/* ------------------------------------------------------------------------------------------------- */
 	QUnit.module("Direct Member Extension: async", {
 		beforeEach: function() {
+			Controller.registerExtensionProvider("example.ExtensionProvider");
 			var oXMLContent = [
 				'<mvc:View xmlns:mvc="sap.ui.core.mvc" controllerName="example.BaseController" xmlns="sap.m">',
 				'  <Button id="btn1"></Button>',
 				'</mvc:View>'
 			].join('');
 
-			this.view = sap.ui.view({
-				type: "XML",
-				viewContent: oXMLContent,
-				async: true
+			this.view = XMLView.create({
+				definition: oXMLContent
 			});
-
 		},
 		afterEach: function() {
 			this.view.destroy();
@@ -600,7 +632,7 @@ sap.ui.define([
 
 	QUnit.test("Public private checks", function(assert) {
 		var done = assert.async();
-		this.view.loaded()
+		this.view
 			.then(function(oView) {
 				this.view = oView;
 				var oController = this.view.getController(),
@@ -643,13 +675,13 @@ sap.ui.define([
 	});
 	QUnit.test("Override checks", function(assert) {
 		var done = assert.async();
-		this.view.loaded()
+		this.view
 			.then(function(oView) {
-				this.oview = oView;
+				this.view = oView;
 				var oController = this.view.getController(),
 					oExtension = oController.extension1;
-				assert.strictEqual(oController.publicWithCallbackMethod(), "callbackOfControllerExt1", "controller.publicWithCallbackMethod returns 'callbackOfControllerExt1'");
-				assert.strictEqual(oExtension.getBase().publicWithCallbackMethod(), "callbackOfControllerExt1", "extension.getBase().publicWithCallbackMethod returns 'callbackOfControllerExt1'");
+				assert.strictEqual(oController.publicWithCallbackMethod(), "callbackOfProviderExt2", "controller.publicWithCallbackMethod returns 'callbackOfProviderExt2'");
+				assert.strictEqual(oExtension.getBase().publicWithCallbackMethod(), "callbackOfProviderExt2", "extension.getBase().publicWithCallbackMethod returns 'callbackOfProviderExt2'");
 				done();
 			}.bind(this));
 	});
@@ -665,24 +697,23 @@ sap.ui.define([
 				'</mvc:View>'
 			].join('');
 
-			this.view = sap.ui.xmlview({
-				viewContent: oXMLContent,
-				async: true
+			this.view = XMLView.create({
+				definition: oXMLContent
 			});
 
 		},
 		afterEach: function() {
 			//jQuery.sap.setObject("sample.ExtensionProvider", null);
-			Controller._sExtensionProvider = null;
+			Controller.registerExtensionProvider(null);
 			this.view.destroy();
 			this.view = null;
 		}
 	});
 	QUnit.test("Public private checks", function(assert) {
 		var done = assert.async();
-		this.view.loaded()
+		this.view
 			.then(function(oView) {
-				this.oview = oView;
+				this.view = oView;
 				var oController = this.view.getController(),
 					oExtension = oController.extension1,
 					oProviderExt1 = oController.extension.example.ProviderExt1,
@@ -760,9 +791,9 @@ sap.ui.define([
 
 	QUnit.test("Override checks", function(assert) {
 		var done = assert.async();
-		this.view.loaded()
+		this.view
 			.then(function(oView) {
-				this.oview = oView;
+				this.view = oView;
 				var oController = this.view.getController(),
 					oExtension = oController.extension1;
 				assert.strictEqual(oController.publicWithCallbackMethod(), "callbackOfProviderExt2", "controller.publicWithCallbackMethod returns 'callbackOfProviderExt2'");

@@ -1,9 +1,20 @@
-/* global QUnit,sinon,SemanticUtil*/
-
-(function ($, QUnit, sinon) {
+/*global QUnit, sinon*/
+sap.ui.define([
+	"sap/ui/thirdparty/jquery",
+	'sap/ui/core/library',
+	"qunit/SemanticUtil"
+],
+function (
+	$,
+	coreLibrary,
+	SemanticUtil
+) {
 	"use strict";
 
 	sinon.config.useFakeTimers = false;
+
+	// shortcut for sap.ui.core.aria.HasPopup
+	var AriaHasPopup = coreLibrary.aria.HasPopup;
 
 	var oFactory = SemanticUtil.oFactory,
 		oSemanticConfiguration = oFactory.getSemanticConfiguration();
@@ -800,15 +811,29 @@
 		oSaveAsTileAction.destroy();
 	});
 
-	QUnit.module("SemanticShareMenu destroy", {
+	QUnit.module("Accessibility", {
 		beforeEach: function () {
 			this.oActionSheet = oFactory.getActionSheet();
 			this.oSemanticShareMenu = oFactory.getSemanticShareMenu(this.oActionSheet);
 		},
 		afterEach: function () {
 			this.oActionSheet.destroy();
+			this.oSemanticShareMenu .destroy();
 			this.oSemanticShareMenu = null;
 			this.oActionSheet = null;
 		}
 	});
-})(jQuery, QUnit, sinon);
+
+	QUnit.test("Aria attributes", function (assert) {
+		// arrange
+		var oShareMenuBtn = this.oSemanticShareMenu._getShareMenuButton();
+
+		// arrange
+		oShareMenuBtn.placeAt("qunit-fixture");
+		sap.ui.getCore().applyChanges();
+
+		// assert
+		assert.equal(oShareMenuBtn.getAriaHasPopup(), AriaHasPopup.Menu, "aria-haspopup is as expected");
+	});
+
+});

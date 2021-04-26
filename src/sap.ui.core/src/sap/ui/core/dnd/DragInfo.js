@@ -2,8 +2,8 @@
  * ${copyright}
  */
 
-sap.ui.define(["jquery.sap.global", "./DragDropBase"],
-	function(jQuery, DragDropBase) {
+sap.ui.define(["./DragDropBase"],
+	function(DragDropBase) {
 	"use strict";
 
 	/**
@@ -14,6 +14,7 @@ sap.ui.define(["jquery.sap.global", "./DragDropBase"],
 	 *
 	 * @class
 	 * Provides the configuration for drag operations.
+	 *
 	 * <b>Note:</b> This configuration might be ignored due to control {@link sap.ui.core.Element.extend metadata} restrictions.
 	 *
 	 * @extends sap.ui.core.dnd.DragDropBase
@@ -76,63 +77,74 @@ sap.ui.define(["jquery.sap.global", "./DragDropBase"],
 		}
 	}});
 
-	DragInfo.prototype.isDraggable = function(oControl) {
-		if (!this.getEnabled()) {
+	/**
+	 * Provides DragInfo mixin for the subclasses that need DragInfo functionalities.
+	 *
+	 * @private
+	 * @mixin
+	 * @since 1.87
+	 */
+	DragInfo.Mixin = function() {
+
+		this.isDraggable = function(oControl) {
+			if (!this.getEnabled()) {
+				return false;
+			}
+
+			var oDragSource = this.getParent();
+			if (!oDragSource) {
+				return false;
+			}
+
+			// metadata restrictions
+			var sSourceAggregation = this.getSourceAggregation();
+			if (!this.checkMetadata(oDragSource, sSourceAggregation, "draggable")) {
+				return false;
+			}
+
+			// control itself is the drag source
+			if (oDragSource === oControl && !sSourceAggregation) {
+				return true;
+			}
+
+			// control is in the aggregation of the drag source
+			if (oControl.getParent() === oDragSource && sSourceAggregation === oControl.sParentAggregationName) {
+				return true;
+			}
+
 			return false;
-		}
+		};
 
-		var oDragSource = this.getParent();
-		if (!oDragSource) {
-			return false;
-		}
+		this.fireDragStart = function(oEvent) {
+			if (!oEvent || !oEvent.dragSession) {
+				return;
+			}
 
-		// draggable by default
-		var sSourceAggregation = this.getSourceAggregation();
-		var oMetadata = oDragSource.getMetadata().getDragDropInfo(sSourceAggregation);
-		if (!oMetadata.draggable) {
-			jQuery.sap.log.warning((sSourceAggregation ? sSourceAggregation + " aggregation of " : "") + oDragSource + " is not configured to be draggable");
-			return false;
-		}
+			var oDragSession = oEvent.dragSession;
+			return this.fireEvent("dragStart", {
+				dragSession: oDragSession,
+				browserEvent: oEvent.originalEvent,
+				target: oDragSession.getDragControl()
+			}, true);
+		};
 
-		// control itself is the drag source
-		if (oDragSource === oControl && !sSourceAggregation) {
-			return true;
-		}
+		this.fireDragEnd = function(oEvent) {
+			if (!oEvent || !oEvent.dragSession) {
+				return;
+			}
 
-		// control is in the aggregation of the drag source
-		if (oControl.getParent() === oDragSource && sSourceAggregation === oControl.sParentAggregationName) {
-			return true;
-		}
+			var oDragSession = oEvent.dragSession;
+			return this.fireEvent("dragEnd", {
+				dragSession: oDragSession,
+				browserEvent: oEvent.originalEvent,
+				target: oDragSession.getDragControl()
+			});
+		};
 
-		return false;
 	};
 
-	DragInfo.prototype.fireDragStart = function(oEvent) {
-		if (!oEvent || !oEvent.dragSession) {
-			return;
-		}
-
-		var oDragSession = oEvent.dragSession;
-		return this.fireEvent("dragStart", {
-			dragSession: oDragSession,
-			browserEvent: oEvent.originalEvent,
-			target: oDragSession.getDragControl()
-		}, true);
-	};
-
-	DragInfo.prototype.fireDragEnd = function(oEvent) {
-		if (!oEvent || !oEvent.dragSession) {
-			return;
-		}
-
-		var oDragSession = oEvent.dragSession;
-		return this.fireEvent("dragEnd", {
-			dragSession: oDragSession,
-			browserEvent: oEvent.originalEvent,
-			target: oDragSession.getDragControl()
-		});
-	};
+	DragInfo.Mixin.apply(DragInfo.prototype);
 
 	return DragInfo;
 
-}, /* bExport= */ true);
+});

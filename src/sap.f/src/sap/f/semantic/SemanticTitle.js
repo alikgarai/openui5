@@ -5,13 +5,7 @@
 /**
  * Provides a private class <code>sap.f.semantic.SemanticTitle</code>.
  */
-sap.ui.define([
-	"jquery.sap.global",
-	"sap/m/library",
-	"./SemanticContainer"
-], function(jQuery,
-			mobileLibrary,
-			SemanticContainer) {
+sap.ui.define(["sap/m/library", "./SemanticContainer"], function(mobileLibrary, SemanticContainer) {
 	"use strict";
 
 	// shortcut for sap.m.ButtonType
@@ -208,7 +202,7 @@ sap.ui.define([
 	*
 	* @private
 	* @param {sap.f.semantic.SemanticControl} oSemanticControl
-	* @returns {sap.f.semantic.SemanticTitle}
+	* @returns {this}
 	*/
 	SemanticTitle.prototype._insertSemanticTextContent = function(oSemanticControl) {
 		var oControl = this._getControl(oSemanticControl),
@@ -233,7 +227,7 @@ sap.ui.define([
 	*
 	* @private
 	* @param {sap.f.semantic.SemanticControl} oSemanticControl
-	* @returns {sap.f.semantic.SemanticTitle}
+	* @returns {this}
 	*/
 	SemanticTitle.prototype._removeSemanticTextContent = function(oSemanticControl) {
 		var oControl = this._getControl(oSemanticControl),
@@ -254,7 +248,7 @@ sap.ui.define([
 	*
 	* @private
 	* @param {sap.f.semantic.SemanticControl} oSemanticControl
-	* @returns {sap.f.semantic.SemanticTitle}
+	* @returns {this}
 	*/
 	SemanticTitle.prototype._insertSemanticIconContent = function(oSemanticControl) {
 		var oControl = this._getControl(oSemanticControl),
@@ -280,7 +274,7 @@ sap.ui.define([
 	*
 	* @private
 	* @param {sap.f.semantic.SemanticControl} oSemanticControl
-	* @returns {sap.f.semantic.SemanticTitle}
+	* @returns {this}
 	*/
 	SemanticTitle.prototype._removeSemanticIconContent = function(oSemanticControl) {
 		var oControl = this._getControl(oSemanticControl),
@@ -306,7 +300,7 @@ sap.ui.define([
 	*
 	* @private
 	* @param {sap.f.semantic.SemanticControl} oSemanticControl
-	* @returns {sap.f.semantic.SemanticTitle}
+	* @returns {this}
 	*/
 	SemanticTitle.prototype._insertSemanticShareContent = function(oSemanticControl) {
 		var oControl = this._getControl(oSemanticControl),
@@ -321,7 +315,7 @@ sap.ui.define([
 	*
 	* @private
 	* @param {sap.f.semantic.SemanticControl} oSemanticControl
-	* @returns {sap.f.semantic.SemanticTitle}
+	* @returns {this}
 	*/
 	SemanticTitle.prototype._removeSemanticShareContent = function(oSemanticControl) {
 		var oControl = this._getControl(oSemanticControl);

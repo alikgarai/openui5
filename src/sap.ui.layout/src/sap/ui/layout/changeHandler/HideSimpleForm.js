@@ -2,9 +2,7 @@
  * ${copyright}
  */
 
-sap.ui.define([
-	'sap/ui/fl/changeHandler/JsControlTreeModifier'
-], function(JsControlTreeModifier) {
+sap.ui.define(['sap/ui/fl/changeHandler/JsControlTreeModifier', "sap/base/Log"], function(JsControlTreeModifier, Log) {
 	"use strict";
 
 	/**
@@ -54,7 +52,7 @@ sap.ui.define([
 			var oRemovedElement = oModifier.bySelector(oChangeDefinition.content.elementSelector || oChangeDefinition.content.sHideId, oAppComponent, oView);
 			var aContent = oModifier.getAggregation(oControl, "content");
 			var iStart = -1;
-			var mState = this._getState(oControl, oModifier);
+			var mState = this._getState(oControl, oModifier, oAppComponent);
 			oChange.setRevertData(mState);
 
 			// this is needed to trigger a refresh of a simpleform! Otherwise simpleForm content and visualization are not in sync
@@ -113,13 +111,14 @@ sap.ui.define([
 				});
 				if (oRemovedElement) {
 					oModifier.removeAggregation(oControl, "content", oRemovedElement, oView);
+					oModifier.insertAggregation(oControl, "dependents", oRemovedElement, 0, oView);
 				}
 			}
 
 			return true;
 		} catch (oError) {
 			oChange.resetRevertData();
-			jQuery.sap.log.error(oError.message || oError.name);
+			Log.error(oError.message || oError.name);
 		}
 	};
 
@@ -158,12 +157,12 @@ sap.ui.define([
 		}
 	};
 
-	HideForm._getState = function (oControl, oModifier) {
+	HideForm._getState = function (oControl, oModifier, oAppComponent) {
 		var aContent = oModifier.getAggregation(oControl, "content");
 		return {
 			content : aContent.map(function(oElement) {
 				return {
-					element : oElement,
+					elementSelector : oModifier.getSelector(oModifier.getId(oElement), oAppComponent),
 					visible : oElement.getVisible ? oElement.getVisible() : undefined,
 					index : aContent.indexOf(oElement)
 				};
@@ -173,15 +172,35 @@ sap.ui.define([
 
 	HideForm.revertChange = function (oChange, oControl, mPropertyBag) {
 		var mState = oChange.getRevertData();
-		oControl.removeAllContent();
+		var oAppComponent = mPropertyBag.appComponent;
+		var oModifier = mPropertyBag.modifier;
+		oModifier.removeAllAggregation(oControl, "content");
 		mState.content.forEach(function(oElementState) {
-			oControl.insertContent(oElementState.element, oElementState.index);
-			if (oElementState.element.setVisible){
-				oElementState.element.setVisible(oElementState.visible);
-			}
+			var oElement = oModifier.bySelector(oElementState.elementSelector, oAppComponent, mPropertyBag.view);
+			var aDependents = oModifier.getAggregation(oControl, "dependents");
+			aDependents.some(function(oDependent) {
+				if (oModifier.getProperty(oDependent, "id") === oModifier.getProperty(oElement, "id")) {
+					oModifier.removeAggregation(oControl, "dependents", oDependent, mPropertyBag.view);
+					return true;
+				}
+			});
+			oModifier.insertAggregation(oControl, "content", oElement, oElementState.index, mPropertyBag.view);
+			oModifier.setProperty(oElement, "visible", oElementState.visible);
 		});
 		oChange.resetRevertData();
 		return true;
+	};
+
+	HideForm.getChangeVisualizationInfo = function(oChange, oAppComponent) {
+		var oSelector = oChange.getDefinition().content.elementSelector;
+		var oElement = JsControlTreeModifier.bySelector(oSelector, oAppComponent);
+		var oDisplaySelector = oChange.getChangeType() === "removeSimpleFormGroup"
+			? oElement.getParent().getId()
+			: oElement.getParent().getParent().getId();
+		return {
+			affectedControls: [oSelector],
+			displayControls: [oDisplaySelector]
+		};
 	};
 
 	return HideForm;

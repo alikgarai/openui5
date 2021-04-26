@@ -4,21 +4,23 @@
 /**
  * Helper for core functionality in Support Tool infrastructure.
  */
-sap.ui.define(["jquery.sap.global"],
-	function (jQuery) {
+sap.ui.define(["sap/ui/thirdparty/jquery", "sap/ui/dom/jquery/control"],  // jQuery Plugin "control"
+	function(jQuery) {
 		"use strict";
 
 		var CoreHelper = {
-			/***
-			 * Checks of passed node has parent control of type UI5.
+			/**
+			 * Checks if passed node has parent control of type UI5.
+			 *
 			 * @param node HTML element that will be checked.
-			 * @param oScope Scope in witch checking will be executed.
+			 * @param oScope Scope in which checking will be executed.
 			 * @returns {boolean} If node has parent of type UI5 control it will return true, otherwise false.
 			 */
 			nodeHasUI5ParentControl : function (node, oScope) {
 				/**
-				 * Here we white list all controls that can contain DOM elements with style different than the framework style
+				 * Here we list all controls that can contain DOM elements with style different than the framework style
 				 */
+				// jQuery Plugin "control"
 				var skipParents = ["sap.ui.core.HTML"],
 					parentNode = jQuery(node).control()[0];
 

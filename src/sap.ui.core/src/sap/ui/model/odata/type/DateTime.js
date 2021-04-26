@@ -2,8 +2,10 @@
  * ${copyright}
  */
 
-sap.ui.define(['jquery.sap.global', 'sap/ui/model/odata/type/DateTimeBase'],
-	function(jQuery, DateTimeBase) {
+sap.ui.define([
+	"sap/base/Log",
+	"sap/ui/model/odata/type/DateTimeBase"
+], function (Log, DateTimeBase) {
 	"use strict";
 
 	/**
@@ -21,14 +23,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/odata/type/DateTimeBase'],
 
 		if (oConstraints) {
 			switch (oConstraints.displayFormat) {
-			case "Date":
-				oAdjustedConstraints.isDateOnly = true;
-				break;
-			case undefined:
-				break;
-			default:
-				jQuery.sap.log.warning("Illegal displayFormat: " + oConstraints.displayFormat,
-					null, oType.getName());
+				case "Date":
+					oAdjustedConstraints.isDateOnly = true;
+					break;
+				case undefined:
+					break;
+				default:
+					Log.warning("Illegal displayFormat: " + oConstraints.displayFormat,
+						null, oType.getName());
 			}
 			oAdjustedConstraints.nullable = oConstraints.nullable;
 		}
@@ -77,6 +79,19 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/odata/type/DateTimeBase'],
 				}
 			}
 		);
+
+	// @override
+	// @see sap.ui.model.SimpleType#getConstraints
+	DateTime.prototype.getConstraints = function () {
+		var oConstraints = DateTimeBase.prototype.getConstraints.call(this);
+
+		if (oConstraints.isDateOnly) {
+			oConstraints.displayFormat = "Date";
+			delete oConstraints.isDateOnly;
+		}
+
+		return oConstraints;
+	};
 
 	/**
 	 * Returns the type's name.

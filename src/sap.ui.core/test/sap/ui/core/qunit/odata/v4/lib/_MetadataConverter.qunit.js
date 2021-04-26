@@ -1,15 +1,13 @@
 /*!
  * ${copyright}
  */
-sap.ui.require([
-	"jquery.sap.global",
+sap.ui.define([
+	"sap/base/Log",
 	"sap/ui/model/odata/v4/lib/_MetadataConverter",
 	"sap/ui/model/odata/v4/lib/_V2MetadataConverter",
 	"sap/ui/model/odata/v4/lib/_V4MetadataConverter",
-	"jquery.sap.xml" // unused, needed to have jQuery.sap.parseXML
-], function (jQuery, _MetadataConverter, _V2MetadataConverter, _V4MetadataConverter) {
-	/*global QUnit */
-	/*eslint no-warning-comments: 0 */
+	"sap/ui/util/XMLHelper"
+], function (Log, _MetadataConverter, _V2MetadataConverter, _V4MetadataConverter, XMLHelper) {
 	"use strict";
 
 	var sV2Start = '<edmx:Edmx Version="1.0" xmlns="http://schemas.microsoft.com/ado/2008/09/edm"'
@@ -27,7 +25,7 @@ sap.ui.require([
 	 * @returns {Document} the DOM document
 	 */
 	function xml(assert, sXml) {
-		var oDocument = jQuery.sap.parseXML(sXml);
+		var oDocument = XMLHelper.parse(sXml);
 		assert.strictEqual(oDocument.parseError.errorCode, 0, "XML parsed correctly");
 		return oDocument;
 	}
@@ -91,8 +89,12 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.v4.lib._MetadataConverter", {
+		before : function () {
+			this.__ignoreIsolatedCoverage__ = true;
+		},
+
 		beforeEach : function () {
-			this.oLogMock = this.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(Log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 		}
@@ -145,7 +147,7 @@ sap.ui.require([
 		oMetadataConverter.processor = function (sExpectedName, oElement) {
 			assert.strictEqual(oElement.nodeType, 1, "is an Element");
 			assert.strictEqual(oElement.localName, sExpectedName);
-			this[sExpectedName]++;
+			this[sExpectedName] += 1;
 		};
 
 		oMetadataConverter.traverse(oXML.documentElement, oSchemaConfig);
@@ -160,7 +162,7 @@ sap.ui.require([
 	QUnit.test("traverse: __postProcessor", function (assert) {
 		var oXML = xml(assert, "<And><Bool>true</Bool><Bool>false</Bool></And>"),
 			oResult = new _MetadataConverter().traverse(oXML.documentElement, {
-				__postProcessor : function (oElement, aResults) {
+				__postProcessor : function (_oElement, aResults) {
 					return {$And : aResults};
 				},
 				"Bool" : {
@@ -191,37 +193,138 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
+	QUnit.test("resolveAliasInParentheses: no ()", function (assert) {
+		var oMetadataConverter = new _MetadataConverter();
+
+		this.mock(oMetadataConverter).expects("resolveAlias").withExactArgs("f.Action")
+			.returns("foo.Action");
+
+		// code under test
+		assert.strictEqual(oMetadataConverter.resolveAliasInParentheses(undefined, "f.Action"),
+			"foo.Action");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("resolveAliasInParentheses: ()", function (assert) {
+		var oMetadataConverter = new _MetadataConverter(),
+			that = this;
+
+		this.mock(oMetadataConverter).expects("resolveAlias").withExactArgs("f.Action")
+			.callsFake(function () {
+				// avoid mock for "code under test"
+				that.mock(oMetadataConverter).expects("resolveAliasInParentheses")
+					.withArgs(true, "")
+					.returns("");
+
+				return "foo.Action";
+			});
+
+		// code under test
+		assert.strictEqual(
+			oMetadataConverter.resolveAliasInParentheses(true, "f.Action()"),
+			"foo.Action()");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("resolveAliasInParentheses: (...)", function (assert) {
+		var oMetadataConverter = new _MetadataConverter(),
+			that = this;
+
+		this.mock(oMetadataConverter).expects("resolveAlias").withExactArgs("f.Action")
+			.callsFake(function () {
+				// avoid mock for "code under test"
+				that.mock(oMetadataConverter).expects("resolveAliasInParentheses")
+					.withArgs(true, "b.Type")
+					.returns("bar.Type");
+
+				return "foo.Action";
+			});
+
+		// code under test
+		assert.strictEqual(
+			oMetadataConverter.resolveAliasInParentheses(true, "f.Action(b.Type)"),
+			"foo.Action(bar.Type)");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("resolveAliasInParentheses: (,,)", function (assert) {
+		var oMetadataConverter = new _MetadataConverter(),
+			oMetadataConverterMock = this.mock(oMetadataConverter);
+
+		oMetadataConverterMock.expects("resolveAlias").withExactArgs("f.Action")
+			.callsFake(function () {
+				// avoid mock for "code under test"
+				oMetadataConverterMock.expects("resolveAliasInParentheses")
+					.withArgs(true, "b.Type")
+					.returns("bar.Type");
+				oMetadataConverterMock.expects("resolveAliasInParentheses")
+					.withArgs(true, "Collection(c.ComplexType)")
+					.returns("Collection(custom.ComplexType)");
+				oMetadataConverterMock.expects("resolveAliasInParentheses")
+					.withArgs(true, "Edm.Int")
+					.returns("Edm_Int"); // just to have some difference between input and output
+
+				return "foo.Action";
+			});
+
+		// code under test
+		assert.strictEqual(oMetadataConverter.resolveAliasInParentheses(true,
+				"f.Action(b.Type,Collection(c.ComplexType),Edm.Int)"),
+			"foo.Action(bar.Type,Collection(custom.ComplexType),Edm_Int)");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("resolveAliasInParentheses: switched off", function (assert) {
+		var oMetadataConverter = new _MetadataConverter();
+
+		this.mock(oMetadataConverter).expects("resolveAlias")
+			.withExactArgs("Products(ID=ProductID)")
+			.returns("~");
+
+		// code under test
+		assert.strictEqual(
+			oMetadataConverter.resolveAliasInParentheses(false, "Products(ID=ProductID)"), "~");
+	});
+
+	//*********************************************************************************************
 	QUnit.test("resolveAliasInPath", function (assert) {
-		var oMock = this.mock(_MetadataConverter.prototype);
+		var bHandleParentheses = {/*false, true*/},
+			oMock = this.mock(_MetadataConverter.prototype);
 
 			function localTest(sPath, sExpected) {
-				assert.strictEqual(new _MetadataConverter().resolveAliasInPath(sPath),
+				assert.strictEqual(
+					// code under test
+					new _MetadataConverter().resolveAliasInPath(sPath, bHandleParentheses),
 					sExpected || sPath);
 			}
 
 			oMock.expects("resolveAlias").never();
+			oMock.expects("resolveAliasInParentheses").never();
 
 			localTest("Employees");
 			localTest("Employees/Team");
 
-			oMock.expects("resolveAlias")
-				.withExactArgs("f.Some").returns("foo.Some");
-			oMock.expects("resolveAlias")
-				.withExactArgs("f.Random").returns("foo.Random");
-			oMock.expects("resolveAlias")
-				.withExactArgs("f.Path").returns("foo.Path");
+			oMock.expects("resolveAliasInParentheses")
+				.withArgs(sinon.match.same(bHandleParentheses), "f.Some")
+				.returns("foo.Some");
+			oMock.expects("resolveAliasInParentheses")
+				.withArgs(sinon.match.same(bHandleParentheses), "f.Random")
+				.returns("foo.Random");
+			oMock.expects("resolveAliasInParentheses")
+				.withArgs(sinon.match.same(bHandleParentheses), "f.Path")
+				.returns("foo.Path");
 			localTest("f.Some/f.Random/f.Path", "foo.Some/foo.Random/foo.Path");
 
-			oMock.expects("resolveAlias")
-				.withExactArgs("f.Path").returns("foo.Path");
+			oMock.expects("resolveAliasInParentheses")
+				.withArgs(sinon.match.same(bHandleParentheses), "f.Path").returns("foo.Path");
 			oMock.expects("resolveAlias")
 				.withExactArgs("f.Term").returns("foo.Term");
 			localTest("f.Path@f.Term", "foo.Path@foo.Term");
 
-			oMock.expects("resolveAlias")
-				.withExactArgs("f.Path").returns("foo.Path");
-			oMock.expects("resolveAlias")
-				.withExactArgs("").returns("");
+			oMock.expects("resolveAliasInParentheses")
+				.withArgs(sinon.match.same(bHandleParentheses), "f.Path").returns("foo.Path");
+			oMock.expects("resolveAliasInParentheses")
+				.withArgs(sinon.match.same(bHandleParentheses), "").returns("");
 			oMock.expects("resolveAlias")
 				.withExactArgs("f.Term").returns("foo.Term");
 			localTest("f.Path/@f.Term", "foo.Path/@foo.Term");
@@ -459,4 +562,28 @@ sap.ui.require([
 				"GivenName@foo.Term" : "PropertyValue"
 			});
 	});
+
+	//*********************************************************************************************
+[false, true].forEach(function (bV4) {
+	QUnit.test("processAnnotations: bound action's overload, V4 = " + bV4, function (assert) {
+		var Converter = bV4 ? _V4MetadataConverter : _V2MetadataConverter,
+			oResult,
+			sXml = (bV4 ? sV4Start : sV2Start) + '\
+<Schema Namespace="foo" Alias="f">\
+	<Annotations xmlns="http://docs.oasis-open.org/odata/ns/edm"\
+			Target="f.Action(Collection(f.Type),f.Type)">\
+		<Annotation Term="f.Term"><String>hello, world!</String></Annotation>\
+	</Annotations>\
+</Schema>'
+				+ sEnd;
+
+		// code under test
+		oResult = new Converter().convertXMLMetadata(xml(assert, sXml));
+
+		assert.ok(oResult, JSON.stringify(oResult));
+		assert.deepEqual(
+			oResult["foo."].$Annotations["foo.Action(Collection(foo.Type),foo.Type)"],
+			{"@foo.Term" : "hello, world!"});
+	});
+});
 });

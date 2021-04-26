@@ -1,14 +1,13 @@
-/*global QUnit*/
+/* global QUnit*/
 
-QUnit.config.autostart = false;
-sap.ui.require([
-	'sap/ui/core/util/reflection/BaseTreeModifier',
-	'sap/ui/core/util/reflection/JsControlTreeModifier',
-	'sap/ui/core/util/reflection/XmlTreeModifier',
-	'sap/ui/core/Control',
-	'sap/ui/core/UIComponent',
-	// should be last:
-	'sap/ui/thirdparty/sinon'
+sap.ui.define([
+	"sap/ui/core/util/reflection/BaseTreeModifier",
+	"sap/ui/core/util/reflection/JsControlTreeModifier",
+	"sap/ui/core/util/reflection/XmlTreeModifier",
+	"sap/ui/core/Control",
+	"sap/ui/core/UIComponent",
+	"sap/ui/base/ManagedObject",
+	"sap/ui/thirdparty/sinon-4"
 ],
 function(
 	BaseTreeModifier,
@@ -16,25 +15,52 @@ function(
 	XmlTreeModifier,
 	Control,
 	UIComponent,
+	ManagedObject,
 	sinon
 ) {
-
 	"use strict";
-	QUnit.start();
+
 	var sandbox = sinon.sandbox.create();
 
-	jQuery.sap.registerModulePath("sap.ui.test", "../../component/testdata");
-
-	var XML_VIEW =	'<mvc:View id="testComponent---myView" xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" xmlns:form="sap.ui.layout.form">' +
-	'<form:SimpleForm id="testComponent---myView--myForm">' +
-	'<Title id="testComponent---myView--myGroup" />' +
-	'<Input id="testComponent---myView--myGroupElement" />' +
-	'</form:SimpleForm>' +
+	var XML_VIEW =
+	'<mvc:View id="testComponent---myView" xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" xmlns:form="sap.ui.layout.form">' +
+		'<form:SimpleForm id="testComponent---myView--myForm">' +
+			'<Title id="testComponent---myView--myGroup" />' +
+			'<Input id="testComponent---myView--myGroupElement" />' +
+		'</form:SimpleForm>' +
 	'</mvc:View>';
+
+	var XML_VIEW2 =
+		'<mvc:View id="testComponent---myView" xmlns:mvc="sap.ui.core.mvc"  xmlns:core="sap.ui.core" xmlns="sap.m">' +
+		'<HBox id="hbox1">' +
+			'<items>' +
+				'<Button id="button1" text="Button1" />' +
+				'<Button id="button2" text="Button2" />' +
+				'<Button id="button3" text="Button3" />' +
+				'<core:ExtensionPoint name="ExtensionPoint1" />' +
+				'<Label id="label1" text="TestLabel1" />' +
+			'</items>' +
+		'</HBox>' +
+		'<Panel id="panel">' +
+				'<core:ExtensionPoint name="ExtensionPoint2" />' +
+				'<Label id="label2" text="TestLabel2" />' +
+				'<core:ExtensionPoint name="ExtensionPoint3" />' +
+		'</Panel>' +
+		'<HBox id="hbox2">' +
+			'<Button id="button4" text="Button4" />' +
+			'<Button id="button5" text="Button5" />' +
+			'<core:ExtensionPoint name="ExtensionPoint3" />' +
+			'<Label id="label3" text="TestLabel3" />' +
+		'</HBox>' +
+	'</mvc:View>';
+
+	var fnMockNodeId = function(sToBeReplacedInId, sReplacementInId, oXmlNode) {
+		var sFormNodeId = oXmlNode.getAttribute("id").replace(sToBeReplacedInId, sReplacementInId);
+		oXmlNode.setAttribute("id", sFormNodeId);
+	};
 
 	QUnit.module("While handling xml views the BaseTreeModifier", {
 		beforeEach: function () {
-
 			this.oComponent = sap.ui.getCore().createComponent({
 				name: "sap.ui.test.other",
 				id: "testComponent"
@@ -42,10 +68,11 @@ function(
 
 			this.oDOMParser = new DOMParser();
 			this.oXmlView = this.oDOMParser.parseFromString(XML_VIEW, "application/xml").documentElement;
+			this.oXmlView2 = this.oDOMParser.parseFromString(XML_VIEW2, "application/xml").documentElement;
 			return this.oXmlView;
 		},
-
 		afterEach: function () {
+			sandbox.restore();
 			this.oComponent.destroy();
 		}
 	}, function() {
@@ -58,16 +85,6 @@ function(
 			assert.ok(oControl);
 		});
 
-		QUnit.test("can determine a targeted control for legacy changes with a global ID containing a flp prefix", function (assert) {
-			var oSelector = {
-				id: "application-LeaveRequest-create-component---myView--myGroupElement"
-			};
-
-			var oControl = XmlTreeModifier.bySelector(oSelector, this.oComponent, this.oXmlView);
-
-			assert.ok(oControl);
-		});
-
 		QUnit.test("can determine a targeted control for changes with local IDs", function (assert) {
 			var oSelector = {
 				id: "myView--myGroupElement",
@@ -77,11 +94,66 @@ function(
 			var oControl = XmlTreeModifier.bySelector(oSelector, this.oComponent, this.oXmlView);
 			assert.ok(oControl);
 		});
+
+		QUnit.test("can determine a targeted control for extension point changes with local IDs", function (assert) {
+			var oSelector = {
+				name: "ExtensionPoint1",
+				viewSelector: {
+					id: "myView",
+					idIsLocal: true
+				}
+			};
+
+			var oControl = XmlTreeModifier.bySelector(oSelector, this.oComponent, this.oXmlView2);
+			assert.ok(oControl);
+		});
+
+		QUnit.test("can determine a selector for a given node", function (assert) {
+			var oFormNode = XmlTreeModifier._children(this.oXmlView)[0];
+			var oFormSelector = {
+					id: "myView--myForm",
+					idIsLocal: true
+				};
+
+			var oSelector = XmlTreeModifier.getSelector(oFormNode, this.oComponent);
+			assert.propEqual(oSelector, oFormSelector, "ok");
+		});
+
+		QUnit.test("will return a selector for a node inside an embedded component", function (assert) {
+			var oFormNode = XmlTreeModifier._children(this.oXmlView)[0];
+			//fake the node belonging to an embedded component
+			fnMockNodeId("testComponent", "embeddedComponent", oFormNode);
+
+			var oFormSelector = {
+				id: "embeddedComponent---myView--myForm",
+				idIsLocal: false
+			};
+
+			var oSelector = XmlTreeModifier.getSelector(oFormNode, this.oComponent);
+			assert.propEqual(oSelector, oFormSelector, "ok");
+			// restore node
+			fnMockNodeId("embeddedComponent", "testComponent", oFormNode);
+		});
+
+		QUnit.test("when getSelector is called with a non-stable node id", function (assert) {
+			var oFormNode = XmlTreeModifier._children(this.oXmlView)[0];
+			//fake the node with an unstable id
+			fnMockNodeId("testComponent", "__unstableId", oFormNode);
+			var oAppComponent = {
+				getLocalId: function() { return null; }
+			};
+
+			assert.throws(function () {
+					XmlTreeModifier.getSelector(oFormNode, oAppComponent);
+				}, new Error("Generated ID attribute found - to offer flexibility a stable control ID is needed to assign the changes to, but for this control the ID was generated by SAPUI5 " + oFormNode.getAttribute("id")),
+				"then the correct error was thrown");
+			// restore node
+			fnMockNodeId("__unstableId", "testComponent", oFormNode);
+		});
 	});
 
 	QUnit.module("While handling js views the BaseTreeModifier", {
 		beforeEach: function () {
-
 			this.oComponent = sap.ui.getCore().createComponent({
 				name: "sap.ui.test.other",
 				id: "testComponent"
@@ -95,7 +167,6 @@ function(
 			});
 			return this.oJsView;
 		},
-
 		afterEach: function () {
 			this.oComponent.destroy();
 			this.oJsView.destroy();
@@ -106,17 +177,7 @@ function(
 				id: "testComponent---myView--myGroupElement"
 			};
 
-			var oControl = JsControlTreeModifier.bySelector(oSelector, this.oComponent, this.oJsView);
-			assert.ok(oControl);
-		});
-
-		QUnit.test("can determine a targeted control for legacy changes with a global ID containing a flp prefix", function (assert) {
-			var oSelector = {
-				id: "application-LeaveRequest-create-component---myView--myGroupElement"
-			};
-
-			var oControl = JsControlTreeModifier.bySelector(oSelector, this.oComponent, this.oJsView);
-
+			var oControl = JsControlTreeModifier.bySelector(oSelector, this.oComponent);
 			assert.ok(oControl);
 		});
 
@@ -126,12 +187,72 @@ function(
 				idIsLocal: true
 			};
 
-			var oControl = JsControlTreeModifier.bySelector(oSelector, this.oComponent, this.oJsView);
+			var oControl = JsControlTreeModifier.bySelector(oSelector, this.oComponent);
 			assert.ok(oControl);
+		});
+
+		QUnit.test("when called with an embedded component's control", function (assert) {
+			var oManagedObject = new ManagedObject("embeddedComponent---mockControl");
+			var oControlSelector = {
+				id: "embeddedComponent---mockControl",
+				idIsLocal: false
+			};
+
+			var oSelector = JsControlTreeModifier.getSelector(oManagedObject, this.oComponent);
+
+			assert.propEqual(oSelector, oControlSelector, "then a selector with control's global id and 'isIsLocal' false is returned");
+			oManagedObject.destroy();
+		});
+
+		QUnit.test("when called with a control containing a non-stable id", function (assert) {
+			var oManagedObject = new ManagedObject("__embeddedComponent---mockControl");
+
+			assert.throws(function () {
+					JsControlTreeModifier.getSelector(oManagedObject, this.oComponent);
+				}, new Error("Generated ID attribute found - to offer flexibility a stable control ID is needed to assign the changes to, but for this control the ID was generated by SAPUI5 " + oManagedObject.getId()),
+				"then the correct error was thrown");
+			oManagedObject.destroy();
+		});
+	});
+
+	QUnit.module("While handling js views (with extension points) the BaseTreeModifier", {
+		beforeEach: function () {
+			this.oComponent = sap.ui.getCore().createComponent({
+				name: "sap.ui.test.other",
+				id: "testComponent"
+			});
+
+			this.oJsView = sap.ui.view({
+				type: sap.ui.core.mvc.ViewType.XML,
+				async: false, // test timing
+				viewContent : XML_VIEW2,
+				id : this.oComponent.createId("myView")
+			});
+			this.oHBox1 = this.oJsView.getContent()[0];
+			return this.oJsView;
+		},
+		afterEach: function () {
+			this.oComponent.destroy();
+			this.oJsView.destroy();
+		}
+	}, function() {
+		QUnit.test("can determine a targeted control for changes with extension point selector", function (assert) {
+			var oSelector = {
+				name: "ExtensionPoint1",
+				viewSelector: {
+					id: "testComponent---myView",
+					idIsLocal: false
+				}
+			};
+			var oControl = JsControlTreeModifier.bySelector(oSelector, this.oComponent);
+			assert.strictEqual(oControl.getId(), this.oHBox1.getId(), "then the correct parent control for the extension point selector is returned");
 		});
 	});
 
 	QUnit.module("Given a BaseTreeModifier...", {
+		afterEach: function() {
+			sandbox.restore();
+		}
 	}, function() {
 		QUnit.test("when checkAndPrefixIdsInFragment is called with various fragments", function(assert) {
 			var oXML1 = jQuery.sap.parseXML(
@@ -301,6 +422,61 @@ function(
 
 			checkIdsOfAllChildren(aChildren, assert);
 		});
+
+		QUnit.test("when getPropertyBindingOrProperty is called", function(assert) {
+			sandbox.stub(BaseTreeModifier, "getPropertyBinding")
+				.onCall(0).returns(undefined)
+				.onCall(1).returns("propertyBinding")
+				.onCall(2).returns("propertyBinding");
+			sandbox.stub(BaseTreeModifier, "getProperty")
+				.onCall(0).returns("property")
+				.onCall(1).returns(undefined)
+				.onCall(2).returns("property");
+
+			assert.equal(BaseTreeModifier.getPropertyBindingOrProperty(), "property", "without propertyBinding the property is returned");
+			assert.equal(BaseTreeModifier.getPropertyBindingOrProperty(), "propertyBinding", "without property the propertyBinding is returned");
+			assert.equal(BaseTreeModifier.getPropertyBindingOrProperty(), "propertyBinding", "with both returning something the propertyBinding is returned");
+		});
+
+		QUnit.test("when setPropertyBindingOrProperty is called", function(assert) {
+			var oPropertyBindingStub = sandbox.stub(BaseTreeModifier, "setPropertyBinding");
+			var oPropertyStub = sandbox.stub(BaseTreeModifier, "setProperty");
+
+			// control and propertyName are not needed in this test
+			var vBindingOrValue;
+			BaseTreeModifier.setPropertyBindingOrProperty(undefined, undefined, vBindingOrValue);
+			assert.equal(oPropertyBindingStub.callCount, 0, "the propertyBindingStub was not called");
+			assert.equal(oPropertyStub.callCount, 1, "the propertyBindingStub was called");
+
+			vBindingOrValue = "";
+			BaseTreeModifier.setPropertyBindingOrProperty(undefined, undefined, vBindingOrValue);
+			assert.equal(oPropertyBindingStub.callCount, 0, "the propertyBindingStub was not called");
+			assert.equal(oPropertyStub.callCount, 2, "the propertyBindingStub was called");
+
+			vBindingOrValue = "property";
+			BaseTreeModifier.setPropertyBindingOrProperty(undefined, undefined, vBindingOrValue);
+			assert.equal(oPropertyBindingStub.callCount, 0, "the propertyBindingStub was not called");
+			assert.equal(oPropertyStub.callCount, 3, "the propertyBindingStub was called");
+
+			vBindingOrValue = "{property}";
+			BaseTreeModifier.setPropertyBindingOrProperty(undefined, undefined, vBindingOrValue);
+			assert.equal(oPropertyBindingStub.callCount, 1, "the propertyBindingStub was called");
+			assert.equal(oPropertyStub.callCount, 3, "the propertyBindingStub was not called");
+
+			vBindingOrValue = {
+				path: "foo"
+			};
+			BaseTreeModifier.setPropertyBindingOrProperty(undefined, undefined, vBindingOrValue);
+			assert.equal(oPropertyBindingStub.callCount, 2, "the propertyBindingStub was called");
+			assert.equal(oPropertyStub.callCount, 3, "the propertyBindingStub was not called");
+
+			vBindingOrValue = {
+				parts: "foo"
+			};
+			BaseTreeModifier.setPropertyBindingOrProperty(undefined, undefined, vBindingOrValue);
+			assert.equal(oPropertyBindingStub.callCount, 3, "the propertyBindingStub was called");
+			assert.equal(oPropertyStub.callCount, 3, "the propertyBindingStub was not called");
+		});
 	});
 
 
@@ -319,41 +495,29 @@ function(
 			this.oControlWithoutPrefix.destroy();
 			sandbox.restore();
 		}
-	});
+	}, function () {
+		QUnit.test("checkControlId shall return false if the ID was generated", function (assert) {
+			assert.equal(BaseTreeModifier.checkControlId(this.oControlWithGeneratedId, this.oComponent), false);
+		});
 
-	QUnit.test("checkControlId shall return false if the id was generated", function (assert) {
-		assert.equal(BaseTreeModifier.checkControlId(this.oControlWithGeneratedId, this.oComponent), false);
-	});
+		QUnit.test("checkControlId shall return true if control ID was not generated", function (assert) {
+			assert.equal(BaseTreeModifier.checkControlId(this.oControlWithPrefix, this.oComponent), true);
+		});
 
-	QUnit.test("checkControlId shall throw an error if the id was generated", function (assert) {
-		var spyLog = sandbox.spy(jQuery.sap.log, "warning");
-		BaseTreeModifier.checkControlId(this.oControlWithGeneratedId, this.oComponent);
-		assert.ok(spyLog.calledOnce);
-	});
+		QUnit.test("checkControlId shall return true if the ID is a stable ID not containing the ComponentId", function (assert) {
+			assert.equal(BaseTreeModifier.checkControlId(this.oControlWithoutPrefix, this.oComponent), true);
+		});
 
-	QUnit.test("checkControlId does not throw an error if the id was generated but the logging was suppressed", function (assert) {
-		var spyLog = sandbox.spy(jQuery.sap.log, "warning");
-		BaseTreeModifier.checkControlId(this.oControlWithGeneratedId, this.oComponent, true);
-		assert.equal(spyLog.callCount, 0);
-	});
+		QUnit.test("hasLocalIdSuffix can determine that a control has a local ID", function(assert) {
+			assert.ok(BaseTreeModifier.hasLocalIdSuffix(this.oControlWithPrefix, this.oComponent));
+		});
 
-	QUnit.test("checkControlId shall return true if control id was not generated", function (assert) {
-		assert.equal(BaseTreeModifier.checkControlId(this.oControlWithPrefix, this.oComponent), true);
-	});
+		QUnit.test("hasLocalIdSuffix can determine that a control has no local ID", function(assert) {
+			assert.notOk(BaseTreeModifier.hasLocalIdSuffix(this.oControlWithoutPrefix, this.oComponent));
+		});
 
-	QUnit.test("checkControlId shall return true if the id is a stable Id not containing the ComponentId", function (assert) {
-		assert.equal(BaseTreeModifier.checkControlId(this.oControlWithoutPrefix, this.oComponent), true);
-	});
-
-	QUnit.test("hasLocalIdSuffix can determine that a control has a local id", function(assert) {
-		assert.ok(BaseTreeModifier.hasLocalIdSuffix(this.oControlWithPrefix, this.oComponent));
-	});
-
-	QUnit.test("hasLocalIdSuffix can determine that a control has no local id", function(assert) {
-		assert.notOk(BaseTreeModifier.hasLocalIdSuffix(this.oControlWithoutPrefix, this.oComponent));
-	});
-
-	QUnit.test("hasLocalIdSuffix returns false if no app component can be found", function(assert) {
-		assert.notOk(BaseTreeModifier.hasLocalIdSuffix(this.oControlWithoutPrefix, this.oComponent));
+		QUnit.test("hasLocalIdSuffix returns false if no app component can be found", function(assert) {
+			assert.notOk(BaseTreeModifier.hasLocalIdSuffix(this.oControlWithoutPrefix, this.oComponent));
+		});
 	});
 });

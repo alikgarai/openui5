@@ -1,12 +1,11 @@
 /*global sinon, QUnit*/
 
-sap.ui.require(['sap/ui/support/supportRules/ui/external/ElementTree'],
-	function (ElementTree) {
+sap.ui.define([
+	'sap/base/util/isEmptyObject',
+	'sap/ui/support/supportRules/ui/external/ElementTree'
+],
+	function (isEmptyObject, ElementTree) {
 		'use strict';
-
-		jQuery.sap.require('sap/ui/thirdparty/sinon');
-		jQuery.sap.require('sap/ui/thirdparty/sinon-qunit');
-		jQuery.sap.require("sap.ui.qunit.qunit-coverage");
 
 		var CONTAINER_LOCATION = 'qunit-fixture';
 
@@ -196,7 +195,7 @@ sap.ui.require(['sap/ui/support/supportRules/ui/external/ElementTree'],
 			this.elementTree.setData(mockSettingsObject);
 
 			// assert
-			assert.strictEqual(jQuery.isEmptyObject(this.elementTree._data), false, 'The _data private property should not be empty');
+			assert.strictEqual(isEmptyObject(this.elementTree._data), false, 'The _data private property should not be empty');
 			assert.strictEqual(JSON.stringify(mockElementTree) === JSON.stringify(this.elementTree._data.controls), true, 'The _data property should be set correctly');
 		});
 
@@ -477,7 +476,7 @@ sap.ui.require(['sap/ui/support/supportRules/ui/external/ElementTree'],
 			assert.strictEqual(this.elementTree._selectedElement.getAttribute('data-id'), '__label0', 'sap.m.Label control should be selected');
 			assert.strictEqual(document.getElementById('control-tree').querySelector("[data-id=__label0]"), this.elementTree._selectedElement, 'The correct element should be selected');
 
-			assert.strictEqual(jQuery.isEmptyObject(this.elementTree._selectedElement), false, 'The selected item should be set');
+			assert.strictEqual(isEmptyObject(this.elementTree._selectedElement), false, 'The selected item should be set');
 			assert.strictEqual(_selectTreeElementSpy.callCount, 1, 'Method _selectTreeElement() should be called');
 			assert.strictEqual(returnValue, this.elementTree, 'The element tree instance should be returned');
 			assert.strictEqual(warningSpy.notCalled, true, 'No warnings should be raised');
@@ -626,9 +625,9 @@ sap.ui.require(['sap/ui/support/supportRules/ui/external/ElementTree'],
 			// arrange
 			var generatedHTML = '<filter>' +
 				'<end>' +
-				'<label><input type="checkbox" issues checked/>Issues</label>' +
-				'<label><input type="checkbox" namespaces checked/>Namespaces</label>' +
-				'<label><input type="checkbox" attributes/>Attributes</label>' +
+				'<label><input type="checkbox" issues checked>Issues</label>' +
+				'<label><input type="checkbox" namespaces checked>Namespaces</label>' +
+				'<label><input type="checkbox" attributes>Attributes</label>' +
 				'</end>' +
 				'</filter>';
 			generatedHTML += '<tree show-namespaces show-problematic-elements></tree>';
@@ -682,9 +681,9 @@ sap.ui.require(['sap/ui/support/supportRules/ui/external/ElementTree'],
 			// arrange
 			var filterHTML = '<filter>' +
 				'<end>' +
-				'<label><input type="checkbox" issues checked/>Issues</label>' +
-				'<label><input type="checkbox" namespaces checked/>Namespaces</label>' +
-				'<label><input type="checkbox" attributes/>Attributes</label>' +
+				'<label><input type="checkbox" issues checked>Issues</label>' +
+				'<label><input type="checkbox" namespaces checked>Namespaces</label>' +
+				'<label><input type="checkbox" attributes>Attributes</label>' +
 				'</end>' +
 				'</filter>';
 
@@ -783,7 +782,7 @@ sap.ui.require(['sap/ui/support/supportRules/ui/external/ElementTree'],
 			this.elementTree._toggleCollapse(this.target);
 
 			// assert
-			assert.strictEqual(jQuery.isEmptyObject(this.target.attributes), true, 'No attributes should be set');
+			assert.strictEqual(isEmptyObject(this.target.attributes), true, 'No attributes should be set');
 		});
 
 		QUnit.test('Calling _toggleCollapse on an object with "right" attribute set', function (assert) {

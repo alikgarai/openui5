@@ -3,13 +3,9 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global",
-	"sap/ui/fl/changeHandler/Base",
-	"sap/ui/fl/Utils"
+	"sap/base/Log"
 ], function(
-	jQuery,
-	Base,
-	FlexUtils
+	Log
 ) {
 	"use strict";
 
@@ -91,7 +87,7 @@ sap.ui.define([
 			var oMovedElement = getElementControlOrThrowError(mMovedElement, oModifier, oAppComponent, oView);
 
 			if (!oMovedElement) {
-				FlexUtils.log.warning("Element to move not found");
+				Log.warning("Element to move not found");
 				return;
 			}
 
@@ -119,24 +115,23 @@ sap.ui.define([
 	 * @name sap.ui.fl.changeHandler.MoveElements#getSpecificChangeInfo
 	 */
 	MoveElements.getSpecificChangeInfo = function(oModifier, mSpecificChangeInfo) {
-
 		var oSourceParent = mSpecificChangeInfo.source.parent || oModifier.bySelector(mSpecificChangeInfo.source.id);
 		var oTargetParent = mSpecificChangeInfo.target.parent || oModifier.bySelector(mSpecificChangeInfo.target.id);
 		var sSourceAggregation = mSpecificChangeInfo.source.aggregation;
 		var sTargetAggregation = mSpecificChangeInfo.target.aggregation;
 
 		var mSpecificInfo = {
-			source : {
-				id : oSourceParent.getId(),
-				aggregation : sSourceAggregation,
-				type : oModifier.getControlType(oSourceParent)
+			source: {
+				id: oSourceParent.getId(),
+				aggregation: sSourceAggregation,
+				type: oModifier.getControlType(oSourceParent)
 			},
-			target : {
-				id : oTargetParent.getId(),
-				aggregation : sTargetAggregation,
-				type : oModifier.getControlType(oTargetParent)
+			target: {
+				id: oTargetParent.getId(),
+				aggregation: sTargetAggregation,
+				type: oModifier.getControlType(oTargetParent)
 			},
-			movedElements : mSpecificChangeInfo.movedElements
+			movedElements: mSpecificChangeInfo.movedElements
 		};
 
 		return mSpecificInfo;

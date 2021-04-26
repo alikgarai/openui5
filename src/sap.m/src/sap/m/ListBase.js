@@ -4,9 +4,9 @@
 
 // Provides control sap.m.ListBase.
 sap.ui.define([
-	"jquery.sap.global",
-	"sap/base/events/KeyCodes",
+	"sap/ui/events/KeyCodes",
 	"sap/ui/Device",
+	"sap/ui/core/Core",
 	"sap/ui/core/Control",
 	"sap/ui/core/InvisibleText",
 	"sap/ui/core/LabelEnablement",
@@ -16,12 +16,18 @@ sap.ui.define([
 	"./GrowingEnablement",
 	"./GroupHeaderListItem",
 	"./ListItemBase",
-	"./ListBaseRenderer"
+	"./ListBaseRenderer",
+	"sap/base/strings/capitalize",
+	"sap/ui/thirdparty/jquery",
+	"sap/base/Log",
+	"sap/ui/dom/jquery/control", // jQuery Plugin "control"
+	"sap/ui/dom/jquery/Selectors", // jQuery custom selectors ":sapTabbable"
+	"sap/ui/dom/jquery/Aria" // jQuery Plugin "addAriaLabelledBy", "removeAriaLabelledBy"
 ],
 function(
-	jQuery,
 	KeyCodes,
 	Device,
+	Core,
 	Control,
 	InvisibleText,
 	LabelEnablement,
@@ -31,7 +37,10 @@ function(
 	GrowingEnablement,
 	GroupHeaderListItem,
 	ListItemBase,
-	ListBaseRenderer
+	ListBaseRenderer,
+	capitalize,
+	jQuery,
+	Log
 ) {
 	"use strict";
 
@@ -56,6 +65,9 @@ function(
 
 	// shortcut for sap.m.ListHeaderDesign
 	var ListHeaderDesign = library.ListHeaderDesign;
+
+	// shortcut for sap.m.Sticky
+	var Sticky = library.Sticky;
 
 
 	/**
@@ -85,6 +97,7 @@ function(
 	var ListBase = Control.extend("sap.m.ListBase", /** @lends sap.m.ListBase.prototype */ { metadata : {
 
 		library : "sap.m",
+		dnd : true,
 		properties : {
 
 			/**
@@ -210,7 +223,25 @@ function(
 			 * Defines keyboard handling behavior of the control.
 			 * @since 1.38.0
 			 */
-			keyboardMode : {type : "sap.m.ListKeyboardMode", group : "Behavior", defaultValue : ListKeyboardMode.Navigation}
+			keyboardMode : {type : "sap.m.ListKeyboardMode", group : "Behavior", defaultValue : ListKeyboardMode.Navigation},
+
+			/**
+			 * Defines the section of the control that remains fixed at the top of the page during vertical scrolling as long as the control is in the viewport.
+			 *
+			 * <b>Note:</b> Enabling sticky column headers in List controls will not have any effect.
+			 *
+			 * There are some known restrictions. A few are given below:
+			 * <ul>
+			 * <li>If the control is placed in layout containers that have the <code>overflow: hidden</code> or <code>overflow: auto</code> style definition, this can
+			 * prevent the sticky elements of the control from becoming fixed at the top of the viewport.</li>
+			 * <li>If sticky column headers are enabled in the <code>sap.m.Table</code> control, setting focus on the column headers will let the table scroll to the top.</li>
+			 * <li>A transparent toolbar design is not supported for sticky bars. The toolbar will automatically get an intransparent background color.</li>
+			 * <li>This feature supports only the default height of the toolbar control.</li>
+			 * </ul>
+			 *
+			 * @since 1.58
+			 */
+			sticky : {type : "sap.m.Sticky[]", group : "Appearance"}
 		},
 		defaultAggregation : "items",
 		aggregations : {
@@ -222,7 +253,12 @@ function(
 
 			/**
 			 * User can swipe to bring in this control on the right hand side of an item.
-			 * <b>Note:</b> For non-touch devices, this functionality is ignored.
+			 * <b>Note:</b>
+			 * <ul>
+			 * <li>For non-touch screen devices, this functionality is ignored.</li>
+			 * <li>There is no accessible alternative provided by the control for swiping.
+			 * Applications that use this functionality must provide an accessible alternative UI to perform the same action.</li>
+			 * <ul>
 			 */
 			swipeContent : {type : "sap.ui.core.Control", multiple : false},
 
@@ -244,7 +280,13 @@ function(
 			 *
 			 * @since 1.54
 			 */
-			contextMenu : {type : "sap.ui.core.IContextMenu", multiple : false}
+			contextMenu : {type : "sap.ui.core.IContextMenu", multiple : false},
+
+			/**
+			 * Defines the message strip to display binding-related messages.
+			 * @since 1.73
+			 */
+			_messageStrip: {type : "sap.m.MessageStrip", multiple : false, visibility : "hidden"}
 		},
 		associations: {
 
@@ -314,8 +356,11 @@ function(
 			},
 
 			/**
-			 * Fires after us"r's swipe action and before the <code>swipeContent</code> is shown. On the <code>swipe</code> event handler, <code>swipeContent</code> can be changed according to the swiped item.
+			 * Fires after user's swipe action and before the <code>swipeContent</code> is shown. On the <code>swipe</code> event handler, <code>swipeContent</code> can be changed according to the swiped item.
 			 * Calling the <code>preventDefault</code> method of the event cancels the swipe action.
+			 *
+			 * <b>Note:</b> There is no accessible alternative provided by the control for swiping.
+			 * Applications that use this functionality must provide an accessible alternative UI to perform the same action.
 			 */
 			swipe : {allowPreventDefault : true,
 				parameters : {
@@ -333,7 +378,14 @@ function(
 					/**
 					 * Holds which control caused the swipe event within the item.
 					 */
-					srcControl : {type : "sap.ui.core.Control"}
+					srcControl : {type : "sap.ui.core.Control"},
+
+					/**
+					 * Shows in which direction the user swipes and can have the value <code>BeginToEnd</code> (left to right in LTR languages
+					 * and right to left in RTL languages) or <code>EndToBegin</code> (right to left in LTR languages
+					 * and left to right in RTL languages)
+					 */
+					swipeDirection : {type : "sap.m.SwipeDirection"}
 				}
 			},
 
@@ -470,6 +522,9 @@ function(
 	// announce accessibility details at the initial focus
 	ListBase.prototype.bAnnounceDetails = true;
 
+	// determines whether range selection and select all feature should be enabled for MultiSelect mode
+	ListBase.prototype.bPreventMassSelection = false;
+
 	ListBase.getInvisibleText = function() {
 		return this.oInvisibleText || (this.oInvisibleText = new InvisibleText().toStatic());
 	};
@@ -481,6 +536,9 @@ function(
 		this._aNavSections = [];
 		this._aSelectedPaths = [];
 		this._iItemNeedsHighlight = 0;
+		this._iItemNeedsNavigated = 0;
+		this._bItemsBeingBound = false;
+		this._bSkippedInvalidationOnRebind = false;
 		this.data("sap-ui-fastnavgroup", "true", true); // Define group for F6 handling
 	};
 
@@ -494,10 +552,9 @@ function(
 	ListBase.prototype.onAfterRendering = function() {
 		this._bRendering = false;
 		this._sLastMode = this.getMode();
-
 		// invalidate item navigation for desktop
 		if (Device.system.desktop) {
-			this._bItemNavigationInvalidated = true;
+			this._startItemNavigation(true);
 		}
 	};
 
@@ -532,7 +589,20 @@ function(
 	// if there is no data this should get called anyway
 	// TODO: if there is a network error this will not get called
 	// but we need to turn back to initial state
-	ListBase.prototype.updateItems = function(sReason) {
+	ListBase.prototype.updateItems = function(sReason, oEventInfo) {
+		// Special handling for "AutoExpandSelect" of the V4 ODataModel.
+		if (oEventInfo && oEventInfo.detailedReason === "AddVirtualContext") {
+			createVirtualItem(this);
+			return;
+		} else if (oEventInfo && oEventInfo.detailedReason === "RemoveVirtualContext") {
+			destroyVirtualItem(this);
+			return;
+		}
+
+		if (this._bSkippedInvalidationOnRebind && this.getBinding("items").getLength() === 0) {
+			this.invalidate();
+		}
+
 		if (this._oGrowingDelegate) {
 			// inform growing delegate to handle
 			this._oGrowingDelegate.updateItems(sReason);
@@ -557,11 +627,42 @@ function(
 			// items binding are updated
 			this._updateFinished();
 		}
+
+		this._bSkippedInvalidationOnRebind = false;
 	};
 
-	ListBase.prototype.setBindingContext = function() {
-		this._resetItemsBinding();
+	function createVirtualItem(oList) {
+		var oBinding = oList.getBinding("items");
+		var oBindingInfo = oList.getBindingInfo("items");
+		var oVirtualContext = oBinding.getContexts(0, oList.getGrowing() ? oList.getGrowingThreshold() : oBindingInfo.length)[0];
+
+		destroyVirtualItem(oList);
+		oList._oVirtualItem = GrowingEnablement.createItem(oVirtualContext, oBindingInfo, "virtual");
+		oList.addAggregation("dependents", oList._oVirtualItem, true);
+	}
+
+	function destroyVirtualItem(oList) {
+		if (oList._oVirtualItem) {
+			oList._oVirtualItem.destroy();
+			delete oList._oVirtualItem;
+		}
+	}
+
+	ListBase.prototype.setBindingContext = function(oContext, sModelName) {
+		var sItemsModelName = (this.getBindingInfo("items") || {}).model;
+		if (sItemsModelName === sModelName) {
+			this._resetItemsBinding();
+		}
+
 		return Control.prototype.setBindingContext.apply(this, arguments);
+	};
+
+	ListBase.prototype.bindAggregation = function(sName) {
+		this._bItemsBeingBound = sName === "items";
+		destroyVirtualItem(this);
+		Control.prototype.bindAggregation.apply(this, arguments);
+		this._bItemsBeingBound = false;
+		return this;
 	};
 
 	ListBase.prototype._bindAggregation = function(sName, oBindingInfo) {
@@ -593,14 +694,14 @@ function(
 		this._showBusyIndicator();
 
 		if (this._dataReceivedHandlerId != null) {
-			jQuery.sap.clearDelayedCall(this._dataReceivedHandlerId);
+			clearTimeout(this._dataReceivedHandlerId);
 			delete this._dataReceivedHandlerId;
 		}
 	};
 
 	ListBase.prototype._onBindingDataReceivedListener = function(oEvent) {
 		if (this._dataReceivedHandlerId != null) {
-			jQuery.sap.clearDelayedCall(this._dataReceivedHandlerId);
+			clearTimeout(this._dataReceivedHandlerId);
 			delete this._dataReceivedHandlerId;
 		}
 
@@ -608,10 +709,10 @@ function(
 		// Under certain conditions it can happen that there are multiple requests in the request queue of the binding, which will be processed
 		// sequentially. In this case the busy indicator will be shown and hidden multiple times (flickering) until all requests have been
 		// processed. With this timer we avoid the flickering, as the list will only be set to not busy after all requests have been processed.
-		this._dataReceivedHandlerId = jQuery.sap.delayedCall(0, this, function() {
+		this._dataReceivedHandlerId = setTimeout(function() {
 			this._hideBusyIndicator();
 			delete this._dataReceivedHandlerId;
-		});
+		}.bind(this), 0);
 	};
 
 	ListBase.prototype.destroyItems = function(bSuppressInvalidate) {
@@ -628,7 +729,11 @@ function(
 
 		// invalidate to update the DOM on the next tick of the RenderManager
 		if (!bSuppressInvalidate) {
-			this.invalidate();
+			if (this._bItemsBeingBound) {
+				this._bSkippedInvalidationOnRebind = true;
+			} else {
+				this.invalidate();
+			}
 		}
 
 		return this;
@@ -701,7 +806,7 @@ function(
 
 		// return no data text from resource bundle when there is no custom
 		var sNoDataText = this.getProperty("noDataText");
-		sNoDataText = sNoDataText || sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("LIST_NO_DATA");
+		sNoDataText = sNoDataText || Core.getLibraryResourceBundle("sap.m").getText("LIST_NO_DATA");
 		return sNoDataText;
 	};
 
@@ -729,15 +834,15 @@ function(
 	 *
 	 * @param {sap.m.ListItemBase} oListItem
 	 *         The list item whose selection to be changed. This parameter is mandatory.
-	 * @param {boolean} bSelect
-	 *         Sets selected status of the list item. Default value is true.
-	 * @type sap.m.ListBase
+	 * @param {boolean} [bSelect=true]
+	 *         Sets selected status of the list item
+	 * @type this
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	ListBase.prototype.setSelectedItem = function(oListItem, bSelect, bFireEvent) {
 		if (this.indexOfItem(oListItem) < 0) {
-			jQuery.sap.log.warning("setSelectedItem is called without valid ListItem parameter on " + this);
+			Log.warning("setSelectedItem is called without valid ListItem parameter on " + this);
 			return;
 		}
 		if (this._bSelectionMode) {
@@ -766,14 +871,14 @@ function(
 	 *
 	 * @param {string} sId
 	 *         The id of the list item whose selection to be changed.
-	 * @param {boolean} bSelect
-	 *         Sets selected status of the list item. Default value is true.
-	 * @type sap.m.ListBase
+	 * @param {boolean} [bSelect=true]
+	 *         Sets selected status of the list item
+	 * @type this
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	ListBase.prototype.setSelectedItemById = function(sId, bSelect) {
-		var oListItem = sap.ui.getCore().byId(sId);
+		var oListItem = Core.byId(sId);
 		return this.setSelectedItem(oListItem, bSelect);
 	};
 
@@ -782,10 +887,10 @@ function(
 	 * Returns the binding contexts of the selected items.
 	 * Note: This method returns an empty array if no databinding is used.
 	 *
-	 * @param {boolean} bAll
+	 * @param {boolean} [bAll=false]
 	 *         Set true to include even invisible selected items(e.g. the selections from the previous filters).
 	 *         Note: In single selection modes, only the last selected item's binding context is returned in array.
-	 * @type object[]
+	 * @type sap.ui.model.Context[]
 	 * @public
 	 * @since 1.18.6
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
@@ -819,7 +924,7 @@ function(
 	 *
 	 * @param {boolean} bAll
 	 *         Since version 1.16.3. This control keeps old selections after filter or sorting. Set this parameter "true" to remove all selections.
-	 * @type sap.m.ListBase
+	 * @type this
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -852,7 +957,9 @@ function(
 	/**
 	 * Select all items in "MultiSelection" mode.
 	 *
-	 * @type sap.m.ListBase
+	 * <b>Note:</b> In case <code>growing</code> is enabled, only the visible items in the list will be selected.
+	 *
+	 * @type this
 	 * @public
 	 * @since 1.16
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
@@ -1009,6 +1116,15 @@ function(
 		if (!this._bRendering && this.bOutput) {
 			this._startItemNavigation(true);
 		}
+
+		var bVisibleItems = this.getVisibleItems().length > 0;
+		if (!bVisibleItems && !this._bInvalidatedForNoData) {
+			this.invalidate();
+			this._bInvalidatedForNoData = true;
+		} else if (bVisibleItems && this._bInvalidatedForNoData) {
+			this.invalidate();
+			this._bInvalidatedForNoData = false;
+		}
 	};
 
 	// this gets called when items active state is changed
@@ -1025,6 +1141,17 @@ function(
 			this.$("listUl").addClass("sapMListHighlight");
 		} else if (this._iItemNeedsHighlight == 0) {
 			this.$("listUl").removeClass("sapMListHighlight");
+		}
+	};
+
+	ListBase.prototype.onItemNavigatedChange = function(oItem, bNeedsNavigated) {
+		this._iItemNeedsNavigated += (bNeedsNavigated ? 1 : -1);
+
+		// update navigated visibility
+		if (this._iItemNeedsNavigated == 1 && bNeedsNavigated) {
+			this.$("listUl").addClass("sapMListNavigated");
+		} else if (this._iItemNeedsNavigated == 0) {
+			this.$("listUl").removeClass("sapMListNavigated");
 		}
 	};
 
@@ -1108,6 +1235,15 @@ function(
 		return true;
 	};
 
+	/*
+	 * This hook method is called from GrowingEnablement to determine whether
+	 * growing should suppress List invalidation
+	 * @protected
+	 */
+	ListBase.prototype.shouldGrowingSuppressInvalidation = function() {
+		return true;
+	};
+
 	// when new items binding we should turn back to initial state
 	ListBase.prototype._resetItemsBinding = function() {
 		if (this.isBound("items")) {
@@ -1135,12 +1271,19 @@ function(
 
 	// fire updateStarted event with update reason and actual/total info
 	ListBase.prototype._fireUpdateStarted = function(sReason, oInfo) {
-		this._sUpdateReason = jQuery.sap.charToUpperCase(sReason || "Refresh");
+		this._sUpdateReason = capitalize(sReason || "Refresh");
 		this.fireUpdateStarted({
 			reason : this._sUpdateReason,
 			actual : oInfo ? oInfo.actual : this.getItems(true).length,
 			total : oInfo ? oInfo.total : this.getMaxItemsCount()
 		});
+	};
+
+	// event listener for theme changed
+	ListBase.prototype.onThemeChanged = function() {
+		if (this._oGrowingDelegate) {
+			this._oGrowingDelegate._updateTrigger();
+		}
 	};
 
 	// called on after rendering to finalize item update finished
@@ -1155,14 +1298,14 @@ function(
 	// fire updateFinished event delayed to make sure rendering phase is done
 	ListBase.prototype._fireUpdateFinished = function(oInfo) {
 		this._hideBusyIndicator();
-		jQuery.sap.delayedCall(0, this, function() {
+		setTimeout(function() {
 			this._bItemNavigationInvalidated = true;
 			this.fireUpdateFinished({
 				reason : this._sUpdateReason,
 				actual : oInfo ? oInfo.actual : this.getItems(true).length,
 				total : oInfo ? oInfo.total : this.getMaxItemsCount()
 			});
-		});
+		}.bind(this), 0);
 	};
 
 	ListBase.prototype._showBusyIndicator = function() {
@@ -1171,10 +1314,10 @@ function(
 			this._bBusy = true;
 
 			// TODO: would be great to have an event when busy indicator visually seen
-			this._sBusyTimer = jQuery.sap.delayedCall(this.getBusyIndicatorDelay(), this, function() {
+			this._sBusyTimer = setTimeout(function() {
 				// clean no data text
 				this.$("nodata-text").text("");
-			});
+			}.bind(this), this.getBusyIndicatorDelay());
 
 			// set busy property
 			this.setBusy(true, "listUl");
@@ -1186,13 +1329,56 @@ function(
 			// revert busy state
 			this._bBusy = false;
 			this.setBusy(false, "listUl");
-			jQuery.sap.clearDelayedCall(this._sBusyTimer);
+			clearTimeout(this._sBusyTimer);
 
 			// revert no data texts when necessary
 			if (!this.getItems(true).length) {
 				this.$("nodata-text").text(this.getNoDataText());
 			}
 		}
+	};
+
+	ListBase.prototype.setBusy = function(bBusy, sBusySection) {
+		if (this.getBusy() == bBusy) {
+			return this;
+		}
+
+		Control.prototype.setBusy.apply(this, arguments);
+		if (!bBusy || !window.IntersectionObserver) {
+			clearTimeout(this._iBusyTimer);
+			return this;
+		}
+
+		this._iBusyTimer = setTimeout(function() {
+			var oBusyDom = this.getDomRef(sBusySection);
+			var oAnimDom = this.getDomRef("busyIndicator");
+			var oScrollDelegate = library.getScrollDelegate(this, true);
+			if (!oBusyDom || !oAnimDom || !oScrollDelegate) {
+				return;
+			}
+
+			var oBusyObserver = new window.IntersectionObserver(function(aEntries) {
+				oBusyObserver.disconnect();
+				var oEntry = aEntries.pop();
+				var fRatio = oEntry.intersectionRatio;
+				if (fRatio <= 0 || fRatio >= 1) {
+					return;
+				}
+
+				var oStyle = oAnimDom.firstChild.style;
+				if (oEntry.intersectionRect.height >= oEntry.rootBounds.height) {
+					oStyle.position = "sticky";
+				} else {
+					oStyle.top = ((oEntry.boundingClientRect.top < 0 ? 1 - fRatio : 0) + (fRatio / 2)) * 100 + "%";
+				}
+			}, {
+				root: oScrollDelegate.getContainerDomRef()
+			});
+
+			oBusyObserver.observe(oBusyDom);
+		}.bind(this), this.getBusyIndicatorDelay());
+
+		return this;
 	};
 
 	ListBase.prototype.onItemBindingContextSet = function(oItem) {
@@ -1238,7 +1424,57 @@ function(
 
 	// this gets called from item when selection is changed via checkbox/radiobutton/press event
 	ListBase.prototype.onItemSelect = function(oListItem, bSelected) {
-		if (this.getMode() == ListMode.MultiSelect) {
+		var sMode = this.getMode();
+
+		if (this._mRangeSelection && !this.bPreventMassSelection) {
+			// if this._mRangeSelection.selected == false, then simply select the item
+			if (!this._mRangeSelection.selected) {
+				this._fireSelectionChangeEvent([oListItem]);
+				// update the _mRangeSelection object so that RangeSelection mode can be resumed as expected by the user
+				this._mRangeSelection.index = this.getVisibleItems().indexOf(oListItem);
+				this._mRangeSelection.selected = bSelected;
+				return;
+			}
+
+			// if the item is deselected in rangeSelection mode, then this action should be prevented
+			if (!bSelected) {
+				oListItem.setSelected(true);
+				return;
+			}
+
+			var iListItemIndex = this.indexOfItem(oListItem),
+				aItems = this.getItems(),
+				iItemsRangeToSelect,
+				oItemToSelect,
+				aSelectedItemsRange = [],
+				iDirection;
+
+			if (iListItemIndex < this._mRangeSelection.index) {
+				iItemsRangeToSelect = this._mRangeSelection.index - iListItemIndex;
+				iDirection = -1;
+			} else {
+				iItemsRangeToSelect = iListItemIndex - this._mRangeSelection.index;
+				iDirection = 1;
+			}
+
+			for (var i = 1; i <= iItemsRangeToSelect; i++) {
+				oItemToSelect = aItems[this._mRangeSelection.index + (i * iDirection)];
+
+				// if item is not visible or item is already selected then do not fire the selectionChange event
+				if (oItemToSelect.isSelectable() && oItemToSelect.getVisible() && !oItemToSelect.getSelected()) {
+					oItemToSelect.setSelected(true);
+					aSelectedItemsRange.push(oItemToSelect);
+				} else if (oItemToSelect === oListItem) {
+					// oListItem.getSelected() === true, hence just add item to the aSelectedItemsRange array
+					aSelectedItemsRange.push(oItemToSelect);
+				}
+			}
+
+			this._fireSelectionChangeEvent(aSelectedItemsRange);
+			return;
+		}
+
+		if (sMode === ListMode.MultiSelect) {
 			this._fireSelectionChangeEvent([oListItem]);
 		} else if (this._bSelectionMode && bSelected) {
 			this._fireSelectionChangeEvent([oListItem]);
@@ -1259,6 +1495,10 @@ function(
 			selected : oListItem.getSelected(),
 			selectAll: !!bSelectAll
 		});
+
+		if (this.getGrowing()) {
+			this._bSelectAll = bSelectAll;
+		}
 
 		// support old API
 		this.fireSelect({
@@ -1282,12 +1522,54 @@ function(
 		}
 
 		// fire event async
-		jQuery.sap.delayedCall(0, this, function() {
+		setTimeout(function() {
 			this.fireItemPress({
 				listItem : oListItem,
 				srcControl : oSrcControl
 			});
-		});
+		}.bind(this), 0);
+	};
+
+	ListBase.prototype.onItemKeyDown = function (oItem, oEvent) {
+		// prevent rangeSelection when SHIFT key is used with an additional key combination (e.g. CTRL + SHIFT + TAB)
+		// prevent rangeSelection also for fast navigation (SHIFT + F6)
+		if (!oEvent.shiftKey ||
+			oEvent.ctrlKey ||
+			oEvent.altKey ||
+			oEvent.metaKey ||
+			this.getMode() !== ListMode.MultiSelect ||
+			!oItem.isSelectable() ||
+			this.bPreventMassSelection ||
+			oEvent.which === KeyCodes.F6) {
+			if (this._mRangeSelection) {
+				this._mRangeSelection = null;
+			}
+			return;
+		}
+
+		var aVisibleItems = this.getVisibleItems(),
+			bHasVisibleSelectedItems = aVisibleItems.some(function(oVisibleItem) {
+				return !!oVisibleItem.getSelected();
+			});
+
+		// if there are no visible selected items then no action required in rangeSelection mode
+		if (!bHasVisibleSelectedItems) {
+			return;
+		}
+
+		if (!this._mRangeSelection) {
+			this._mRangeSelection = {
+				index: aVisibleItems.indexOf(oItem),
+				selected: oItem.getSelected()
+			};
+		}
+	};
+
+	ListBase.prototype.onItemKeyUp = function(oItem, oEvent) {
+		// end of range selection when SHIFT key is released
+		if (oEvent.which === KeyCodes.SHIFT) {
+			this._mRangeSelection = null;
+		}
 	};
 
 	// insert or remove given item's path from selection array
@@ -1364,7 +1646,7 @@ function(
 		// render swipe content into swipe container if needed
 		if (this._bRerenderSwipeContent) {
 			this._bRerenderSwipeContent = false;
-			var rm = sap.ui.getCore().createRenderManager();
+			var rm = Core.createRenderManager();
 			rm.render(this.getSwipeContent(), $container.empty()[0]);
 			rm.destroy();
 		}
@@ -1383,7 +1665,7 @@ function(
 		that._renderSwipeContent();
 
 		// add to instance manager
-		InstanceManager.addDialogInstance(that);
+		InstanceManager.addPopoverInstance(that);
 
 		// maybe keyboard is opened
 		window.document.activeElement.blur();
@@ -1402,10 +1684,10 @@ function(
 		});
 
 		// UX: swipeout is not interruptible till animation is finished
-		$container.bind("webkitAnimationEnd animationend", function() {
-			jQuery(this).unbind("webkitAnimationEnd animationend");
+		$container.on("webkitAnimationEnd animationend", function() {
+			jQuery(this).off("webkitAnimationEnd animationend");
 			// disable animation and focus to container
-			$container.css("opacity", 1).focus();
+			$container.css("opacity", 1).trigger("focus");
 
 			// check parents touchend for auto hide mode
 			$blocker.parent().on("touchend.swp touchcancel.swp mouseup.swp", function(e) {
@@ -1434,7 +1716,7 @@ function(
 		this._isSwipeActive = false;
 
 		// remove from instance manager
-		InstanceManager.removeDialogInstance(this);
+		InstanceManager.removePopoverInstance(this);
 	};
 
 
@@ -1444,7 +1726,7 @@ function(
 	 *
 	 * @param {any} oCallback
 	 *         This callback function is called with two parameters(swipedListItem and swipedContent) after swipe-out animation is finished.
-	 * @type sap.m.ListBase
+	 * @type this
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -1460,8 +1742,8 @@ function(
 		this._getTouchBlocker().parent().off("touchend.swp touchend.swp touchcancel.swp mouseup.swp");
 
 		// add swipeout animation and listen this
-		$container.bind("webkitAnimationEnd animationend", function() {
-			jQuery(this).unbind("webkitAnimationEnd animationend");
+		$container.on("webkitAnimationEnd animationend", function() {
+			jQuery(this).off("webkitAnimationEnd animationend");
 			that._onSwipeOut(callback);
 		}).removeClass("sapMListSwpInAnim").addClass("sapMListSwpOutAnim");
 
@@ -1484,8 +1766,13 @@ function(
 	 */
 	ListBase.prototype.close = ListBase.prototype._removeSwipeContent;
 
-	// called on swipe event to bring in the swipeContent control
-	ListBase.prototype._onSwipe = function(oEvent) {
+	/**
+	 * Called on swipe event to bring in the swipeContent control.
+	 * Swipe direction the value can be <code>BeginToEnd</code> (left to right in LTR languages
+	 * and right to left in RTL languages) or <code>EndToBegin</code> (right to left in LTR languages
+	 * and left to right in RTL languages)
+	 */
+	ListBase.prototype._onSwipe = function(oEvent, swipeDirection) {
 		var oContent = this.getSwipeContent(),
 			oSrcControl = oEvent.srcControl;
 
@@ -1503,7 +1790,8 @@ function(
 				this.fireSwipe({
 					listItem : this._swipedItem,
 					swipeContent : oContent,
-					srcControl : oSrcControl
+					srcControl : oSrcControl,
+					swipeDirection: swipeDirection
 				}, true) && this._swipeIn();
 			}
 		}
@@ -1513,19 +1801,44 @@ function(
 		this._eventHandledByControl = oEvent.isMarked();
 	};
 
+	// Swipe from the end to the begin - right to left in LTR and left to right in RTL languages.
 	ListBase.prototype.onswipeleft = function(oEvent) {
-		var exceptDirection = sap.ui.getCore().getConfiguration().getRTL() ? "RightToLeft" : "LeftToRight";
 
-		if (this.getSwipeDirection() != exceptDirection) {
-			this._onSwipe(oEvent);
+		var bRtl = Core.getConfiguration().getRTL();
+		var exceptDirection = bRtl ? SwipeDirection.EndToBegin : SwipeDirection.BeginToEnd;
+		var swipeDirection = this.getSwipeDirection();
+
+		if (swipeDirection === SwipeDirection.LeftToRight) {
+			swipeDirection = SwipeDirection.BeginToEnd;
+		} else if (swipeDirection === SwipeDirection.RightToLeft) {
+			swipeDirection = SwipeDirection.EndToBegin;
+		}
+
+		if (swipeDirection != exceptDirection) {
+			if (swipeDirection == SwipeDirection.Both) {
+				swipeDirection = bRtl ? SwipeDirection.BeginToEnd : SwipeDirection.EndToBegin;
+			}
+			this._onSwipe(oEvent, swipeDirection);
 		}
 	};
 
+	// Swipe from the begin to the end - left to right in LTR and right to left in RTL languages.
 	ListBase.prototype.onswiperight = function(oEvent) {
-		var exceptDirection = sap.ui.getCore().getConfiguration().getRTL() ? "LeftToRight" : "RightToLeft";
+		var bRtl = Core.getConfiguration().getRTL();
+		var exceptDirection = bRtl ? SwipeDirection.BeginToEnd : SwipeDirection.EndToBegin;
+		var swipeDirection = this.getSwipeDirection();
 
-		if (this.getSwipeDirection() != exceptDirection) {
-			this._onSwipe(oEvent);
+		if (swipeDirection === SwipeDirection.LeftToRight) {
+			swipeDirection = SwipeDirection.BeginToEnd;
+		} else if (swipeDirection === SwipeDirection.RightToLeft) {
+			swipeDirection = SwipeDirection.EndToBegin;
+		}
+
+		if (swipeDirection != exceptDirection) {
+			if (swipeDirection == SwipeDirection.Both) {
+				swipeDirection = bRtl ? SwipeDirection.EndToBegin : SwipeDirection.BeginToEnd;
+			}
+			this._onSwipe(oEvent, swipeDirection);
 		}
 	};
 
@@ -1558,16 +1871,19 @@ function(
 		if (oOrigin && oOrigin === this.getSwipeContent()) {
 			this._bRerenderSwipeContent = true;
 			this._isSwipeActive && this._renderSwipeContent();
-			return this;
+			return;
 		}
 
 		return Control.prototype.invalidate.apply(this, arguments);
 	};
 
 	ListBase.prototype.addItemGroup = function(oGroup, oHeader, bSuppressInvalidate) {
-		oHeader = oHeader || new GroupHeaderListItem({
-			title: oGroup.text || oGroup.key
-		});
+		if (!oHeader) {
+			oHeader = new GroupHeaderListItem();
+			// setter is used to avoid complex binding parser checks which happens when setting values in constructor (ManagedObject)
+			// i.e., to ignore binding strings "{" "[" from the value being set
+			oHeader.setTitle(oGroup.text || oGroup.key);
+		}
 
 		oHeader._bGroupHeader = true;
 		this.addAggregation("items", oHeader, bSuppressInvalidate);
@@ -1583,7 +1899,7 @@ function(
 	};
 
 	ListBase.prototype.getAccessibilityType = function() {
-		return sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("ACC_CTR_TYPE_LIST");
+		return Core.getLibraryResourceBundle("sap.m").getText("ACC_CTR_TYPE_LIST");
 	};
 
 	ListBase.prototype.getAccessibilityStates = function() {
@@ -1594,50 +1910,30 @@ function(
 		var sStates = "",
 			mMode = ListMode,
 			sMode = this.getMode(),
-			oBundle = sap.ui.getCore().getLibraryResourceBundle("sap.m");
+			oBundle = Core.getLibraryResourceBundle("sap.m");
 
 		if (LabelEnablement.isRequired(this)) {
 			sStates += oBundle.getText("LIST_REQUIRED") + " ";
 		}
 
 		if (sMode == mMode.MultiSelect) {
-			sStates += oBundle.getText("LIST_MULTISELECTABLE") + " ";
+			sStates += oBundle.getText("LIST_MULTISELECTABLE") + " . ";
 		} else if (sMode == mMode.Delete) {
-			sStates += oBundle.getText("LIST_DELETABLE") + " ";
+			sStates += oBundle.getText("LIST_DELETABLE") + " . ";
 		} else if (sMode != mMode.None) {
-			sStates += oBundle.getText("LIST_SELECTABLE") + " ";
+			sStates += oBundle.getText("LIST_SELECTABLE") + " . ";
 		}
 
 		if (this.isGrouped()) {
-			sStates += oBundle.getText("LIST_GROUPED") + " ";
+			sStates += oBundle.getText("LIST_GROUPED") + " . ";
 		}
 
 		return sStates;
 	};
 
-	ListBase.prototype.getAccessibilityDescription = function() {
-		var sDescription = this.getAriaLabelledBy().map(function(sAriaLabelledBy) {
-			var oAriaLabelledBy = sap.ui.getCore().byId(sAriaLabelledBy);
-			return ListItemBase.getAccessibilityText(oAriaLabelledBy);
-		}).join(" ");
-
-		var oHeaderTBar = this.getHeaderToolbar();
-		if (oHeaderTBar) {
-			var oTitle = oHeaderTBar.getTitleControl();
-			if (oTitle) {
-				sDescription += oTitle.getText() + " ";
-			}
-		} else {
-			sDescription += this.getHeaderText() + " ";
-		}
-
-		sDescription += this.getAccessibilityStates() + " ";
-		return sDescription;
-	};
-
 	ListBase.prototype.getAccessibilityInfo = function() {
 		return {
-			description: this.getAccessibilityDescription().trim(),
+			description: this.getAccessibilityStates().trim(),
 			focusable: true
 		};
 	};
@@ -1668,11 +1964,11 @@ function(
 
 	// this gets called when the focus is on the item or its content
 	ListBase.prototype.onItemFocusIn = function(oItem, oFocusedControl) {
-		if (oItem !== oFocusedControl) {
-			return;
-		}
+		// focus and scroll handling for sticky elements
+		this._handleStickyItemFocus(oItem.getDomRef());
 
-		if (!sap.ui.getCore().getConfiguration().getAccessibility()) {
+		if (oItem !== oFocusedControl ||
+			!Core.getConfiguration().getAccessibility()) {
 			return;
 		}
 
@@ -1687,10 +1983,16 @@ function(
 		} else {
 			// prepare the announcement for the screen reader
 			var oAccInfo = oItem.getAccessibilityInfo(),
-				oBundle = sap.ui.getCore().getLibraryResourceBundle("sap.m"),
-				sDescription = oAccInfo.type + " ";
+				oBundle = Core.getLibraryResourceBundle("sap.m"),
+				sDescription = oAccInfo.type + " . ";
 
-			sDescription += oBundle.getText("LIST_ITEM_POSITION", [mPosition.posInset, mPosition.setSize]) + " ";
+			if (!Device.browser.chrome || this.isA("sap.m.Table")) {
+				sDescription += oBundle.getText("LIST_ITEM_POSITION", [mPosition.posInset, mPosition.setSize]) + " . ";
+			} else {
+				oItemDomRef.setAttribute("aria-posinset", mPosition.posInset);
+				oItemDomRef.setAttribute("aria-setsize", mPosition.setSize);
+			}
+
 			sDescription += oAccInfo.description;
 			this.updateInvisibleText(sDescription, oItemDomRef);
 			return sDescription;
@@ -1708,9 +2010,6 @@ function(
 
 		oInvisibleText.setText(sText.trim());
 		$FocusedItem.addAriaLabelledBy(oInvisibleText.getId(), bPrepend);
-		window.setTimeout(function() {
-			$FocusedItem.removeAriaLabelledBy(oInvisibleText.getId());
-		}, 0);
 	};
 
 	/* Keyboard Handling */
@@ -1730,6 +2029,19 @@ function(
 			return;
 		}
 
+		// focus on root element should be prevented by showNoData=false and there a no items & destroy ItemNavigation
+		var oDomRef = this.getDomRef();
+
+		if (!this.getShowNoData() && !this.getVisibleItems().length && oDomRef) {
+			oDomRef.classList.add("sapMListPreventFocus");
+			this._destroyItemNavigation();
+			return;
+		}
+
+		if (oDomRef) {
+			oDomRef.classList.remove("sapMListPreventFocus");
+		}
+
 		var sKeyboardMode = this.getKeyboardMode(),
 			mKeyboardMode = ListKeyboardMode;
 
@@ -1739,8 +2051,13 @@ function(
 		}
 
 		// if focus is not on the navigation items then only invalidate the item navigation
-		if (bIfNeeded && !this.getNavigationRoot().contains(document.activeElement)) {
+		var oNavigationRoot = this.getNavigationRoot();
+		var iTabIndex = (sKeyboardMode == mKeyboardMode.Edit) ? -1 : 0;
+		if (bIfNeeded && oNavigationRoot && !oNavigationRoot.contains(document.activeElement)) {
 			this._bItemNavigationInvalidated = true;
+			if (!oNavigationRoot.getAttribute("tabindex")) {
+				oNavigationRoot.tabIndex = iTabIndex;
+			}
 			return;
 		}
 
@@ -1748,10 +2065,9 @@ function(
 		if (!this._oItemNavigation) {
 			this._oItemNavigation = new ItemNavigation();
 			this._oItemNavigation.setCycling(false);
-			this.addEventDelegate(this._oItemNavigation);
+			this.addDelegate(this._oItemNavigation);
 
 			// set the tab index of active items
-			var iTabIndex = (sKeyboardMode == mKeyboardMode.Edit) ? -1 : 0;
 			this._setItemNavigationTabIndex(iTabIndex);
 
 			// explicitly setting table mode with one column
@@ -1759,10 +2075,11 @@ function(
 			this._oItemNavigation.setTableMode(true, true).setColumns(1);
 
 			// alt + up/down will be used for section navigation
-			// notify item navigation not to handle alt key modifiers
+			// alt/meta + left/right in the browser is used by default for navigating backwards or forwards in the browser history
+			// notify item navigation not to handle alt, meta key modifiers
 			this._oItemNavigation.setDisabledModifiers({
-				sapnext : ["alt"],
-				sapprevious : ["alt"]
+				sapnext : ["alt", "meta"],
+				sapprevious : ["alt", "meta"]
 			});
 		}
 
@@ -1770,10 +2087,9 @@ function(
 		this._oItemNavigation.setPageSize(this.getGrowingThreshold());
 
 		// configure navigation root
-		var oNavigationRoot = this.getNavigationRoot();
 		this._oItemNavigation.setRootDomRef(oNavigationRoot);
 
-		// configure navigatable items
+		// configure navigation items
 		this.setNavigationItems(this._oItemNavigation, oNavigationRoot);
 
 		// clear invalidations
@@ -1801,7 +2117,7 @@ function(
 	};
 
 	/**
-	 * Returns ItemNavigation for controls uses List
+	 * Returns the ItemNavigation delegate of the list
 	 * @since 1.16.5
 	 * @returns {sap.ui.core.delegate.ItemNavigation|undefined}
 	 * @protected
@@ -1861,7 +2177,7 @@ function(
 	 */
 	ListBase.prototype.forwardTab = function(bForward) {
 		this._bIgnoreFocusIn = true;
-		this.$(bForward ? "after" : "before").focus();
+		this.$(bForward ? "after" : "before").trigger("focus");
 	};
 
 	// move focus out of the table for nodata row
@@ -1900,7 +2216,7 @@ function(
 
 		// find the current section index
 		this._aNavSections.some(function(sSectionId, iSectionIndex) {
-			var oSectionDomRef = jQuery.sap.domById(sSectionId);
+			var oSectionDomRef = (sSectionId ? window.document.getElementById(sSectionId) : null);
 			if (oSectionDomRef && oSectionDomRef.contains(document.activeElement)) {
 				iIndex = iSectionIndex;
 				return true;
@@ -1909,7 +2225,7 @@ function(
 
 		// if current section is items container then save the current focus position
 		var oItemsContainerDomRef = this.getItemsContainerDomRef();
-		var $CurrentSection = jQuery.sap.byId(this._aNavSections[iIndex]);
+		var $CurrentSection = jQuery(document.getElementById(this._aNavSections[iIndex]));
 		if ($CurrentSection[0] === oItemsContainerDomRef && this._oItemNavigation) {
 			$CurrentSection.data("redirect", this._oItemNavigation.getFocusedIndex());
 		}
@@ -1917,7 +2233,7 @@ function(
 		// find the next focusable section
 		this._aNavSections.some(function() {
 			iIndex = (iIndex + iStep + iLength) % iLength;	// circle
-			$TargetSection = jQuery.sap.byId(this._aNavSections[iIndex]);
+			$TargetSection = jQuery(document.getElementById(this._aNavSections[iIndex]));
 
 			// if target is items container
 			if ($TargetSection[0] === oItemsContainerDomRef && this._oItemNavigation) {
@@ -1928,7 +2244,7 @@ function(
 			}
 
 			if ($TargetSection.is(":focusable")) {
-				$TargetSection.focus();
+				$TargetSection.trigger("focus");
 				return true;
 			}
 
@@ -1973,9 +2289,8 @@ function(
 
 	// Ctrl + A to switch select all/none
 	ListBase.prototype.onkeydown = function(oEvent) {
-
 		var bCtrlA = (oEvent.which == KeyCodes.A) && (oEvent.metaKey || oEvent.ctrlKey);
-		if (oEvent.isMarked() || !bCtrlA || !jQuery(oEvent.target).hasClass(this.sNavItemClass)) {
+		if (oEvent.isMarked() || !bCtrlA || !jQuery(oEvent.target).hasClass(this.sNavItemClass) || this.bPreventMassSelection) {
 			return;
 		}
 
@@ -1999,6 +2314,11 @@ function(
 		if (this._bItemNavigationInvalidated) {
 			this._startItemNavigation();
 		}
+
+		// prevent text selection when preforming range selection with SHIFT + mouse click
+		if (oEvent.shiftKey && this._mRangeSelection && oEvent.srcControl.getId().includes("-selectMulti")) {
+			oEvent.preventDefault();
+		}
 	};
 
 	// focus to previously focused element known in item navigation
@@ -2019,7 +2339,7 @@ function(
 		// get the last tabbable item or itself and focus
 		var $FocusElement = $Tabbables.eq(-1).add($LastFocused).eq(-1);
 		this.bAnnounceDetails = true;
-		$FocusElement.focus();
+		$FocusElement.trigger("focus");
 	};
 
 	// Handles focus to reposition the focus to correct place
@@ -2079,7 +2399,7 @@ function(
 			iFocusPos = oListItem.getTabbables().index(oEvent.target),
 			$Element = $Tabbables.eq($Tabbables[iFocusPos] ? iFocusPos : -1);
 
-		$Element[0] ? $Element.focus() : oItem.focus();
+		$Element[0] ? $Element.trigger("focus") : oItem.focus();
 		oEvent.preventDefault();
 		oEvent.setMarked();
 	};
@@ -2092,7 +2412,7 @@ function(
 
 		var bExecuteDefault = this.fireBeforeOpenContextMenu({
 			listItem: oLI,
-			column: sap.ui.getCore().byId(jQuery(oEvent.target).closest(".sapMListTblCell", this.getNavigationRoot()).attr("data-sap-ui-column"))
+			column: Core.byId(jQuery(oEvent.target).closest(".sapMListTblCell", this.getNavigationRoot()).attr("data-sap-ui-column"))
 		});
 		if (bExecuteDefault) {
 			oEvent.setMarked();
@@ -2102,10 +2422,58 @@ function(
 				oBindingInfo = this.getBindingInfo("items");
 			if (oBindingInfo) {
 				oBindingContext = oLI.getBindingContext(oBindingInfo.model);
-				oContextMenu.setBindingContext(oBindingContext);
+				oContextMenu.setBindingContext(oBindingContext, oBindingInfo.model);
 			}
 
 			oContextMenu.openAsContextMenu(oEvent, oLI);
+		}
+	};
+
+	ListBase.prototype.onItemUpDownModifiers = function(oItem, oEvent, iDirection) {
+		if (!this._mRangeSelection || this.bPreventMassSelection) {
+			return;
+		}
+
+		// Range selection with shift + arrow up/down only works with visible items
+		var aVisibleItems = this.getVisibleItems(),
+			iItemIndex = aVisibleItems.indexOf(oItem),
+			oItemToSelect = aVisibleItems[iItemIndex + iDirection];
+
+		if (!oItemToSelect) {
+			if (this._mRangeSelection) {
+				this._mRangeSelection = null;
+			}
+			// onItemSelect causes unexpected selection when the item is selected by space key (see ListItemBase.onsapspace)
+			// hence marking the event
+			oEvent.setMarked();
+			return;
+		}
+
+		var bItemSelected = oItemToSelect.getSelected();
+
+		if (this._mRangeSelection.direction === undefined) {
+			// store the direction when first called
+			// -1 indicates "up"
+			// 1 indicates "down"
+			this._mRangeSelection.direction = iDirection;
+		} else if (this._mRangeSelection.direction !== iDirection) {
+			if (this._mRangeSelection.index !== aVisibleItems.indexOf(oItem)) {
+				// When moving back up/down to the item where the range selection started, the item always get deselected
+				oItemToSelect = oItem;
+				bItemSelected = oItemToSelect.getSelected();
+				if (this._mRangeSelection.selected && bItemSelected) {
+					this.setSelectedItem(oItemToSelect, false, true);
+					return;
+				}
+			} else {
+				// store the new direction once the above condition is met, so that the selection/deseelction can be handled accordingly
+				this._mRangeSelection.direction = iDirection;
+			}
+		}
+
+		if (this._mRangeSelection.selected !== bItemSelected && oItemToSelect.isSelectable()) {
+			// selection change should only happen on selectable items
+			this.setSelectedItem(oItemToSelect, this._mRangeSelection.selected, true);
 		}
 	};
 
@@ -2118,11 +2486,270 @@ function(
 	// invalidation of the table list is not required for setting the context menu
 	ListBase.prototype.setContextMenu = function(oContextMenu) {
 		this.setAggregation("contextMenu", oContextMenu, true);
+		return this;
 	};
 
 	// invalidation of the table list is not required for destroying the context menu
 	ListBase.prototype.destroyContextMenu = function() {
 		this.destroyAggregation("contextMenu", true);
+		return this;
+	};
+
+	// Returns the sticky value to be added to the sticky table container.
+	// sapMSticky7 is the result of sticky headerToolbar, infoToolbar and column headers.
+	// sapMSticky6 is the result of sticky infoToolbar and column headers.
+	// sapMSticky5 is the result of sticky headerToolbar and column headers.
+	// sapMSticky4 is the result of sticky column headers only.
+	// sapMSticky3 is the result of sticky headerToolbar and infoToolbar.
+	// sapMSticky2 is the result of sticky infoToolbar.
+	// sapMSticky1 is the result of sticky headerToolbar.
+	ListBase.prototype.getStickyStyleValue = function() {
+		var aSticky = this.getSticky();
+		if (!aSticky || !aSticky.length) {
+			return (this._iStickyValue = 0);
+		}
+
+		var iStickyValue = 0,
+			sHeaderText = this.getHeaderText(),
+			oHeaderToolbar = this.getHeaderToolbar(),
+			bHeaderToolbarVisible = sHeaderText || (oHeaderToolbar && oHeaderToolbar.getVisible()),
+			oInfoToolbar = this.getInfoToolbar(),
+			bInfoToolbar = oInfoToolbar && oInfoToolbar.getVisible(),
+			bColumnHeadersVisible = false;
+
+		if (this.isA("sap.m.Table")) {
+			bColumnHeadersVisible = this.getColumns().some(function(oColumn) {
+				return oColumn.getVisible() && oColumn.getHeader();
+			});
+		}
+
+		aSticky.forEach(function(sSticky) {
+			if (sSticky === Sticky.HeaderToolbar && bHeaderToolbarVisible) {
+				iStickyValue += 1;
+			} else if (sSticky === Sticky.InfoToolbar && bInfoToolbar) {
+				iStickyValue += 2;
+			} else if (sSticky === Sticky.ColumnHeaders && bColumnHeadersVisible) {
+				iStickyValue += 4;
+			}
+		});
+
+		return (this._iStickyValue = iStickyValue);
+	};
+
+	// gets the sticky header position and scrolls the page so that the item is completely visible when focused
+	ListBase.prototype._handleStickyItemFocus = function(oItemDomRef) {
+		if (!this._iStickyValue) {
+			return;
+		}
+
+		var oScrollDelegate = library.getScrollDelegate(this, true);
+		if (!oScrollDelegate) {
+			return;
+		}
+
+		// check the all the sticky element and get their height
+		var iTHRectHeight = 0,
+			iTHRectBottom = 0,
+			iInfoTBarContainerRectHeight = 0,
+			iInfoTBarContainerRectBottom = 0,
+			iHeaderToolbarRectHeight = 0,
+			iHeaderToolbarRectBottom = 0;
+
+		if (this._iStickyValue & 4 /* ColumnHeaders */) {
+			var oTblHeaderDomRef = this.getDomRef("tblHeader").firstChild;
+			var oTblHeaderRect = oTblHeaderDomRef.getBoundingClientRect();
+			iTHRectBottom = parseInt(oTblHeaderRect.bottom);
+			iTHRectHeight = parseInt(oTblHeaderRect.height);
+		}
+
+		if (this._iStickyValue & 2 /* InfoToolbar */) {
+			// additional padding is applied in HCW and HCB theme, hence infoToolbarContainer height is required
+			var oInfoToolbarContainer = this.getDomRef().querySelector(".sapMListInfoTBarContainer");
+			if (oInfoToolbarContainer) {
+				var oInfoToolbarContainerRect = oInfoToolbarContainer.getBoundingClientRect();
+				iInfoTBarContainerRectBottom = parseInt(oInfoToolbarContainerRect.bottom);
+				iInfoTBarContainerRectHeight = parseInt(oInfoToolbarContainerRect.height);
+			}
+		}
+
+		if (this._iStickyValue & 1 /* HeaderToolbar */) {
+			var oHeaderToolbarDomRef = this.getDomRef().querySelector(".sapMListHdr");
+			if (oHeaderToolbarDomRef) {
+				var oHeaderToolbarRect = oHeaderToolbarDomRef.getBoundingClientRect();
+				iHeaderToolbarRectBottom = parseInt(oHeaderToolbarRect.bottom);
+				iHeaderToolbarRectHeight = parseInt(oHeaderToolbarRect.height);
+			}
+		}
+
+		var iItemTop = Math.round(oItemDomRef.getBoundingClientRect().top);
+
+		if (iTHRectBottom > iItemTop || iInfoTBarContainerRectBottom > iItemTop || iHeaderToolbarRectBottom > iItemTop) {
+			window.requestAnimationFrame(function () {
+				oScrollDelegate.scrollToElement(oItemDomRef, 0, [0, -iTHRectHeight - iInfoTBarContainerRectHeight - iHeaderToolbarRectHeight]);
+			});
+		}
+	};
+
+	ListBase.prototype.setHeaderToolbar = function(oHeaderToolbar) {
+		return this._setToolbar("headerToolbar", oHeaderToolbar);
+	};
+
+	ListBase.prototype.setInfoToolbar = function(oInfoToolbar) {
+		return this._setToolbar("infoToolbar", oInfoToolbar);
+	};
+
+	/**
+	 * Scrolls the list so that the item with the given index is in the viewport.
+	 * If the index is -1, it scrolls to the bottom of the list. If the growing feature is enabled,
+	 * the list is scrolled to the last available item.
+	 *
+	 * Growing in combination with <code>growingScrollToLoad=true</code> can result in loading of
+	 * new items when scrolling to the bottom of the list.
+	 *
+	 * @param {number} iIndex The list item index that must be scrolled into the viewport
+	 * @returns {Promise} A <code>Promise</code> that resolves after the table scrolls to the row
+	 * with the given index
+	 *
+	 * @public
+	 */
+	ListBase.prototype.scrollToIndex = function(iIndex) {
+		return new Promise(function(resolve, reject) {
+			var oItem, oScrollDelegate;
+
+			oScrollDelegate = library.getScrollDelegate(this, true);
+
+			if (!oScrollDelegate) {
+				return reject();
+			}
+
+			oItem = getItemAtIndex(this, iIndex);
+			if (!oItem) {
+				return reject();
+			}
+
+			// adding timeout of 0 ensures the DOM is ready in case of rerendering
+			setTimeout(function() {
+				oScrollDelegate.scrollToElement(oItem.getDomRef(), null, [0, this._getStickyAreaHeight() * -1]);
+				return resolve();
+			}.bind(this), 0);
+		}.bind(this));
+	};
+
+	function getItemAtIndex(oList, iIndex) {
+		var aItems = oList.getVisibleItems();
+		var iRowCount = aItems.length;
+
+		if (typeof iIndex !== 'number' || iIndex < -1) {
+			iIndex = 0;
+		}
+
+		if (iIndex >= iRowCount || iIndex === -1) {
+			iIndex = iRowCount - 1;
+		}
+
+		return aItems[iIndex];
+	}
+
+	/**
+	 * Sets the focus on the item. If <code>bFirstInteractiveElement</code> is <code>true</code> and there are
+	 * interactive elements inside the item, sets the focus on the first interactive element. Otherwise sets
+	 * the focus on the entire item.
+	 *
+	 * If the given index is not in the visible area, the table scrolls to it automatically.
+	 *
+	 * @param {number} iIndex The index of the item that is to be focused
+	 * @param {boolean} [bFirstInteractiveElement=false] Indicates whether to set the focus on the first
+	 * interactive element inside the item
+	 *
+	 * @returns {Promise} A <code>Promise</code> that resolves after the focus has been set
+	 * @private
+	 */
+	ListBase.prototype._setFocus = function(iIndex, bFirstInteractiveElement) {
+		return new Promise(function(resolve, reject) {
+			var oItem = getItemAtIndex(this, iIndex);
+			if (!oItem) {
+				return reject();
+			}
+
+			if (bFirstInteractiveElement === true) {
+				var $InteractiveElements = oItem.getTabbables();
+				if ($InteractiveElements.length) {
+					$InteractiveElements[0].focus();
+					return resolve();
+				}
+			}
+
+			oItem.focus();
+			return resolve();
+		}.bind(this));
+	};
+
+	/**
+	 * Returns the height of the sticky area in px. The height depends on the sticky configuration.
+	 *
+	 * @return {number} Height in px
+	 * @private
+	 */
+	ListBase.prototype._getStickyAreaHeight = function() {
+		var aSticky = this.getSticky();
+
+		if  (!(aSticky && aSticky.length)) {
+			return 0;
+		}
+
+		return aSticky.reduce(function(accumulatedHeight, stickyOption) {
+			var oControl, oDomRef;
+
+			switch (stickyOption) {
+				case Sticky.HeaderToolbar:
+					oControl = this.getHeaderToolbar();
+					oDomRef = oControl && oControl.getDomRef() || this.getDomRef("header");
+					break;
+				case Sticky.InfoToolbar:
+					oControl = this.getInfoToolbar();
+					oDomRef = oControl && oControl.getDomRef();
+					break;
+				case Sticky.ColumnHeaders:
+					oDomRef = this.getDomRef("tblHeader");
+					break;
+				default:
+			}
+
+			return accumulatedHeight + (oDomRef ? oDomRef.offsetHeight : 0);
+		}.bind(this), 0 /* Initial value */);
+	};
+
+	ListBase.prototype._setToolbar = function(sAggregationName, oToolbar) {
+		var oOldToolbar = this.getAggregation(sAggregationName);
+		if (oOldToolbar) {
+			oOldToolbar.detachEvent("_change", this._onToolbarPropertyChanged, this);
+		}
+
+		this.setAggregation(sAggregationName, oToolbar);
+		if (oToolbar) {
+			oToolbar.attachEvent("_change", this._onToolbarPropertyChanged, this);
+		}
+		return this;
+	};
+
+	ListBase.prototype._onToolbarPropertyChanged = function(oEvent) {
+		if (oEvent.getParameter("name") !== "visible") {
+			return;
+		}
+
+		// update the sticky style class
+		var iOldStickyValue = this._iStickyValue,
+			iNewStickyValue = this.getStickyStyleValue();
+
+		if (iOldStickyValue !== iNewStickyValue) {
+			var oDomRef = this.getDomRef();
+			if (oDomRef) {
+				var aClassList = oDomRef.classList;
+				aClassList.toggle("sapMSticky", !!iNewStickyValue);
+				aClassList.remove("sapMSticky" + iOldStickyValue);
+				aClassList.toggle("sapMSticky" + iNewStickyValue, !!iNewStickyValue);
+			}
+		}
 	};
 
 	return ListBase;

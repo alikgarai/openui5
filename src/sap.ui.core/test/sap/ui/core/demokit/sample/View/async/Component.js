@@ -9,36 +9,17 @@ sap.ui.define([
 		return UIComponent.extend("sap.ui.core.sample.View.async.Component", {
 
 			metadata: {
-				dependencies: {
-					libs: [
-						"sap.ui.core",
-						"sap.m"
-					]
-				},
-				config: {
-					sample: {
-						files: [
-							"Sample.view.xml",
-							"Sample.controller.js"
-						]
-					}
-				}
+				manifest: "json"
 			},
 			createContent: function(oController) {
 				//Add jsview when async loading of resources via sap.ui.require is established
-
-				// *** Sample.controller.js: ***
-				// sap.ui.core.mvc.JSView._unregisterView("sap.ui.core.sample.View.async.Async");
-				// oSampleView.byId("js_sample").destroy();
-				// jQuery.sap.unloadResources("sap/ui/core/sample/View/async/Async.view.js", false, true, true);
 				return sap.ui.jsview("sap.ui.core.sample.View.async.Root", true);
 			},
 			init: function() {
-				var aTypes, xhr, mResponses, fnDelay, iNow;
+				var aTypes, xhr, mResponses, fnDelay;
 				fnDelay = function() {
 					return Math.floor(Math.random() * 2500);
 				};
-				iNow = Date.now();
 				aTypes = ["xml", "js", "json", "html"];
 				mResponses = {};
 

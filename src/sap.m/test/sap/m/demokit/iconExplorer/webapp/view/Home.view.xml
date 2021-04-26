@@ -9,6 +9,11 @@
 		showHeader="false"
 		id="page"
 		class="IconExplorerHomeBackground">
+		<landmarkInfo>
+			<PageAccessibleLandmarkInfo
+				contentRole="Region"
+				contentLabel="{i18n>Home_contentLabel}"/>
+		</landmarkInfo>
 		<l:BlockLayout class="BlockLayoutFlex">
 			<l:BlockLayoutRow class="BlockLayoutFirstRow">
 				<l:BlockLayoutCell class="sapUiNoContentPadding sapUiResponsiveContentPadding">
@@ -28,15 +33,15 @@
 							type="Text"
 							showSuggestion="true"
 							showValueHelp="true"
-							submit="onEnter"
+							submit=".onEnter"
 							showTableSuggestionValueHelp="false"
 							suggestionRows="{
 								path: '/AllIcons'
 							}"
-							suggestionItemSelected="onSuggestionSelect"
+							suggestionItemSelected=".onSuggestionSelect"
 							valueLiveUpdate="true"
 							startSuggestion="2"
-							liveChange="onSearch">
+							liveChange=".onSearch">
 							<suggestionColumns>
 								<Column
 									hAlign="Begin"
@@ -93,7 +98,7 @@
 											class="tagsArea">
 											<Token
 												text="{name}"
-												select="onTagSelect"
+												select=".onTagSelect"
 												class="tagsToken"
 												editable="false"/>
 										</l:HorizontalLayout>
@@ -123,7 +128,7 @@
 							class="sapUiSmallMarginBottom sapUiSmallMarginTop entryIcon">
 						</core:Icon>
 						<custom:TitleLink
-							press="onTitleLinkPress"
+							press=".onTitleLinkPress"
 							text="{i18n>fontName_SAPIcons}"
 							class="TitleLink "
 							titleStyle="H2"
@@ -154,7 +159,7 @@
 							class="sapUiSmallMarginBottom sapUiSmallMarginTop entryIcon">
 						</core:Icon>
 						<custom:TitleLink
-							press="onTitleLinkPress"
+							press=".onTitleLinkPress"
 							text="{i18n>fontName_SAPIconsTNT}"
 							class="TitleLink"
 							titleStyle="H2"
@@ -177,14 +182,15 @@
 				<l:BlockLayoutCell
 					visible="{= ${/AllFontsLoaded/BusinessSuiteInAppSymbols} &amp;&amp; !${version>/isOpenUI5}}"
 					backgroundColorSet="ColorSet6"
-					backgroundColorShade="ShadeC">
+					backgroundColorShade="ShadeC"
+					class="BlockLayoutCellHeight">
 					<l:VerticalLayout>
 						<core:Icon
 							src="sap-icon://BusinessSuiteInAppSymbols/icon-display-ads"
 							class="sapUiSmallMarginBottom sapUiSmallMarginTop entryIcon">
 						</core:Icon>
 						<custom:TitleLink
-							press="onTitleLinkPress"
+							press=".onTitleLinkPress"
 							text="{i18n>fontName_BusinessSuiteInAppSymbols}"
 							class="TitleLink"
 							titleStyle="H2"
@@ -246,7 +252,7 @@
 							class="sapUiSmallMarginBottom sapUiSmallMarginTop entryIcon">
 						</core:Icon>
 						<custom:TitleLink
-							press="onTitleLinkPress"
+							press=".onTitleLinkPress"
 							text="{i18n>fioriLaunchIcons}"
 							class="TitleLink"
 							titleStyle="H2"
@@ -272,7 +278,7 @@
 							class="sapUiSmallMarginBottom sapUiSmallMarginTop entryIcon">
 						</core:Icon>
 						<custom:TitleLink
-							press="onTitleLinkPress"
+							press=".onTitleLinkPress"
 							text="{i18n>sapWebIdeIcons}"
 							class="TitleLink"
 							titleStyle="H2"
@@ -292,7 +298,7 @@
 							class="sapUiSmallMarginBottom sapUiSmallMarginTop entryIcon">
 						</core:Icon>
 						<custom:TitleLink
-							press="onTitleLinkPress"
+							press=".onTitleLinkPress"
 							text="{i18n>sapGuiIcons}"
 							class="TitleLink"
 							titleStyle="H2"

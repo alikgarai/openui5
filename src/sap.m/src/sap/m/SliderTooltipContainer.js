@@ -3,21 +3,21 @@
 */
 
 sap.ui.define([
-	'jquery.sap.global',
 	'./library',
 	'./SliderUtilities',
 	'sap/ui/core/Control',
 	'sap/ui/core/Popup',
-	'./SliderTooltipContainerRenderer'
+	'./SliderTooltipContainerRenderer',
+	"sap/ui/thirdparty/jquery"
 ],
 function(
-	jQuery,
 	Library,
 	SliderUtilities,
 	Control,
 	Popup,
-	SliderTooltipContainerRenderer
-	) {
+	SliderTooltipContainerRenderer,
+	jQuery
+) {
 		"use strict";
 
 		/**
@@ -94,7 +94,7 @@ function(
 		SliderTooltipContainer.prototype._handleRangeSliderF2 = function (oEvent) {
 			var oHandle = this._oParentSlider._getHandleForTooltip(oEvent.srcControl);
 
-			jQuery(oHandle).focus();
+			jQuery(oHandle).trigger("focus");
 		};
 
 		SliderTooltipContainer.prototype.onsaptabnext = SliderTooltipContainer.prototype._handleTabNavigation;
@@ -128,8 +128,8 @@ function(
 		 */
 		SliderTooltipContainer.prototype._getScrollListener = function () {
 			return function () {
-				jQuery.sap.clearDelayedCall(this._scrollDebounce);
-				this._scrollDebounce = jQuery.sap.delayedCall(0, this, this.repositionTooltips);
+				clearTimeout(this._scrollDebounce);
+				this._scrollDebounce = setTimeout(this.repositionTooltips.bind(this), 0);
 			}.bind(this);
 		};
 
@@ -271,7 +271,7 @@ function(
 		/**
 		 * Gets Slider's tooltip position.
 		 *
-		 * @param {float} fValue
+		 * @param {float} fTooltipValue
 		 * @param {float} fMin Min property of the Slider/RangeSlider.
 		 * @param {float} fMax Max property of the Slider/RangeSlider.
 		 * @private
@@ -299,7 +299,7 @@ function(
 		/**
 		 * Sets the width of the SliderTooltipContainer.
 		 * @param {sap.ui.core.CSSSize} sWidth The width of the SliderTooltipContainer as CSS size.
-		 * @returns {sap.m.SliderTooltipContainer} Pointer to the control instance to allow method chaining.
+		 * @returns {this} Pointer to the control instance to allow method chaining.
 		 * @public
 		 */
 		SliderTooltipContainer.prototype.setWidth = function (sWidth) {

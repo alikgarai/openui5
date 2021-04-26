@@ -3,8 +3,8 @@
  */
 
 // Provides control sap.ui.commons.layout.MatrixLayoutCell.
-sap.ui.define(['jquery.sap.global', 'sap/ui/commons/library', 'sap/ui/core/CustomStyleClassSupport', 'sap/ui/core/Element'],
-	function(jQuery, library, CustomStyleClassSupport, Element) {
+sap.ui.define(['sap/ui/commons/library', 'sap/ui/core/CustomStyleClassSupport', 'sap/ui/core/Element'],
+	function(library, CustomStyleClassSupport, Element) {
 	"use strict";
 
 
@@ -130,7 +130,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/commons/library', 'sap/ui/core/Custo
 	 * @function
 	 * @param {string} sStyleClass
 	 *         the CSS class name to be added
-	 * @type sap.ui.commons.layout.MatrixLayoutCell
+	 * @type this
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -146,7 +146,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/commons/library', 'sap/ui/core/Custo
 	 * @function
 	 * @param {string} sStyleClass
 	 *         the style to be removed
-	 * @type sap.ui.commons.layout.MatrixLayoutCell
+	 * @type this
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -168,4 +168,4 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/commons/library', 'sap/ui/core/Custo
 
 	return MatrixLayoutCell;
 
-}, /* bExport= */ true);
+});

@@ -11,12 +11,15 @@
 	color: @sapUiContentLabelColor;
 }
 
-.sapMObjectAttributeActive {
-	pointer-events: none;
+.sapMObjectAttributeDiv .sapMText {
+	vertical-align: top;
 }
 
-.sapMObjectAttributeActive .sapMObjectAttributeColon {
-	vertical-align: middle;
+.sapMObjectAttributeActive {
+	pointer-events: none;
+	.sapMObjectAttributeColon {
+		vertical-align: top;
+	}
 }
 
 .sapMListTbl .sapMObjectAttributeActive .sapMText,
@@ -47,22 +50,16 @@
 	text-overflow: ellipsis;
 }
 
-.sapMListTblCell .sapMObjectAttributeActive {
+.sapMObjectAttributeActive{
 	white-space: normal;
-}
-
-.sapMObjectAttributeActive .sapMObjectAttributeTitle,
-.sapMObjectAttributeActive .sapMObjectAttributeText {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 50%;
-	vertical-align: middle;
-}
-
-.sapMListTblCell .sapMObjectAttributeActive .sapMObjectAttributeTitle,
-.sapMListTblCell .sapMObjectAttributeActive .sapMObjectAttributeText {
-	white-space: normal;
+	word-break: break-word;
+	.sapMObjectAttributeTitle,
+	.sapMObjectAttributeText {
+		white-space: normal;
+		vertical-align: top;
+		/* we need this otherwise the focus get broken when the link is on more lines */
+		display: inline-block;
+	}
 }
 
 .sapMObjectAttributeText > .sapMLnk {
@@ -74,11 +71,12 @@
 }
 
 .sapMOH .sapMObjectAttributeText > .sapMText {
-	vertical-align: bottom;
+	vertical-align: top;
 }
 
 .sapMObjectAttributeDiv{
 	outline: none;
+	font-size: @sapMFontMediumSize;
 }
 
 .sapMLIBActive .sapMObjectAttributeText,
@@ -98,12 +96,6 @@ html.sap-desktop .sapMObjectAttributeActive:focus {
 	line-height: normal;
 }
 
-html[data-sap-ui-browser^='ie'], html[data-sap-ui-browser^='ie'] {
-	.sapMObjectAttributeActive:focus .sapMObjectAttributeText::after {
-		outline-style: dashed;
-	}
-}
-
 /*=========================================== */
 /* Custom design for Responsive Object Header */
 /*=========================================== */
@@ -119,7 +111,7 @@ html[data-sap-ui-browser^='ie'], html[data-sap-ui-browser^='ie'] {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	max-width: 50%;
-	vertical-align: middle;
+	vertical-align: top;
 }
 
 .sapMOHR .sapMOHRAttr .sapMObjectAttributeTitle {
@@ -138,11 +130,11 @@ html[data-sap-ui-browser^='ie'], html[data-sap-ui-browser^='ie'] {
 	font-size: @sapMFontMediumSize;
 	font-weight: normal;
 	color: @sapUiContentLabelColor;
-	white-space: nowrap;
+	white-space: pre;
 	max-width: 0.5rem;
 	margin-left: -0.5rem;
 	overflow: auto;
-	vertical-align: middle;
+	vertical-align: top;
 }
 
 .sapMOHR .sapMObjectAttributeActive .sapMObjectAttributeText {

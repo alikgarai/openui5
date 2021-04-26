@@ -8,56 +8,61 @@
 		<script src="shared-config.js"></script>
 		<script src="../../../resources/sap-ui-core.js"
 			id="sap-ui-bootstrap"
-			data-sap-ui-libs="sap.m">
+			data-sap-ui-libs="sap.m"
+			data-sap-ui-resourceroots='{
+				"qunit.internal.acc": "../../../test-resources/sap/ui/core/qunit/internal/acc"
+			}'>
 		</script>
 
 		<script>
+			new sap.ui.core.InvisibleText("input_acc_name", {text: "Change value"}).toStatic();
+
 			var app = new sap.m.App("myApp", {initialPage:"page1"});
 
 			var label1 = new sap.m.Label({
+				wrapping: true,
 				text : "Progress Indicator with 50% neutral"
 			});
 
 			// create progressIndicator
 			var oProgInd1 = new sap.m.ProgressIndicator("pi1", {
-				width:"100%",
 				percentValue:50,
-				displayValue:"50%",
-				showValue:true
+				displayValue:"50%"
 			});
 
 			var oInput = new sap.m.Input("input", {
 				placeholder : "Number",
+				ariaLabelledBy: ["input_acc_name"],
 				width:"10%"
 			});
 
 			var label2 = new sap.m.Label({
+				wrapping: true,
 				text : "Progress Indicator with 75% negative without text (suggested normal size)"
 			});
 
 			// create progressIndicator
 			var oProgInd2 = new sap.m.ProgressIndicator("pi2", {
-				width:"100%",
 				percentValue:75,
 				state: sap.ui.core.ValueState.Error
 			});
 
 			var label3 = new sap.m.Label({
+				wrapping: true,
 				text : "Progress Indicator with 99% positive (suggested small size)"
 			});
 
 			// create progressIndicator
 			var oProgInd3 = new sap.m.ProgressIndicator("pi3", {
-				width:"100%",
 				height: "1.375rem",
 				percentValue:88,
 				displayValue:"0.88GB of 1GB",
-				showValue:true,
 				state: sap.ui.core.ValueState.Success
 			});
 
 			var label4 = new sap.m.Label({
-				text : "Progress Indicator with 25% critical, 50% width, disabled"
+				wrapping: true,
+				text : "Progress Indicator with 25% critical, 50% width, disabled - no value state shown"
 			});
 
 			// create progressIndicator
@@ -65,12 +70,11 @@
 				width:"50%",
 				percentValue:25,
 				displayValue:"25%",
-				showValue:true,
-				enabled:false,
 				state: sap.ui.core.ValueState.Warning
 			});
 
 			var label5 = new sap.m.Label({
+				wrapping: true,
 				text : "Invisible Progress Indicator"
 			});
 
@@ -83,7 +87,8 @@
 			});
 
 			var label6 = new sap.m.Label({
-				text : "Progress Indicator with 65% negative"
+				wrapping: true,
+				text : "Progress Indicator with 65% negative, disabled - no value state shown"
 			});
 
 			// create progressIndicator
@@ -96,6 +101,7 @@
 			});
 
 			var label7 = new sap.m.Label({
+				wrapping: true,
 				text : "Progress Indicator with 45% critical"
 			});
 
@@ -108,6 +114,7 @@
 			});
 
 			var label8 = new sap.m.Label({
+				wrapping: true,
 				text : "Progress Indicator with 49% success"
 			});
 
@@ -117,6 +124,31 @@
 				percentValue:49,
 				displayValue:"49%",
 				state: sap.ui.core.ValueState.Success
+			});
+
+			var label9 = new sap.m.Label({
+				wrapping: true,
+				text : "Progress Indicator with 39% information"
+			});
+
+			// create progressIndicator
+			var oProgInd9 = new sap.m.ProgressIndicator("pi9", {
+				width:"80%",
+				percentValue:39,
+				displayValue:"39%",
+				state: sap.ui.core.ValueState.Information
+			});
+
+			var label10 = new sap.m.Label({
+				wrapping: true,
+				text : "Progress Indicator without animation"
+			});
+
+			var oProgInd10 = new sap.m.ProgressIndicator("pi10", {
+				percentValue:0,
+				displayValue:"0%",
+				state: sap.ui.core.ValueState.Success,
+				displayAnimation: false
 			});
 
 			var oButton = new sap.m.Button("button", {
@@ -173,9 +205,26 @@
 				}
 			});
 
+			var oButton10 = new sap.m.Button("button_no_animation100", {
+				text:"Change PI to 100% without animation",
+				press: function(){
+					oProgInd10.setPercentValue(100);
+					oProgInd10.setDisplayValue("100%");
+				}
+			});
+
+			var oButton11 = new sap.m.Button("button_no_animation0", {
+				text:"Change PI to 0% without animation",
+				press: function(){
+					oProgInd10.setPercentValue(0);
+					oProgInd10.setDisplayValue("0%");
+				}
+			}).addStyleClass("sapUiSmallMarginEnd");
+
 			// create page
 			var page1 = new sap.m.Page("page1", {
 				title:"Progress Indicator",
+				titleLevel: "H1",
 				content: [
 					label2,
 					oProgInd2,
@@ -191,6 +240,9 @@
 					oProgInd6,
 					label7,
 					oProgInd7,
+					label9,
+					oProgInd9,
+					label10,
 					label8,
 					oProgInd8,
 					oInput,
@@ -200,7 +252,10 @@
 					oButton4,
 					oButton5,
 					oButton6,
-					oButton7
+					oButton7,
+					oProgInd10,
+					oButton11,
+					oButton10
 				]
 			});
 
@@ -210,6 +265,6 @@
 		</script>
 
 	</head>
-	<body id="body" class="sapUiBody" role="application">
+	<body id="body" class="sapUiBody">
 	</body>
 </html>

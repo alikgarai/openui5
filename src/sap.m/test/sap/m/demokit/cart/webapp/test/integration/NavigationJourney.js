@@ -1,11 +1,12 @@
 /* global QUnit */
 
 sap.ui.define([
-    'sap/ui/test/opaQunit',
-	'./pages/Home',
-	'./pages/Category',
-	'./pages/Welcome',
-	'./pages/Cart'
+	"sap/ui/test/opaQunit",
+	"./pages/Home",
+	"./pages/Category",
+	"./pages/Welcome",
+	"./pages/Product",
+	"./pages/Cart"
 ], function (opaTest) {
 	"use strict";
 
@@ -29,7 +30,7 @@ sap.ui.define([
 
 	opaTest("Should navigate back to home", function (Given, When, Then) {
 		// Actions
-		When.onTheCategory.iPressTheBackButton();
+		When.onTheCategory.iPressTheBackButtonInCategory();
 		// Assertions
 		Then.onHome.iShouldSeeTheCategoryList();
 		Then.onTheWelcomePage.iShouldSeeTheWelcomePage();
@@ -37,22 +38,15 @@ sap.ui.define([
 
 	opaTest("Should navigate to cart", function (Given, When, Then) {
 		// Actions
-		When.onHome.iGoToTheCartPage();
+		When.onTheWelcomePage.iToggleTheCart();
 		// Assertions
 		Then.onTheCart.iShouldSeeTheCart();
 		Then.onTheWelcomePage.iShouldSeeTheWelcomePage();
 	});
 
-	opaTest("Should navigate back home", function (Given, When, Then) {
-		// Actions
-		When.onTheCart.iPressTheBackButton();
-		// Assertions
-		Then.onHome.iShouldSeeTheCategoryList();
-		Then.onTheWelcomePage.iShouldSeeTheWelcomePage();
-	});
-
 	opaTest("Should navigate from welcome to product view", function (Given, When, Then) {
 		// Actions
+		When.onTheWelcomePage.iToggleTheCart();
 		When.onTheWelcomePage.iPressOnTheProductSmartphoneAlphaTitle();
 		// Assertions
 		Then.onTheProduct.iShouldSeeTheSmartphoneAlphaDetailPage();
@@ -60,13 +54,13 @@ sap.ui.define([
 
 	opaTest("Should navigate back to home", function (Given, When, Then) {
 		// Actions
-		When.onTheCategory.iPressTheBackButton();
+		When.onTheCategory.iPressTheBackButtonInCategory();
 		// Assertions
 		Then.onHome.iShouldSeeTheCategoryList();
 		Then.onTheWelcomePage.iShouldSeeTheWelcomePage();
 	});
 
-    opaTest("Should navigate to product view via pressing product image", function (Given, When, Then) {
+	opaTest("Should navigate to product view via pressing product image", function (Given, When, Then) {
 		// Actions
 		When.onTheWelcomePage.iPressTheProductImage();
 		// Assertions
@@ -74,5 +68,5 @@ sap.ui.define([
 		Then.onTheCategory.iShouldSeeSomeEntriesInTheProductList();
 		// Cleanup
 		Then.iTeardownMyApp();
-    });
+	});
 });

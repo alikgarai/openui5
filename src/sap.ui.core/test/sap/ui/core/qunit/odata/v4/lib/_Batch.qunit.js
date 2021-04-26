@@ -1,19 +1,19 @@
 /*!
  * ${copyright}
  */
-sap.ui.require([
+sap.ui.define([
 	"jquery.sap.global",
+	"sap/base/Log",
 	"sap/ui/model/odata/v4/lib/_Batch",
+	"sap/ui/model/odata/v4/lib/_Helper",
 	"sap/ui/test/TestUtils"
-], function (jQuery, _Batch, TestUtils) {
-	/*global QUnit */
-	/*eslint max-nested-callbacks: 0, no-multi-str: 0, no-warning-comments: 0 */
+], function (jQuery, Log, _Batch, _Helper, TestUtils) {
 	"use strict";
 
-	var oEmployeesBody = {
+	var oEntity = {"@odata.etag" : "W/\"20180830000000.0000000\""},
+		oEmployeesBody = {
 			"@odata.context": "$metadata#EMPLOYEES",
 			"value" : [{
-				"@odata.etag" : "W/\"19770724000000.0000000\"",
 				"ID" : "1",
 				"Name" : "Walter\"s Win's",
 				"AGE" : 52,
@@ -38,7 +38,6 @@ sap.ui.require([
 				},
 				"STATUS": "Available"
 			}, {
-				"@odata.etag" : "W/\"20030701000000.0000000\"",
 				"ID" : "2",
 				"Name" : "Frederic Fall",
 				"AGE" : 32,
@@ -63,7 +62,6 @@ sap.ui.require([
 				},
 				"STATUS": "Occupied"
 			}, {
-				"@odata.etag" : "W/\"19770724000000.0000000\"",
 				"ID" : "3",
 				"Name" : "Jonathan Smith",
 				"AGE" : 56,
@@ -88,7 +86,6 @@ sap.ui.require([
 				},
 				"STATUS": "Occupied"
 			}, {
-				"@odata.etag" : "W/\"20040912000000.0000000\"",
 				"ID" : "4",
 				"Name" : "Peter Burke",
 				"AGE" : 39,
@@ -113,7 +110,6 @@ sap.ui.require([
 				},
 				"STATUS": "Available"
 			}, {
-				"@odata.etag" : "W/\"20010201000000.0000000\"",
 				"ID" : "5",
 				"Name" : "John Field",
 				"AGE" : 42,
@@ -138,7 +134,6 @@ sap.ui.require([
 				},
 				"STATUS": "Available"
 			}, {
-				"@odata.etag" : "W/\"20101201000000.0000000\"",
 				"ID" : "6",
 				"Name" : "Susan Bay",
 				"AGE" : 29,
@@ -220,7 +215,7 @@ sap.ui.require([
 
 	function parseResponses(aResponses) {
 		var i, oResponse;
-		for (i = 0; i < aResponses.length; i++) {
+		for (i = 0; i < aResponses.length; i += 1) {
 			oResponse = aResponses[i];
 			if (Array.isArray(oResponse)) {
 				parseResponses(oResponse);
@@ -234,7 +229,7 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.v4.lib._Batch", {
 		beforeEach : function () {
-			this.oLogMock = this.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(Log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 		}
@@ -243,6 +238,7 @@ sap.ui.require([
 	//*********************************************************************************************
 	[{// serialization
 		testTitle : "query parts without headers",
+		epilogue : "foo",
 		requests : [
 			{
 				method : "GET",
@@ -266,7 +262,8 @@ sap.ui.require([
 		"GET Employees('2') HTTP/1.1\r\n" +
 		"\r\n" +
 		"\r\n" +
-		"--batch_id-0123456789012-345--\r\n",
+		"--batch_id-0123456789012-345--\r\n" +
+		"foo",
 		"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
 		"MIME-Version" : "1.0"
 	}, {
@@ -329,6 +326,7 @@ sap.ui.require([
 				body : {"TEAM_ID" : "TEAM_01"}
 			}
 		]],
+		$ContentIDs : [["0.0", "1.0"]],
 		body : "--batch_id-0123456789012-345\r\n" +
 		"Content-Type: multipart/mixed;boundary=changeset_id-9876543210987-654\r\n" +
 		"\r\n" +
@@ -410,6 +408,7 @@ sap.ui.require([
 				}
 			]
 		],
+		$ContentIDs : [[], ["0.1", "1.1"], [], ["0.3", "1.3"]],
 		body : "--batch_id-0123456789012-345\r\n" +
 		"Content-Type:application/http\r\n" +
 		"Content-Transfer-Encoding:binary\r\n" +
@@ -475,7 +474,7 @@ sap.ui.require([
 		"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
 		"MIME-Version" : "1.0"
 	}, {
-		testTitle : "batch request with content-ID references",
+		testTitle : "batch request with Content-ID references",
 		expectedBoundaryIDs :
 			["id-1450426018742-911", "id-1450426018742-912", "id-1450426018742-913"],
 		requests : [
@@ -510,7 +509,8 @@ sap.ui.require([
 				}
 			}, {
 				method : "POST",
-				url : "TEAMS",
+				// Note: do not confuse with Content-ID reference! BCP: 2070180250
+				url : "TEAMS?$expand=TEAM_2_EMPLOYEES($filter=STATUS%20eq%20'$42')",
 				headers : {
 					"Content-Type" : "application/json"
 				},
@@ -529,8 +529,25 @@ sap.ui.require([
 					"Content-Type" : "application/json"
 				},
 				body : oNewEmployeeBody
-			}]
+			}, {
+				method : "DELETE",
+				// Note: This is unrealistic as key predicates use encodeURIComponent and entity set
+				// names cannot contain a dollar, but still we should not confuse it with a
+				// Content-ID reference!
+				url : "$TEAMS('$1')",
+				headers : {
+					"Content-Type" : "application/json"
+				}
+			}], {
+				method : "GET",
+				// Note: do not confuse with Content-ID reference! BCP: 2070180250
+				url : "EMPLOYEES?$filter=STATUS%20eq%20'$42'",
+				headers : {
+					"Content-Type" : "application/json"
+				}
+			}
 		],
+		$ContentIDs : [["0.0", "1.0"], ["0.1", "1.1", "2.1", "3.1"]],
 		body : "--batch_id-1450426018742-911\r\n" +
 		"Content-Type: multipart/mixed;boundary=changeset_id-1450426018742-912\r\n" +
 		"\r\n" +
@@ -575,7 +592,7 @@ sap.ui.require([
 		"Content-Transfer-Encoding:binary\r\n" +
 		"Content-ID:1.1\r\n" +
 		"\r\n" +
-		"POST TEAMS HTTP/1.1\r\n" +
+		"POST TEAMS?$expand=TEAM_2_EMPLOYEES($filter=STATUS%20eq%20'$42') HTTP/1.1\r\n" +
 		"Content-Type:application/json\r\n" +
 		"\r\n" +
 		'{"Team_Id":"TEAM_06",'
@@ -593,27 +610,182 @@ sap.ui.require([
 		"Content-Type:application/json\r\n" +
 		"\r\n" +
 		JSON.stringify(oNewEmployeeBody) + "\r\n" +
+		"--changeset_id-1450426018742-913\r\n" +
+		"Content-Type:application/http\r\n" +
+		"Content-Transfer-Encoding:binary\r\n" +
+		"Content-ID:3.1\r\n" +
+		"\r\n" +
+		"DELETE $TEAMS('$1') HTTP/1.1\r\n" +
+		"Content-Type:application/json\r\n" +
+		"\r\n" +
+		"\r\n" +
 		"--changeset_id-1450426018742-913--\r\n" +
+		"--batch_id-1450426018742-911\r\n" +
+		"Content-Type:application/http\r\n" +
+		"Content-Transfer-Encoding:binary\r\n" +
+		"\r\n" +
+		"GET EMPLOYEES?$filter=STATUS%20eq%20'$42' HTTP/1.1\r\n" +
+		"Content-Type:application/json\r\n" +
+		"\r\n" +
+		"\r\n" +
 		"--batch_id-1450426018742-911--\r\n",
 		"Content-Type" : "multipart/mixed; boundary=batch_id-1450426018742-911",
+		"MIME-Version" : "1.0"
+	}, {
+		testTitle : "If-Match parameter is an object",
+		expectedBoundaryIDs : ["id-0123456789012-345", "id-9876543210987-654"],
+		requests : [[
+			{
+				method : "PATCH",
+				url : "Employees('1')",
+				headers : {
+					"Content-Type" : "application/json",
+					"If-Match" : oEntity
+				},
+				body : {"TEAM_ID" : "TEAM_03"}
+			}
+		]],
+		$ContentIDs : [["0.0"]],
+		body : "--batch_id-0123456789012-345\r\n" +
+		"Content-Type: multipart/mixed;boundary=changeset_id-9876543210987-654\r\n" +
+		"\r\n" +
+		"--changeset_id-9876543210987-654\r\n" +
+		"Content-Type:application/http\r\n" +
+		"Content-Transfer-Encoding:binary\r\n" +
+		"Content-ID:0.0\r\n" +
+		"\r\n" +
+		"PATCH Employees('1') HTTP/1.1\r\n" +
+		"Content-Type:application/json\r\n" +
+		"If-Match:" + oEntity["@odata.etag"] + "\r\n" +
+		"\r\n" +
+		'{"TEAM_ID":"TEAM_03"}\r\n' +
+		"--changeset_id-9876543210987-654--\r\n" +
+		"--batch_id-0123456789012-345--\r\n",
+		"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
+		"MIME-Version" : "1.0"
+	}, {
+		testTitle : "If-Match parameter is a string",
+		expectedBoundaryIDs : ["id-0123456789012-345", "id-9876543210987-654"],
+		requests : [[
+			{
+				method : "PATCH",
+				url : "Employees('1')",
+				headers : {
+					"Content-Type" : "application/json",
+					"If-Match" : "W/\"20151211144619.4328660\""
+				},
+				body : {"TEAM_ID" : "TEAM_03"}
+			}
+		]],
+		$ContentIDs : [["0.0"]],
+		body : "--batch_id-0123456789012-345\r\n" +
+		"Content-Type: multipart/mixed;boundary=changeset_id-9876543210987-654\r\n" +
+		"\r\n" +
+		"--changeset_id-9876543210987-654\r\n" +
+		"Content-Type:application/http\r\n" +
+		"Content-Transfer-Encoding:binary\r\n" +
+		"Content-ID:0.0\r\n" +
+		"\r\n" +
+		"PATCH Employees('1') HTTP/1.1\r\n" +
+		"Content-Type:application/json\r\n" +
+		"If-Match:W/\"20151211144619.4328660\"\r\n" +
+		"\r\n" +
+		'{"TEAM_ID":"TEAM_03"}\r\n' +
+		"--changeset_id-9876543210987-654--\r\n" +
+		"--batch_id-0123456789012-345--\r\n",
+		"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
+		"MIME-Version" : "1.0"
+	}, {
+		testTitle : "If-Match: @odata.etag is undefined",
+		expectedBoundaryIDs : ["id-0123456789012-345", "id-9876543210987-654"],
+		requests : [[
+			{
+				method : "PATCH",
+				url : "Employees('1')",
+				headers : {
+					"Content-Type" : "application/json",
+					"If-Match" : {
+						/*"@odata.etag" : undefined*/
+					}
+				},
+				body : {"TEAM_ID" : "TEAM_03"}
+			}
+		]],
+		$ContentIDs : [["0.0"]],
+		body : "--batch_id-0123456789012-345\r\n" +
+		"Content-Type: multipart/mixed;boundary=changeset_id-9876543210987-654\r\n" +
+		"\r\n" +
+		"--changeset_id-9876543210987-654\r\n" +
+		"Content-Type:application/http\r\n" +
+		"Content-Transfer-Encoding:binary\r\n" +
+		"Content-ID:0.0\r\n" +
+		"\r\n" +
+		"PATCH Employees('1') HTTP/1.1\r\n" +
+		"Content-Type:application/json\r\n" +
+		"\r\n" +
+		'{"TEAM_ID":"TEAM_03"}\r\n' +
+		"--changeset_id-9876543210987-654--\r\n" +
+		"--batch_id-0123456789012-345--\r\n",
+		"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
+		"MIME-Version" : "1.0"
+	}, {
+		testTitle : "Header with empty value",
+		expectedBoundaryIDs : ["id-0123456789012-345", "id-9876543210987-654"],
+		requests : [[
+			{
+				method : "PATCH",
+				url : "Employees('1')",
+				headers : {
+					"Content-Type" : "application/json",
+					"Foo" : ""
+				},
+				body : {"TEAM_ID" : "TEAM_03"}
+			}
+		]],
+		$ContentIDs : [["0.0"]],
+		body : "--batch_id-0123456789012-345\r\n" +
+		"Content-Type: multipart/mixed;boundary=changeset_id-9876543210987-654\r\n" +
+		"\r\n" +
+		"--changeset_id-9876543210987-654\r\n" +
+		"Content-Type:application/http\r\n" +
+		"Content-Transfer-Encoding:binary\r\n" +
+		"Content-ID:0.0\r\n" +
+		"\r\n" +
+		"PATCH Employees('1') HTTP/1.1\r\n" +
+		"Content-Type:application/json\r\n" +
+		"Foo:\r\n" +
+		"\r\n" +
+		'{"TEAM_ID":"TEAM_03"}\r\n' +
+		"--changeset_id-9876543210987-654--\r\n" +
+		"--batch_id-0123456789012-345--\r\n",
+		"Content-Type" : "multipart/mixed; boundary=batch_id-0123456789012-345",
 		"MIME-Version" : "1.0"
 	}].forEach(function (oFixture) {
 			QUnit.test("serializeBatchRequest: " + oFixture.testTitle, function (assert) {
 				var oBatchRequest,
-					oMock = this.mock(jQuery.sap),
+					oHelperMock = this.mock(_Helper),
 					aRequests = JSON.parse(JSON.stringify(oFixture.requests));
+
+				if (oFixture.$ContentIDs) {
+					oFixture.$ContentIDs.forEach(function (aContentIds, i) {
+						aContentIds.forEach(function (sContentID, j) {
+							oFixture.requests[i][j].$ContentID = sContentID;
+						});
+					});
+				}
 
 				if (oFixture.expectedBoundaryIDs) {
 					oFixture.expectedBoundaryIDs.forEach(function (oValue) {
-						oMock.expects("uid").returns(oValue);
+						oHelperMock.expects("uid").returns(oValue);
 					});
 				} else {
-					oMock.expects("uid").returns("id-0123456789012-345");
+					oHelperMock.expects("uid").returns("id-0123456789012-345");
 				}
 
-				oBatchRequest = _Batch.serializeBatchRequest(aRequests);
+				oBatchRequest = _Batch.serializeBatchRequest(aRequests, oFixture.epilogue);
 
-				assert.deepEqual(aRequests, oFixture.requests, "input remained unchanged");
+				assert.deepEqual(aRequests, oFixture.requests,
+					"aRequests remained unchanged, apart from $ContentID");
 				assert.strictEqual(oBatchRequest.body, oFixture.body);
 				assert.strictEqual(oBatchRequest.headers["Content-Type"], oFixture["Content-Type"]);
 				assert.strictEqual(oBatchRequest.headers["MIME-Version"], oFixture["MIME-Version"]);
@@ -665,7 +837,7 @@ sap.ui.require([
 			}]
 		],
 		errorMessage : "Invalid HTTP request method: GET. Change set must contain only POST, " +
-		"PUT, PATCH or DELETE requests."
+		"PUT, PATCH, or DELETE requests."
 	}].forEach(function (oFixture) {
 			QUnit.test("validation serializeBatchRequest: " + oFixture.title, function (assert) {
 				assert.throws(
@@ -678,7 +850,7 @@ sap.ui.require([
 	//*********************************************************************************************
 	// deserialization
 	[{
-		testTitle : "batch parts with preamble and epilogue",
+		testTitle : "batch parts with preamble and epilogue, and \r\n\r\n in batch body",
 		contentType : "multipart/mixed; boundary=batch_id-0123456789012-345",
 		body : "this is a preamble for the batch request\r\n\
 --batch_id-0123456789012-345\r\n\
@@ -705,6 +877,7 @@ header-with-colonValue: http://host:8080/sap/opu/MyService\r\n\
 header-with-space-before-colon : Headername with space before colon\r\n\
 \r\n\
 {\"foo1\":\"bar1\"}\r\n\
+\r\n\
 --batch_id-0123456789012-345--\r\n\
 this is a batch request epilogue",
 		expectedResponses : [{
@@ -726,7 +899,7 @@ this is a batch request epilogue",
 				"header-with-colonValue" : "http://host:8080/sap/opu/MyService",
 				"header-with-space-before-colon" : "Headername with space before colon"
 			},
-			responseText : "{\"foo1\":\"bar1\"}"
+			responseText : "{\"foo1\":\"bar1\"}\r\n"
 		}]
 	}, {
 		testTitle : "no final CRLF",
@@ -1174,7 +1347,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 	});
 
 	//*********************************************************************************************
-	// Integration Tests with real backend
+	// Integration Tests with real back end
 	if (TestUtils.isRealOData()) {
 		// integration tests serialization/deserialization
 		// --------------------------------------------
@@ -1192,7 +1365,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : oEmployeesBody
@@ -1200,10 +1373,10 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
-				responseText :  oDepartmentsBody
+				responseText : oDepartmentsBody
 			}]
 		},
 		// --------------------------------------------
@@ -1230,7 +1403,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				// Nowadays for POST we have to provide all properties, hence we need a new employee
 				// with initial values for all properties as gateway strictly checks now that all
 				// properties are available
-				// -> we may reduce properties again if back-end provides defaulting
+				// -> we may reduce properties again if the back end provides defaulting
 				body : {
 					"ID" : "7",
 					"Name" : "Egon",
@@ -1261,7 +1434,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : oEmployeesBody
@@ -1276,7 +1449,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 201,
 				statusText : "Created",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : oNewEmployeeBody
@@ -1301,7 +1474,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : oDepartmentsBody
@@ -1309,7 +1482,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 404,
 				statusText : "Not Found",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal;charset=utf-8",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				}
 			}]
@@ -1348,7 +1521,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : oDepartmentsBody
@@ -1356,7 +1529,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 404,
 				statusText : "Not Found",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal;charset=utf-8",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				}
 			}]
@@ -1397,7 +1570,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : oDepartmentsBody
@@ -1405,14 +1578,14 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 404,
 				statusText : "Not Found",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal;charset=utf-8",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				}
 			}, {
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : {
@@ -1505,7 +1678,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : oEmployeesBody
@@ -1515,7 +1688,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 					status : 200,
 					statusText : "OK",
 					headers : {
-						"Content-Type" : "application/json;odata.metadata=minimal",
+						"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 						"odata-version" : "4.0"
 					},
 					responseText : {
@@ -1546,7 +1719,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 					status : 200,
 					statusText : "OK",
 					headers : {
-						"Content-Type" : "application/json;odata.metadata=minimal",
+						"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 						"odata-version" : "4.0"
 					},
 					responseText : {
@@ -1578,7 +1751,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 				status : 200,
 				statusText : "OK",
 				headers : {
-					"Content-Type" : "application/json;odata.metadata=minimal",
+					"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 					"odata-version" : "4.0"
 				},
 				responseText : {
@@ -1610,7 +1783,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 					status : 200,
 					statusText : "OK",
 					headers : {
-						"Content-Type" : "application/json;odata.metadata=minimal",
+						"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 						"odata-version" : "4.0"
 					},
 					responseText : {
@@ -1641,7 +1814,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 					status : 200,
 					statusText : "OK",
 					headers : {
-						"Content-Type" : "application/json;odata.metadata=minimal",
+						"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 						"odata-version" : "4.0"
 					},
 					responseText : {
@@ -1696,7 +1869,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 					status : 201,
 					statusText : "Created",
 					headers : {
-						"Content-Type" : "application/json;odata.metadata=minimal",
+						"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 						"odata-version" : "4.0"
 					},
 					responseText : oNewTeamBody
@@ -1705,7 +1878,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 					status : 201,
 					statusText : "Created",
 					headers : {
-						"Content-Type" : "application/json;odata.metadata=minimal",
+						"Content-Type" : /^application\/json;odata\.metadata=minimal/,
 						"odata-version" : "4.0"
 					},
 					responseText : oNewEmployeeBody
@@ -1724,7 +1897,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 						headers : {
 							"X-CSRF-Token" : "Fetch"
 						}
-					}).then(function (oData, sTextStatus, jqXHR) {
+					}).then(function (_oData, _sTextStatus, jqXHR) {
 						var sCsrfToken = jqXHR.getResponseHeader("X-CSRF-Token"),
 							oBatchHeaders = {
 								"Content-Type" : oBatchRequestContent.headers["Content-Type"],
@@ -1740,7 +1913,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 							method : "POST",
 							headers : oBatchHeaders,
 							data : oBatchRequestContent.body
-						}).then(function (oData, sTextStatus, jqXHR) {
+						}).then(function (oData, _sTextStatus, jqXHR) {
 							var aResponses;
 
 							assert.strictEqual(jqXHR.status, 200);
@@ -1752,7 +1925,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 							TestUtils.deepContains(aResponses, oFixture.expectedResponses);
 							done();
 						});
-					}, function (jqXHR, sTextStatus, sErrorMessage) {
+					}, function (_jqXHR, _sTextStatus, sErrorMessage) {
 						assert.ok(false, sErrorMessage);
 						done();
 					});
@@ -1779,7 +1952,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 					headers : {
 						"X-CSRF-Token" : "Fetch"
 					}
-				}).then(function (oData, sTextStatus, jqXHR) {
+				}).then(function (_oData, _sTextStatus, jqXHR) {
 					var sCsrfToken = jqXHR.getResponseHeader("X-CSRF-Token");
 					jQuery.ajax(sResolvedServiceUrl + '$batch', {
 						method : "POST",
@@ -1789,7 +1962,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 							"X-CSRF-Token" : sCsrfToken
 						},
 						data : oBatchRequestContent.body
-					}).then(function (oData, sTextStatus, jqXHR) {
+					}).then(function (oData, _sTextStatus, jqXHR) {
 						var aResponses, oResponse;
 
 						assert.strictEqual(jqXHR.status, 200);
@@ -1803,7 +1976,7 @@ Content-Type: application/json;odata.metadata=minimal;charset=UTF-8\r\n\
 						assert.ok(oResponse.headers["content-language"]);
 						done();
 					});
-				}, function (jqXHR, sTextStatus, sErrorMessage) {
+				}, function (_jqXHR, _sTextStatus, sErrorMessage) {
 					assert.ok(false, sErrorMessage);
 					done();
 				});

@@ -3,11 +3,12 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global",
+	"sap/base/Log",
+	"sap/ui/core/CalendarType",
 	"sap/ui/core/format/DateFormat",
 	"sap/ui/model/FormatException",
 	"sap/ui/model/odata/type/DateTimeBase"
-], function (jQuery, DateFormat, FormatException, DateTimeBase) {
+], function (Log, CalendarType, DateFormat, FormatException, DateTimeBase) {
 	"use strict";
 
 	/**
@@ -19,7 +20,7 @@ sap.ui.define([
 	 *
 	 *   In {@link sap.ui.model.odata.v2.ODataModel} this type is represented as a
 	 *   <code>Date</code> instance in local time. In {@link sap.ui.model.odata.v4.ODataModel} this
-	 *   type is represented as a <code>string</code> like "2014-11-27T13:47:26Z". See parameter
+	 *   type is represented as a <code>string</code> like "1970-12-31T23:59:58Z". See parameter
 	 *   <code>oConstraints.V4</code> for more information.
 	 *
 	 * @extends sap.ui.model.odata.type.DateTimeBase
@@ -40,7 +41,7 @@ sap.ui.define([
 	 *   (OData V4 only); only integer values between 0 and 12 are valid (since 1.37.0)
 	 * @param {boolean} [oConstraints.V4=false]
 	 *   Whether OData V4 semantics apply and the model representation is expected to be a
-	 *   <code>string</code> like "2014-11-27T13:47:26Z" (see {@link #parseValue} and
+	 *   <code>string</code> like "1970-12-31T23:59:58Z" (see {@link #parseValue} and
 	 *   {@link #validateValue}); this type automatically adapts itself whenever it is used within
 	 *   an OData V4 model via {@link sap.ui.model.odata.v4.ODataPropertyBinding#setType}.
 	 * @public
@@ -55,13 +56,14 @@ sap.ui.define([
 					precision : oConstraints ? oConstraints.precision : undefined
 				});
 				this.rDateTimeOffset = undefined; // @see #validateValue
+				this.oModelFormat = undefined;
 				this.bV4 = false; // @see #setV4
 				if (oConstraints) {
 					bV4 = oConstraints.V4;
 					if (bV4 === true) {
 						this.bV4 = true;
 					} else if (bV4 !== undefined && bV4 !== false) {
-						jQuery.sap.log.warning("Illegal V4: " + bV4, null, this.getName());
+						Log.warning("Illegal V4: " + bV4, null, this.getName());
 					}
 				}
 			}
@@ -83,10 +85,11 @@ sap.ui.define([
 		if (!oType.oModelFormat) {
 			iPrecision = oType.oConstraints && oType.oConstraints.precision;
 			if (iPrecision) {
-				sPattern += "." + jQuery.sap.padRight("", "S", iPrecision);
+				sPattern += "." + "".padEnd(iPrecision, "S");
 			}
 			oType.oModelFormat = DateFormat.getDateInstance({
-				pattern : sPattern + "X",
+				calendarType : CalendarType.Gregorian,
+				pattern : sPattern + "XXX",
 				strictParsing : true,
 				UTC : oType.oFormatOptions && oType.oFormatOptions.UTC
 			});
@@ -95,15 +98,25 @@ sap.ui.define([
 	}
 
 	/**
+	 * Resets the model formatter instance which is recreated on demand, for example via
+	 * {@link #getModelFormat}, and cached.
+	 *
+	 * @private
+	 */
+	DateTimeOffset.prototype._resetModelFormatter = function () {
+		this.oModelFormat = undefined;
+	};
+
+	/**
 	 * Formats the given value to the given target type.
 	 *
-	 * @param {Date|string} vValue
+	 * @param {Date|string} [vValue]
 	 *   The value to be formatted, which is represented in the model as a <code>Date</code>
-	 *   instance (OData V2) or as a string like "2014-11-27T13:47:26Z" (OData V4); both
+	 *   instance (OData V2) or as a string like "1970-12-31T23:59:58Z" (OData V4); both
 	 *   representations are accepted independent of the model's OData version
 	 * @param {string} sTargetType
-	 *   The target type, may be "any", "string", or a type with one of these types as its
-	 *   {@link sap.ui.base.DataType#getPrimitiveType primitive type}.
+	 *   The target type, may be "any", "object" (since 1.69.0), "string", or a type with one of
+	 *   these types as its {@link sap.ui.base.DataType#getPrimitiveType primitive type}.
 	 *   See {@link sap.ui.model.odata.type} for more information.
 	 * @returns {Date|string}
 	 *   The formatted output value in the target type; <code>undefined</code> or <code>null</code>
@@ -117,6 +130,16 @@ sap.ui.define([
 	DateTimeOffset.prototype.formatValue = function (vValue, sTargetType) {
 		var oDateValue;
 
+		if (vValue === undefined || vValue === null) {
+			return null;
+		}
+		if (this.getPrimitiveType(sTargetType) === "object") {
+			if (vValue instanceof Date) {
+				return new Date(vValue.getUTCFullYear(), vValue.getUTCMonth(), vValue.getUTCDate(),
+					vValue.getUTCHours(), vValue.getUTCMinutes(), vValue.getUTCSeconds());
+			}
+			return getModelFormat(this).parse(vValue);
+		}
 		if (typeof vValue === "string" && this.getPrimitiveType(sTargetType) === "string") {
 			oDateValue = getModelFormat(this).parse(vValue);
 			if (!oDateValue) {
@@ -125,6 +148,18 @@ sap.ui.define([
 			vValue = oDateValue;
 		}
 		return DateTimeBase.prototype.formatValue.call(this, vValue, sTargetType);
+	};
+
+	// @override
+	// @see sap.ui.model.SimpleType#getConstraints
+	DateTimeOffset.prototype.getConstraints = function () {
+		var oConstraints = DateTimeBase.prototype.getConstraints.call(this);
+
+		if (this.bV4) {
+			oConstraints.V4 = true;
+		}
+
+		return oConstraints;
 	};
 
 	/**
@@ -142,7 +177,7 @@ sap.ui.define([
 	 * @override
 	 * @protected
 	 */
-	DateTimeOffset.prototype.getModelFormat = function() {
+	DateTimeOffset.prototype.getModelFormat = function () {
 		if (this.bV4) {
 			return getModelFormat(this);
 		}
@@ -162,14 +197,16 @@ sap.ui.define([
 
 	/**
 	 * Parses the given value to a <code>Date</code> instance (OData V2) or a string like
-	 * "2014-11-27T13:47:26Z" (OData V4), depending on the model's OData version.
+	 * "1970-12-31T23:59:58Z" (OData V4), depending on the model's OData version.
 	 *
-	 * @param {string} sValue
+	 * @param {Date|string} vValue
 	 *   The value to be parsed; the empty string and <code>null</code> are parsed to
-	 *   <code>null</code>
+	 *   <code>null</code>; <code>Date</code> objects are expected to represent local time and are
+	 *   supported if and only if source type is "object".
 	 * @param {string} sSourceType
-	 *   The source type (the expected type of <code>sValue</code>), must be "string", or a type
-	 *   with "string" as its {@link sap.ui.base.DataType#getPrimitiveType primitive type}.
+	 *   The source type (the expected type of <code>vValue</code>), must be "string",
+	 *   "object" (since 1.69.0), or a type with one of these types as its
+	 *   {@link sap.ui.base.DataType#getPrimitiveType primitive type}.
 	 *   See {@link sap.ui.model.odata.type} for more information.
 	 * @returns {Date|string}
 	 *   The parsed value
@@ -180,8 +217,8 @@ sap.ui.define([
 	 * @public
 	 * @since 1.27.0
 	 */
-	DateTimeOffset.prototype.parseValue = function (sValue, sSourceType) {
-		var oResult = DateTimeBase.prototype.parseValue.call(this, sValue, sSourceType);
+	DateTimeOffset.prototype.parseValue = function (vValue, sSourceType) {
+		var oResult = DateTimeBase.prototype.parseValue.call(this, vValue, sSourceType);
 
 		return this.bV4 && oResult !== null
 			? getModelFormat(this).format(oResult)
@@ -191,7 +228,7 @@ sap.ui.define([
 	/**
 	 * Sets OData V4 semantics for this type instance.
 	 *
-	 * @returns {sap.ui.model.odata.type.DateTimeOffset}
+	 * @returns {this}
 	 *   <code>this</code> to allow method chaining
 	 *
 	 * @private
@@ -207,7 +244,6 @@ sap.ui.define([
 	 *
 	 * @param {any} vValue
 	 *   The value to be validated
-	 * @returns {void}
 	 * @throws {sap.ui.model.ValidateException}
 	 *   If the value is not valid
 	 *

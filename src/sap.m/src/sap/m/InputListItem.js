@@ -33,6 +33,7 @@ sap.ui.define([
 	 * @constructor
 	 * @public
 	 * @alias sap.m.InputListItem
+	 * @see {@link fiori:/input-list-item/ Input List Item}
 	 * @ui5-metamodel This control/element also will be described in the UI5 (legacy) designtime metamodel
 	 */
 	var InputListItem = ListItemBase.extend("sap.m.InputListItem", /** @lends sap.m.InputListItem.prototype */ { metadata : {
@@ -63,12 +64,11 @@ sap.ui.define([
 	}});
 
 	InputListItem.prototype.getContentAnnouncement = function() {
-		var sAnnouncement = this.getLabel();
+		var sAnnouncement = this.getLabel() + " . ";
 		this.getContent().forEach(function(oContent) {
 			sAnnouncement += ListItemBase.getAccessibilityText(oContent) + " ";
 		});
-
-		return sAnnouncement;
+		return sAnnouncement.trim();
 	};
 
 	return InputListItem;

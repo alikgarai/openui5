@@ -10,7 +10,10 @@
 		id="sap-ui-bootstrap"
 		src="../../../../resources/sap-ui-core.js"
 		data-sap-ui-xx-bindingSyntax="complex"
-		data-sap-ui-libs="sap.m, sap.uxap, sap.ui.layout" >
+		data-sap-ui-libs="sap.m, sap.uxap, sap.ui.layout"
+		data-sap-ui-resourceroots='{
+			"qunit.internal.acc": "../../../../test-resources/sap/ui/core/qunit/internal/acc"
+		}'>
 	</script>
 
 	<script>
@@ -29,10 +32,10 @@
 					]
 				}),
 			headerContent:[
-				new sap.m.Label({text:"Hello! I am Denise and I use UxAP"}),
+				new sap.m.Label({text:"Hello! I am Denise and I use UxAP", wrapping: true}),
 				new sap.m.ObjectAttribute({
 					title: "Phone",
-					text: "+33 6 4512 5158",
+					customContent: new sap.m.Link({text: "+33 6 4512 5158"}),
 					active: true
 				})
 				],
@@ -64,7 +67,7 @@
 	</script>
 
 </head>
-<body class="sapUiBody" id="content" role="application">
+<body class="sapUiBody" id="content">
 
 </body>
 </html>

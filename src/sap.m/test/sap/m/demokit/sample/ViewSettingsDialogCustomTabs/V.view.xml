@@ -6,14 +6,14 @@
 	<l:VerticalLayout
 		class="sapUiContentPadding"
 		width="100%">
-		<l:content>
-			<Button
-				text="Open View Settings Dialog with several tabs"
-				press="handleOpenDialog" />
+		<Button
+			text="Open View Settings Dialog with several tabs"
+			press="handleOpenDialog"
+			ariaHasPopup="Dialog" />
 
-			<Button
-					text="Open View Settings Dialog with single custom tab"
-					press="handleOpenDialogSingleCustomTab" />
-		</l:content>
+		<Button
+				text="Open View Settings Dialog with single custom tab"
+				press="handleOpenDialogSingleCustomTab"
+				ariaHasPopup="Dialog" />
 	</l:VerticalLayout>
 </mvc:View>

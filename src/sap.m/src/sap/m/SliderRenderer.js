@@ -2,15 +2,17 @@
  * ${copyright}
  */
 
-sap.ui.define(['./SliderUtilities'],
-	function(SliderUtilities) {
+sap.ui.define(['./SliderUtilities', "sap/ui/core/InvisibleText"],
+	function(SliderUtilities, InvisibleText) {
 		"use strict";
 
 		/**
 		 * Slider renderer.
 		 * @namespace
 		 */
-		var SliderRenderer = {};
+		var SliderRenderer = {
+			apiVersion: 2
+		};
 
 		/**
 		 * CSS class to be applied to the HTML root element of the Slider control.
@@ -33,65 +35,58 @@ sap.ui.define(['./SliderUtilities'],
 					return sAccumulator + " " + sId;
 				}, "");
 
-			oRm.write("<div");
+			oRm.openStart("div", oSlider);
 			this.addClass(oRm, oSlider);
 
 			if (!bEnabled) {
-				oRm.addClass(CSS_CLASS + "Disabled");
+				oRm.class(CSS_CLASS + "Disabled");
 			}
 
-			oRm.addStyle("width", oSlider.getWidth());
-			oRm.writeClasses();
-			oRm.writeStyles();
-			oRm.writeControlData(oSlider);
+			oRm.style("width", oSlider.getWidth());
 
 			if (sTooltip && oSlider.getShowHandleTooltip()) {
-				oRm.writeAttributeEscaped("title", oSlider._formatValueByCustomElement(sTooltip));
+				oRm.attr("title", oSlider._formatValueByCustomElement(sTooltip));
 			}
 
-			oRm.write(">");
-			oRm.write('<div');
-			oRm.writeAttribute("id", oSlider.getId() + "-inner");
+			oRm.openEnd();
+
+			oRm.openStart('div', oSlider.getId() + "-inner");
 			this.addInnerClass(oRm, oSlider);
 
 			if (!bEnabled) {
-				oRm.addClass(CSS_CLASS + "InnerDisabled");
+				oRm.class(CSS_CLASS + "InnerDisabled");
 			}
 
-			oRm.writeClasses();
-			oRm.writeStyles();
-			oRm.write(">");
+			oRm.openEnd();
 
 			if (oSlider.getProgress()) {
 				this.renderProgressIndicator(oRm, oSlider, sSliderLabels);
 			}
 
 			this.renderHandles(oRm, oSlider, sSliderLabels);
-			oRm.write("</div>");
+			oRm.close("div");
 
 			if (oSlider.getEnableTickmarks()) {
 				this.renderTickmarks(oRm, oSlider);
-			} else {
-				// Keep the "old" labels for backwards compatibility
-				this.renderLabels(oRm, oSlider);
 			}
+
+			this.renderLabels(oRm, oSlider);
 
 			if (oSlider.getName()) {
 				this.renderInput(oRm, oSlider);
 			}
 
-			oRm.write("</div>");
+			oRm.close("div");
 		};
 
 		SliderRenderer.renderProgressIndicator = function(oRm, oSlider) {
-			oRm.write("<div");
-			oRm.writeAttribute("id", oSlider.getId() + "-progress");
+			oRm.openStart("div", oSlider.getId() + "-progress");
 			this.addProgressIndicatorClass(oRm, oSlider);
-			oRm.addStyle("width", oSlider._sProgressValue);
-			oRm.writeClasses();
-			oRm.writeStyles();
-			oRm.write(' aria-hidden="true"></div>');
+			oRm.style("width", oSlider._sProgressValue);
+			oRm.attr("aria-hidden", "true");
+			oRm.openEnd().close("div");
 		};
+
 		/**
 		 * This hook method is reserved for derived classes to render more handles.
 		 *
@@ -106,36 +101,29 @@ sap.ui.define(['./SliderUtilities'],
 		};
 
 		SliderRenderer.renderHandle = function(oRm, oSlider, mOptions) {
-			var bEnabled = oSlider.getEnabled(),
-				oFirstTooltip = oSlider.getUsedTooltips()[0];
+			var bEnabled = oSlider.getEnabled();
 
-			oRm.write("<span");
-
-			if (mOptions && (mOptions.id !== undefined)) {
-				oRm.writeAttributeEscaped("id", mOptions.id);
-			}
-
-			oRm.writeAttribute("aria-labelledby", (mOptions.forwardedLabels + " " + oSlider.getAggregation("_handlesLabels")[0].getId()).trim());
+			oRm.openStart("span", mOptions && mOptions.id);
 
 			if (oSlider.getShowHandleTooltip() && !oSlider.getShowAdvancedTooltip()) {
 				this.writeHandleTooltip(oRm, oSlider);
 			}
 
-			if (oSlider.getInputsAsTooltips() && oFirstTooltip) {
-				oRm.writeAttribute("aria-controls", oFirstTooltip.getId());
+			if (oSlider.getInputsAsTooltips()) {
+				oRm.attr("aria-describedby", InvisibleText.getStaticId("sap.m", "SLIDER_INPUT_TOOLTIP"));
+				bEnabled && oRm.attr("aria-keyshortcuts", "F2");
 			}
 
 			this.addHandleClass(oRm, oSlider);
-			oRm.addStyle(sap.ui.getCore().getConfiguration().getRTL() ? "right" : "left", oSlider._sProgressValue);
-			this.writeAccessibilityState(oRm, oSlider);
-			oRm.writeClasses();
-			oRm.writeStyles();
+			oRm.style(sap.ui.getCore().getConfiguration().getRTL() ? "right" : "left", oSlider._sProgressValue);
+			this.writeAccessibilityState(oRm, oSlider, mOptions);
+
 
 			if (bEnabled) {
-				oRm.writeAttribute("tabindex", "0");
+				oRm.attr("tabindex", "0");
 			}
 
-			oRm.write("></span>");
+			oRm.openEnd().close("span");
 		};
 
 		/**
@@ -146,22 +134,20 @@ sap.ui.define(['./SliderUtilities'],
 		 * @param {sap.ui.core.Control} oSlider An object representation of the control that should be rendered.
 		 */
 		SliderRenderer.writeHandleTooltip = function(oRm, oSlider) {
-			oRm.writeAttribute("title", oSlider._formatValueByCustomElement(oSlider.toFixed(oSlider.getValue())));
+			oRm.attr("title", oSlider._formatValueByCustomElement(oSlider.toFixed(oSlider.getValue())));
 		};
 
 		SliderRenderer.renderInput = function(oRm, oSlider) {
-			oRm.write('<input type="text"');
-			oRm.writeAttribute("id", oSlider.getId() + "-input");
-			oRm.addClass(SliderRenderer.CSS_CLASS + "Input");
+			oRm.voidStart("input", oSlider.getId() + "-input").attr("type", "text");
+			oRm.class(SliderRenderer.CSS_CLASS + "Input");
 
 			if (!oSlider.getEnabled()) {
-				oRm.write("disabled");
+				oRm.attr("disabled");
 			}
 
-			oRm.writeClasses();
-			oRm.writeAttributeEscaped("name", oSlider.getName());
-			oRm.writeAttribute("value", oSlider._formatValueByCustomElement(oSlider.toFixed(oSlider.getValue())));
-			oRm.write("/>");
+			oRm.attr("name", oSlider.getName());
+			oRm.attr("value", oSlider._formatValueByCustomElement(oSlider.toFixed(oSlider.getValue())));
+			oRm.voidEnd();
 		};
 
 		/**
@@ -171,7 +157,7 @@ sap.ui.define(['./SliderUtilities'],
 		 * @param {sap.ui.core.RenderManager} oRm The RenderManager that can be used for writing to the render output buffer.
 		 * @param {sap.ui.core.Control} oSlider An object representation of the control that should be rendered.
 		 */
-		SliderRenderer.writeAccessibilityState = function(oRm, oSlider) {
+		SliderRenderer.writeAccessibilityState = function(oRm, oSlider, mOptions) {
 			var fSliderValue = oSlider.getValue(),
 				bNotNumericalLabel = oSlider._isElementsFormatterNotNumerical(fSliderValue),
 				sScaleLabel = oSlider._formatValueByCustomElement(fSliderValue),
@@ -183,23 +169,26 @@ sap.ui.define(['./SliderUtilities'],
 				sValueNow = oSlider.toFixed(fSliderValue);
 			}
 
-			oRm.writeAccessibilityState(oSlider, {
+			oRm.accessibilityState(oSlider, {
 				role: "slider",
 				orientation: "horizontal",
 				valuemin: oSlider.toFixed(oSlider.getMin()),
 				valuemax: oSlider.toFixed(oSlider.getMax()),
-				valuenow: sValueNow
+				valuenow: sValueNow,
+				labelledby: {
+					value: (mOptions.forwardedLabels + " " + oSlider.getAggregation("_handlesLabels")[0].getId()).trim()
+				}
 			});
 
 			if (bNotNumericalLabel) {
-				oRm.writeAccessibilityState(oSlider, {
+				oRm.accessibilityState(oSlider, {
 					valuetext: sScaleLabel
 				});
 			}
 		};
 
 		SliderRenderer.renderTickmarks = function (oRm, oSlider) {
-			var i, iTickmarksToRender, fTickmarksDistance, iLabelsCount, fStep, fSliderSize,fSliderStep,
+			var i, iTickmarksToRender, fTickmarksDistance, iLabelsCount, fStep, fSliderSize, fSliderStep,
 				oScale = oSlider._getUsedScale();
 
 			if (!oSlider.getEnableTickmarks() || !oScale) {
@@ -215,9 +204,16 @@ sap.ui.define(['./SliderUtilities'],
 				this._calcTickmarksDistance(iTickmarksToRender, oSlider.getMin(), oSlider.getMax(), fSliderStep));
 
 
-			oRm.write("<ul class=\"" + SliderRenderer.CSS_CLASS + "Tickmarks\">");
+			oRm.openStart("ul")
+				.class(SliderRenderer.CSS_CLASS + "Tickmarks")
+				.openEnd();
+
 			this.renderTickmarksLabel(oRm, oSlider, oSlider.getMin());
-			oRm.write("<li class=\"" + SliderRenderer.CSS_CLASS + "Tick\" style=\"width: " + fTickmarksDistance + "%;\"></li>");
+			oRm.openStart("li")
+				.class(SliderRenderer.CSS_CLASS + "Tick")
+				.style("width", fTickmarksDistance + "%;")
+				.openEnd()
+				.close("li");
 
 			for (i = 1; i < iTickmarksToRender - 1; i++) {
 				if (iLabelsCount && (i % iLabelsCount === 0)) {
@@ -225,12 +221,20 @@ sap.ui.define(['./SliderUtilities'],
 					this.renderTickmarksLabel(oRm, oSlider, oSlider._getValueOfPercent(fStep));
 				}
 
-				oRm.write("<li class=\"" + SliderRenderer.CSS_CLASS + "Tick\" style=\"width: " + fTickmarksDistance + "%;\"></li>");
+				oRm.openStart("li").class(SliderRenderer.CSS_CLASS + "Tick")
+					.style("width", fTickmarksDistance + "%;")
+					.openEnd()
+					.close("li");
 			}
 
 			this.renderTickmarksLabel(oRm, oSlider, oSlider.getMax());
-			oRm.write("<li class=\"" + SliderRenderer.CSS_CLASS + "Tick\" style=\"width: 0;\"></li>");
-			oRm.write("</ul>");
+			oRm.openStart("li")
+				.class(SliderRenderer.CSS_CLASS + "Tick")
+				.style("width", "0")
+				.openEnd()
+				.close("li");
+
+			oRm.close("ul");
 		};
 
 		SliderRenderer.renderTickmarksLabel = function (oRm, oSlider, fValue) {
@@ -242,16 +246,18 @@ sap.ui.define(['./SliderUtilities'],
 			// Call Scale's callback or use the plain value. Cast to string
 			sValue = oSlider._formatValueByCustomElement(fValue, 'scale');
 
-			oRm.write("<li class=\"" + SliderRenderer.CSS_CLASS + "TickLabel\"");
+			oRm.openStart("li")
+				.class(SliderRenderer.CSS_CLASS + "TickLabel")
+				.style(sLeftOrRightPosition, (fOffset + "%"))
+				.openEnd();
 
-			oRm.addStyle(sLeftOrRightPosition, (fOffset + "%"));
-			oRm.writeStyles();
+			oRm.openStart("div")
+				.class(SliderRenderer.CSS_CLASS + "Label")
+				.openEnd()
+				.text(sValue)
+				.close("div");
 
-			oRm.write(">");
-			oRm.write("<div class=\"" + SliderRenderer.CSS_CLASS + "Label\">");
-			oRm.writeEscaped(sValue);
-			oRm.write("</div>");
-			oRm.write("</li>");
+			oRm.close("li");
 		};
 
 		/**
@@ -283,7 +289,7 @@ sap.ui.define(['./SliderUtilities'],
 		 * @since 1.36
 		 */
 		SliderRenderer.addClass = function(oRm, oSlider) {
-			oRm.addClass(SliderRenderer.CSS_CLASS);
+			oRm.class(SliderRenderer.CSS_CLASS);
 		};
 
 		/**
@@ -294,7 +300,7 @@ sap.ui.define(['./SliderUtilities'],
 		 * @since 1.38
 		 */
 		SliderRenderer.addInnerClass = function(oRm, oSlider) {
-			oRm.addClass(SliderRenderer.CSS_CLASS + "Inner");
+			oRm.class(SliderRenderer.CSS_CLASS + "Inner");
 		};
 
 		/**
@@ -305,7 +311,7 @@ sap.ui.define(['./SliderUtilities'],
 		 * @since 1.38
 		 */
 		SliderRenderer.addProgressIndicatorClass = function(oRm, oSlider) {
-			oRm.addClass(SliderRenderer.CSS_CLASS + "Progress");
+			oRm.class(SliderRenderer.CSS_CLASS + "Progress");
 		};
 
 		/**
@@ -316,7 +322,7 @@ sap.ui.define(['./SliderUtilities'],
 		 * @since 1.38
 		 */
 		SliderRenderer.addHandleClass = function(oRm, oSlider) {
-			oRm.addClass(SliderRenderer.CSS_CLASS + "Handle");
+			oRm.class(SliderRenderer.CSS_CLASS + "Handle");
 		};
 
 		/**
@@ -326,7 +332,7 @@ sap.ui.define(['./SliderUtilities'],
 		 * @param {sap.ui.core.Control} oSlider An object representation of the control that should be rendered.
 		 */
 		SliderRenderer.renderLabels = function (oRm, oSlider) {
-			oSlider.getAggregation("_handlesLabels").forEach(oRm.renderControl);
+			oSlider.getAggregation("_handlesLabels").forEach(oRm.renderControl, oRm);
 		};
 
 		return SliderRenderer;

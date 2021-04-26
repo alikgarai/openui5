@@ -4,31 +4,40 @@
 
 /*global location */
 sap.ui.define([
-		"jquery.sap.global",
+		"sap/ui/thirdparty/jquery",
 		"sap/ui/documentation/sdk/controller/BaseController",
 		"sap/ui/model/json/JSONModel",
 		"sap/ui/documentation/sdk/controller/util/ControlsInfo",
 		"sap/ui/documentation/sdk/util/ToggleFullScreenHandler",
 		"sap/ui/documentation/sdk/controller/util/APIInfo",
+		"sap/ui/documentation/sdk/model/formatter",
+		"sap/m/Image",
 		"sap/m/Label",
 		"sap/m/Link",
 		"sap/m/Text",
 		"sap/m/HBox",
 		"sap/m/ObjectAttribute",
 		"sap/m/Popover",
-		"sap/m/FlexWrap"
+		"sap/m/library",
+		"sap/m/CustomListItem",
+		"sap/m/List"
 	], function (jQuery, BaseController, JSONModel, ControlsInfo, ToggleFullScreenHandler, APIInfo,
-			Label, Link, Text, HBox, ObjectAttribute, Popover, FlexWrap) {
+			formatter, Image, Label, Link, Text, HBox, ObjectAttribute, Popover, library, CustomListItem, List) {
 		"use strict";
+
+		// shortcut for sap.m.FlexWrap
+		var FlexWrap = library.FlexWrap;
 
 		return BaseController.extend("sap.ui.documentation.sdk.controller.SubApiDetail", {
 
 			NOT_AVAILABLE: 'N/A',
+			PUBLIC_GITHUB_FRAMEWORK_DOMAIN: 'https://github.com/SAP/openui5/blob/master/src/',
 			SECTION_MAP: {
 				"properties": "controlProperties",
 				"fields": "properties",
 				"special settings": "specialsettings"
 			},
+			formatter: formatter,
 
 			onInit: function () {
 				this._objectPage = this.byId("apiDetailObjectPage");
@@ -39,6 +48,12 @@ sap.ui.define([
 			/* =========================================================== */
 
 			initiate: function (oReferences) {
+				var bHasSelfProps,
+					bHasSelfAggr,
+					bHasSelfAssoc,
+					fnOverrideBorrowedFilter = function (item) {
+						return !item.borrowedFrom;
+					};
 
 				// Setup
 				this._sTopicId = oReferences.sTopicId;
@@ -47,10 +62,11 @@ sap.ui.define([
 				this._aApiIndex = oReferences.aApiIndex;
 				this._aAllowedMembers = oReferences.aAllowedMembers;
 				this._sEntityType = oReferences.sEntityType;
-				this._sEntityId = oReferences.sEntityId;
+				this._sEntityId = oReferences.sEntityId !== "undefined" ? oReferences.sEntityId : undefined;
 				this._oEntityData = oReferences.oEntityData;
 				this._oContainerController = oReferences.oContainerController;
 				this._oContainerView = oReferences.oContainerView;
+				this._oToggleFullScreenBtn = this.byId("toggleFullScreenBtn");
 
 				// Override instance getOwnerComponent so correct component will be used for the controller
 				this.getOwnerComponent = function () {
@@ -59,6 +75,49 @@ sap.ui.define([
 
 				// Cache router instance
 				this._oRouter = this.getRouter();
+
+				this._allProperties = this._oModel.getProperty("/ui5-metadata/properties");
+				this._allAggregations = this._oModel.getProperty("/ui5-metadata/aggregations");
+				this._allAssociations = this._oModel.getProperty("/ui5-metadata/associations");
+
+				if (this._allProperties) {
+					this._selfProperties = this._allProperties.filter(fnOverrideBorrowedFilter);
+					bHasSelfProps = this._selfProperties.length > 0;
+					this._oModel.setProperty("/bShowBorrowedProps", !bHasSelfProps);
+					this._oModel.setProperty("/bHasSelfProps", bHasSelfProps);
+					this._oModel.setProperty("/bHasBorrowedProps", this._allProperties.length > this._selfProperties.length);
+					this._oModel.setProperty("/ui5-metadata/properties", bHasSelfProps ? this._selfProperties : this._allProperties);
+				}
+
+				if (this._allAggregations) {
+					this._selfAggregations = this._allAggregations.filter(fnOverrideBorrowedFilter);
+					bHasSelfAggr = this._selfAggregations.length > 0;
+					this._oModel.setProperty("/bShowBorrowedAggr", !bHasSelfAggr);
+					this._oModel.setProperty("/bHasSelfAggr", bHasSelfAggr);
+					this._oModel.setProperty("/bHasBorrowedAggr", this._allAggregations.length > this._selfAggregations.length);
+					this._oModel.setProperty("/ui5-metadata/aggregations", bHasSelfAggr ? this._selfAggregations : this._allAggregations);
+				}
+
+				if (this._allAssociations) {
+					this._selfAssociations = this._allAssociations.filter(fnOverrideBorrowedFilter);
+					bHasSelfAssoc = this._selfAssociations.length > 0;
+					this._oModel.setProperty("/bShowBorrowedAssoc", !bHasSelfAssoc);
+					this._oModel.setProperty("/bHasSelfAssoc", bHasSelfAssoc);
+					this._oModel.setProperty("/bHasBorrowedAssoc", this._allAssociations.length > this._selfAssociations.length);
+					this._oModel.setProperty("/ui5-metadata/associations", bHasSelfAssoc ? this._selfAssociations : this._allAssociations);
+				}
+
+				if (this._oModel.getProperty("/hasFAQ")) {
+					jQuery.ajax({
+						type: "GET",
+						url: './docs/api/' + this._oEntityData.lib.replace(/\./g, '/') +
+						'/demokit/faq/' + this._oEntityData.displayName + '.html',
+						success: function (data) {
+							this._startMonitorFAQSection();
+							this._oModel.setProperty("/faqContent", data);
+						}.bind(this)
+					});
+				}
 
 				// Attach the model to the view
 				this.setModel(this._oModel);
@@ -70,7 +129,7 @@ sap.ui.define([
 
 				this._buildHeaderLayout(this._oControlData, this._oEntityData);
 
-				jQuery.sap.delayedCall(0, this, function () {
+				setTimeout(function () {
 					// Initial prettify
 					this._prettify();
 
@@ -78,27 +137,27 @@ sap.ui.define([
 					this._objectPage.attachEvent("subSectionEnteredViewPort", function () {
 						// Clear previous calls if any
 						if (this._sPrettyPrintDelayedCallID) {
-							jQuery.sap.clearDelayedCall(this._sPrettyPrintDelayedCallID);
+							clearTimeout(this._sPrettyPrintDelayedCallID);
 						}
-						this._sPrettyPrintDelayedCallID = jQuery.sap.delayedCall(200, this, function () {
+						this._sPrettyPrintDelayedCallID = setTimeout(function () {
 							// The event is called even if all the sub-sections are un-stashed so apply the class and prettyPrint only when we have un-processed targets.
 							var $aNotApplied = jQuery('.sapUxAPObjectPageContainer .APIDetailMethodsSection pre:not(.prettyprint)', this._objectPage.$());
 							if ($aNotApplied.length > 0) {
 								$aNotApplied.addClass('prettyprint');
 								window.prettyPrint();
 							}
-						});
+						}.bind(this), 200);
 					}, this);
 
 					// Init scrolling right after busy indicator is cleared and prettify is ready
-					jQuery.sap.delayedCall(1000, this, function () {
+					setTimeout(function () {
 
 						if (this._sEntityType) {
 							this._scrollToEntity(this._sEntityType, this._sEntityId);
 						}
 
 						// Add listener's with a slight delay so they don't break scroll to entity
-						jQuery.sap.delayedCall(500, this, function () {
+						setTimeout(function () {
 							this._objectPage.attachEvent("_sectionChange", function (oEvent) {
 								var oSection = oEvent.getParameter("section"),
 									oSubSection = oEvent.getParameter("subSection");
@@ -122,16 +181,18 @@ sap.ui.define([
 								this._oNavigatingTo = oSubSection;
 								this._modifyURL(oSection, oSubSection, true);
 							}, this);
-						});
+						}.bind(this), 500);
 
-					});
-				});
+					}.bind(this), 1000);
+				}.bind(this), 0);
 
 				this.searchResultsButtonVisibilitySwitch(this.byId("apiDetailBackToSearch"));
+				this.appendPageTitle(this._oModel.getProperty("/displayName"));
 			},
 
 			onAfterRendering: function () {
 				this.getView().attachBrowserEvent("click", this.onJSDocLinkClick, this);
+				ToggleFullScreenHandler.updateControl(this._oToggleFullScreenBtn, this._oContainerView, this._oContainerController);
 			},
 
 			onExit: function () {
@@ -144,14 +205,44 @@ sap.ui.define([
 				ToggleFullScreenHandler.updateMode(oEvent, this._oContainerView, this._oContainerController);
 			},
 
+			onBorrowedPropCheckboxClick: function (oEvent) {
+				var bChecked = oEvent.getParameter("selected");
+
+				this._oModel.setProperty("/bShowBorrowedProps", bChecked);
+
+				this._oModel.setProperty("/ui5-metadata/properties", bChecked ? this._allProperties : this._selfProperties);
+			},
+
+			onBorrowedAggrCheckboxClick: function (oEvent) {
+				var bChecked = oEvent.getParameter("selected");
+
+				this._oModel.setProperty("/bShowBorrowedAggr", bChecked);
+
+				this._oModel.setProperty("/ui5-metadata/aggregations", bChecked ? this._allAggregations : this._selfAggregations);
+			},
+
+			onBorrowedAssocCheckboxClick: function (oEvent) {
+				var bChecked = oEvent.getParameter("selected");
+
+				this._oModel.setProperty("/bShowBorrowedAssoc", bChecked);
+
+				this._oModel.setProperty("/ui5-metadata/associations", bChecked ? this._allAssociations : this._selfAssociations);
+			},
+
 			onJSDocLinkClick: function (oEvent) {
 				var oClassList = oEvent.target.classList,
 					bJSDocLink = oClassList.contains("jsdoclink"),
-					sLinkTarget = oEvent.target.getAttribute("data-sap-ui-target"),
+					bExternalLink = oClassList.contains("sapUISDKExternalLink"),
+					sLinkTarget = decodeURIComponent(oEvent.target.getAttribute("data-target")),
 					sEntityType;
 
 				// Not a JSDocLink - we do nothing
-				if (!bJSDocLink) {
+				if (!bJSDocLink && !bExternalLink) {
+					return;
+				}
+
+				if (bExternalLink) {
+					this.onDisclaimerLinkPress(oEvent);
 					return;
 				}
 
@@ -159,28 +250,36 @@ sap.ui.define([
 					sEntityType = "methods";
 				} else if (oClassList.contains("scrollToEvent")) {
 					sEntityType = "events";
+				} else if (oClassList.contains("scrollToAnnotation")) {
+					sEntityType = "annotations";
 				} else {
 					// We do not scroll
 					return;
 				}
 
 				this._scrollToEntity(sEntityType, sLinkTarget);
-				this._navigateRouter(sEntityType, sLinkTarget, true);
+			},
+
+			_startMonitorFAQSection: function() {
+				var oPage = this.getView().byId("apiDetailObjectPage"),
+					oSection = this.getView().byId("faq"),
+					oDetailEl,
+					iNewSpacerHeight;
+
+				oSection.addEventDelegate({
+					ontap: function(oEvent) {
+						if (oEvent.target.nodeName === "SUMMARY" && (oDetailEl = oEvent.target.parentElement).open) {
+							// early adjust the layout to prevent a visual jump
+							iNewSpacerHeight = oPage._$spacer.height() + oDetailEl.offsetHeight;
+							oPage._$spacer.height(iNewSpacerHeight + "px");
+						}
+					}
+				});
 			},
 
 			/* =========================================================== */
-			/* begin: internal methods									   */
+			/* begin: internal methods									   aa*/
 			/* =========================================================== */
-
-			_navigateRouter: function(sEntityType, sEntityId, bShouldStoreToHistory) {
-				this._oRouter.stop();
-				this._oRouter.navTo("apiId", {
-					id: this._sTopicId,
-					entityType: sEntityType,
-					entityId: sEntityId
-				}, !bShouldStoreToHistory);
-				this._oRouter.initialize(true);
-			},
 
 			_modifyURL: function(oSection, oSubSection, bShouldStoreToHistory) {
 				var sSection = oSection.getTitle().toLowerCase(),
@@ -192,7 +291,12 @@ sap.ui.define([
 					sSection = this.SECTION_MAP[sSection];
 				}
 
-				this._navigateRouter(sSection, sSubSection, bShouldStoreToHistory);
+				this._oRouter.navToChangeUrlOnly({
+					id: this._sTopicId,
+					entityType: sSection,
+					entityId: sSubSection
+				}, bShouldStoreToHistory);
+
 			},
 
 			_prettify: function () {
@@ -243,15 +347,6 @@ sap.ui.define([
 					});
 
 					if (aFilteredSubSections.length) {
-
-						// Disable router as we are going to scroll only - this is only to prevent routing when a link
-						// pointing to a sub-section from the same entity with a href is clicked
-						this._oRouter.stop();
-						jQuery.sap.delayedCall(0, this, function () {
-							// Re-enable rooter after current operation
-							this._oRouter.initialize(true);
-						});
-
 						// We scroll to the first sub-section found
 						this._objectPage.scrollToSection(aFilteredSubSections[0].getId(), 250);
 					}
@@ -305,9 +400,22 @@ sap.ui.define([
 										emphasized: true,
 										text: oEntityData.sample,
 										visible: !!oEntityData.hasSample,
-										href: "#/entity/" + oControlData.name
+										href: "entity/" + oControlData.name
 									}),
 									_getText({text: oEntityData.sample, visible: !oEntityData.hasSample})
+								]
+							}, true);
+						},
+						_getControlGithub: function (oControlData, oEntityData) {
+							return _getHBox({
+								items: [
+									_getLabel({design: "Bold", text: "GitHub:"}),
+									_getLink({
+										emphasized: true,
+										text: oControlData.resource,
+										visible: true,
+										href: this.PUBLIC_GITHUB_FRAMEWORK_DOMAIN + oEntityData.lib + '/src/' + oControlData.resource
+									})
 								]
 							}, true);
 						},
@@ -318,7 +426,7 @@ sap.ui.define([
 									_getLink({
 										emphasized: true,
 										text: oControlData.docuLinkText,
-										href: "#/topic/" + oControlData.docuLink
+										href: "topic/" + oControlData.docuLink
 									})
 								]
 							}, true);
@@ -332,6 +440,11 @@ sap.ui.define([
 										text: oControlData.uxGuidelinesLinkText,
 										href: oControlData.uxGuidelinesLink,
 										target: "_blank"
+									}),
+									new Image({
+										src: "./resources/sap/ui/documentation/sdk/images/link-sap.png",
+										tooltip: "Information published on SAP site",
+										press: this.onDisclaimerLinkPress
 									})
 								]
 							}, true);
@@ -342,7 +455,7 @@ sap.ui.define([
 									_getLabel({text: "Extends:"}),
 									_getLink({
 										text: oControlData.extendsText,
-										href: "#/api/" + oControlData.extendsText,
+										href: "api/" + oControlData.extendsText,
 										visible: oControlData.isDerived
 									}),
 									_getText({text: oControlData.extendsText, visible: !oControlData.isDerived})
@@ -356,7 +469,7 @@ sap.ui.define([
 							this._aSubClasses = aSubClasses;
 
 							if (aSubClasses.length === 1) {
-								oSubClassesLink = _getLink({text: aSubClasses[0], href: "#/api/" + aSubClasses[0]});
+								oSubClassesLink = _getLink({text: aSubClasses[0], href: "api/" + aSubClasses[0]});
 							} else {
 								oSubClassesLink = _getLink({
 									text: oControlData.isClass ? "View subclasses" : "View implementations",
@@ -375,7 +488,7 @@ sap.ui.define([
 							var aItems = [_getLabel({text: "Implements:"})];
 
 							oControlData.implementsParsed.forEach(function (oElement) {
-								aItems.push(_getLink({text: oElement.name, href: "#/api/" + oElement.href}));
+								aItems.push(_getLink({text: oElement.name, href: "api/" + oElement.href}));
 							});
 
 							return _getHBox({
@@ -410,10 +523,14 @@ sap.ui.define([
 			 */
 			_openSubclassesImplementationsPopover: function (oEvent) {
 				var aPopoverContent = this._aSubClasses.map(function (oElement) {
-					return new Link({
-						text: oElement,
-						href: "#/api/" + oElement
-					}).addStyleClass("sapUiTinyMarginBottom sapUiTinyMarginEnd");
+					return new CustomListItem({
+						content: [
+							new Link({
+								text: oElement,
+								href: "api/" + oElement
+							}).addStyleClass("sapUiTinyMargin")
+						]
+					});
 				}), oPopover = this._getSubClassesAndImplementationsPopover(aPopoverContent);
 
 				oPopover.openBy(oEvent.getSource());
@@ -426,7 +543,13 @@ sap.ui.define([
 					oPopover.destroyContent(); // destroy the old content, before adding the new one
 				}
 
-				(aContent || []).forEach(oPopover.addContent, oPopover);
+				if (aContent && aContent.length > 0) {
+					var oList = new List({
+						items: aContent || []
+					});
+
+					oPopover.addContent(oList);
+				}
 
 				return oPopover;
 			},
@@ -436,7 +559,7 @@ sap.ui.define([
 					this._oPopover = new Popover({
 						placement: "Bottom",
 						showHeader: false
-					}).addStyleClass("sapUiDocumentationSubclassesPopover");
+					});
 				}
 
 				return this._oPopover;
@@ -457,9 +580,11 @@ sap.ui.define([
 					aHeaderControls = [[], [], []],
 					oHeaderLayoutUtil = this._getHeaderLayoutUtil(),
 					aSubClasses = oEntityData.extendedBy || oEntityData.implementedBy || [],
+					bIsOpenUI5 = this.getModel("versionData").getProperty("/isOpenUI5"),
 					aHeaderBlocksInfo = [
 						{creator: "_getControlSampleBlock", exists: oControlData.isClass || oControlData.isNamespace},
 						{creator: "_getDocumentationBlock", exists: oControlData.docuLink !== undefined},
+						{creator: "_getControlGithub", exists: bIsOpenUI5 && oControlData.resource && oEntityData.lib},
 						{creator: "_getUXGuidelinesBlock", exists: oControlData.uxGuidelinesLink !== undefined},
 						{creator: "_getExtendsBlock", exists: oControlData.isClass},
 						{creator: "_getSubclassesBlock", exists: aSubClasses.length > 0},
@@ -517,6 +642,5 @@ sap.ui.define([
 				this.onNavBack();
 			}
 		});
-
 	}
 );

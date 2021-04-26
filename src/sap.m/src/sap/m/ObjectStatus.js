@@ -7,10 +7,13 @@ sap.ui.define([
 	'./library',
 	'sap/ui/core/Control',
 	'sap/ui/core/ValueStateSupport',
+	'sap/ui/core/IndicationColorSupport',
 	'sap/ui/core/library',
+	'sap/ui/base/DataType',
+	'sap/ui/core/InvisibleText',
 	'./ObjectStatusRenderer'
 ],
-	function(library, Control, ValueStateSupport, coreLibrary, ObjectStatusRenderer) {
+	function(library, Control, ValueStateSupport, IndicationColorSupport, coreLibrary, DataType, InvisibleText, ObjectStatusRenderer) {
 	"use strict";
 
 
@@ -21,10 +24,11 @@ sap.ui.define([
 	// shortcut for sap.ui.core.TextDirection
 	var TextDirection = coreLibrary.TextDirection;
 
-	// shortcut for sap.ui.core.ValueState
+	// shortcuts for sap.ui.core.ValueState
 	var ValueState = coreLibrary.ValueState;
 
-
+	// shortcut for sap.m.EmptyIndicator
+	var EmptyIndicatorMode = library.EmptyIndicatorMode;
 
 	/**
 	 * Constructor for a new ObjectStatus.
@@ -34,6 +38,10 @@ sap.ui.define([
 	 *
 	 * @class
 	 * Status information that can be either text with a value state, or an icon.
+	 *
+	 *
+	 * With 1.63, large design of the control is supported by setting <code>sapMObjectStatusLarge</code> CSS class to the <code>ObjectStatus</code>.
+	 *
 	 * @extends sap.ui.core.Control
 	 * @implements sap.ui.core.IFormContent
 	 * @version ${version}
@@ -71,9 +79,17 @@ sap.ui.define([
 			active : {type : "boolean", group : "Misc", defaultValue : false},
 
 			/**
-			 * Defines the text value state.
+			 * Defines the text value state. The allowed values are from the enum type
+			 * <code>sap.ui.core.ValueState</code>. Since version 1.66 the <code>state</code> property also accepts
+			 * values from enum type <code>sap.ui.core.IndicationColor</code>.
 			 */
-			state : {type : "sap.ui.core.ValueState", group : "Misc", defaultValue : ValueState.None},
+			state : {type : "string", group : "Misc", defaultValue : ValueState.None},
+
+			/**
+			 * Determines whether the background color reflects the set <code>state</code> instead of the control's text.
+			 * @since 1.66
+			 */
+			inverted : {type : "boolean", group : "Misc", defaultValue : false},
 
 			/**
 			 * Icon URI. This may be either an icon font or image path.
@@ -91,7 +107,14 @@ sap.ui.define([
 			 * Determines the direction of the text, not including the title.
 			 * Available options for the text direction are LTR (left-to-right) and RTL (right-to-left). By default the control inherits the text direction from its parent control.
 			 */
-			textDirection : {type : "sap.ui.core.TextDirection", group : "Appearance", defaultValue : TextDirection.Inherit}
+			textDirection : {type : "sap.ui.core.TextDirection", group : "Appearance", defaultValue : TextDirection.Inherit},
+
+			/**
+			 * Specifies if an empty indicator should be displayed when there is no text.
+			 *
+			 * @since 1.89
+			 */
+			emptyIndicatorMode: { type: "sap.m.EmptyIndicatorMode", group: "Appearance", defaultValue: EmptyIndicatorMode.Off }
 		},
 		associations : {
 
@@ -107,8 +130,35 @@ sap.ui.define([
 			 * @since 1.54
 			 */
 			press : {}
-		}
+		},
+		dnd: { draggable: true, droppable: false }
 	}});
+
+	/**
+	 * Creates a new sap.ui.core.InvisibleText control instance with a text property value compliant
+	 * to the sap.m.ObjectStatus control instance state and attaches its DOM representation
+	 * to the static area.
+	 *
+	 * @private
+	 * @param {string} sState the propety state value.
+	 */
+	ObjectStatus.prototype._createInvisibleTextReferece = function(sState) {
+		var sStateText;
+
+		if (sState !== ValueState.None) {
+			sStateText = ValueStateSupport.getAdditionalText(sState) ?
+				ValueStateSupport.getAdditionalText(sState) :
+				IndicationColorSupport.getAdditionalText(sState);
+
+			if (this._oInvisibleText) {
+				this._oInvisibleText.setText(sStateText);
+			} else {
+				this._oInvisibleText = new InvisibleText({
+					text: sStateText
+				}).toStatic();
+			}
+		}
+	};
 
 	/**
 	 * Called when the control is destroyed.
@@ -120,6 +170,11 @@ sap.ui.define([
 			this._oImageControl.destroy();
 			this._oImageControl = null;
 		}
+
+		if (this._oInvisibleText){
+			this._oInvisibleText.destroy();
+			this._oInvisibleText = null;
+		}
 	};
 
 	/**
@@ -129,12 +184,18 @@ sap.ui.define([
 	 * @private
 	 */
 	ObjectStatus.prototype._getImageControl = function() {
-		var sImgId = this.getId() + '-icon';
-		var mProperties = {
-			src : this.getIcon(),
-			densityAware : this.getIconDensityAware(),
-			useIconTooltip : false
-		};
+		var sImgId = this.getId() + '-icon',
+			bIsIconOnly = !this.getText() && !this.getTitle(),
+			mProperties = {
+				src : this.getIcon(),
+				densityAware : this.getIconDensityAware(),
+				useIconTooltip : false
+			};
+
+		if (bIsIconOnly) {
+			mProperties.decorative = false;
+			mProperties.alt = sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("OBJECT_STATUS_ICON");
+		}
 
 		this._oImageControl = ImageHelper.getImageControl(sImgId, this._oImageControl, this, mProperties);
 
@@ -142,43 +203,21 @@ sap.ui.define([
 	};
 
 	/**
-	 * Sets the title.
-	 * The default value is empty/undefined.
+	 * Sets value for the <code>state</code> property. The default value is <code>ValueState.None</code>.
 	 * @public
-	 * @param {string} sTitle New value for property title
-	 * @returns {sap.m.ObjectStatus} this to allow method chaining
+	 * @param {string} sValue New value for property state.
+	 * It should be valid value of enumeration <code>sap.ui.core.ValueState</code> or <code>sap.ui.core.IndicationColor</code>
+	 * @returns {this} this to allow method chaining
 	 */
-	ObjectStatus.prototype.setTitle = function (sTitle) {
-		var $Title = this.$().children(".sapMObjStatusTitle"),
-			bShouldSuppressInvalidate = !!$Title.length && !!this.validateProperty("title", sTitle).trim();
-
-		this.setProperty("title", sTitle, bShouldSuppressInvalidate);
-
-		if (bShouldSuppressInvalidate) {
-			$Title.text(this.getTitle() + ":");
+	ObjectStatus.prototype.setState = function(sValue) {
+		if (sValue == null) {
+			sValue = ValueState.None;
+		} else if (!DataType.getType("sap.ui.core.ValueState").isValid(sValue) && !DataType.getType("sap.ui.core.IndicationColor").isValid(sValue)) {
+			throw new Error('"' + sValue + '" is not a value of the enums sap.ui.core.ValueState or sap.ui.core.IndicationColor for property "state" of ' + this);
 		}
 
-		return this;
-	};
-
-	/**
-	 * Sets the text.
-	 * The default value is empty/undefined.
-	 * @public
-	 * @param {string} sText New value for property text
-	 * @returns {sap.m.ObjectStatus} this to allow method chaining
-	 */
-	ObjectStatus.prototype.setText = function (sText) {
-		var $Text = this.$().children(".sapMObjStatusText"),
-			bShouldSuppressInvalidate = !!$Text.length && !!this.validateProperty("text", sText).trim();
-
-		this.setProperty("text", sText, bShouldSuppressInvalidate);
-
-		if (bShouldSuppressInvalidate) {
-			$Text.text(this.getText());
-		}
-
-		return this;
+		this._createInvisibleTextReferece(sValue);
+		return this.setProperty("state", sValue);
 	};
 
 	/**
@@ -251,10 +290,20 @@ sap.ui.define([
 	 * @protected
 	 */
 	ObjectStatus.prototype.getAccessibilityInfo = function() {
-		var sState = this.getState() != ValueState.None ? ValueStateSupport.getAdditionalText(this.getState()) : "";
+		var sState = ValueStateSupport.getAdditionalText(this.getState());
+
+		if (this.getState() != ValueState.None) {
+			sState = (sState !== null) ? sState : IndicationColorSupport.getAdditionalText(this.getState());
+		}
 
 		return {
-			description: ((this.getTitle() || "") + " " + (this.getText() || "") + " " + sState + " " + (this.getTooltip() || "")).trim()
+			description: (
+				(this.getTitle() || "") + " " +
+				(this.getText() || "") + " " +
+				(sState !== null ? sState : "") + " " +
+				(this.getTooltip() || "") + " " +
+				sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("OBJECT_STATUS")
+			).trim()
 		};
 	};
 
@@ -262,7 +311,7 @@ sap.ui.define([
 		var sSourceId = oEvent.target.id;
 
 		//event should only be fired if the click is on the text, link or icon
-		return this._isActive() && (sSourceId === this.getId() + "-link" || sSourceId === this.getId() + "-text" || sSourceId === this.getId() + "-icon");
+		return this._isActive() && (sSourceId === this.getId() + "-link" || sSourceId === this.getId() + "-text" || sSourceId === this.getId() + "-statusIcon" || sSourceId === this.getId() + "-icon");
 	};
 
 	return ObjectStatus;

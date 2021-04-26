@@ -4,8 +4,8 @@
 
 // Provides control sap.m.P13nColumnsPanel.
 sap.ui.define([
-	'jquery.sap.global', './ColumnListItem', './P13nPanel', './P13nColumnsItem', './SearchField', './Table', './library', 'sap/ui/core/library', 'sap/ui/model/ChangeReason', 'sap/ui/model/json/JSONModel', 'sap/ui/model/BindingMode', 'sap/ui/core/ResizeHandler', 'sap/ui/core/IconPool', 'sap/m/ScrollContainer'
-], function(jQuery, ColumnListItem, P13nPanel, P13nColumnsItem, SearchField, Table, library, CoreLibrary, ChangeReason, JSONModel, BindingMode, ResizeHandler, IconPool, ScrollContainer) {
+	'sap/ui/core/library', 'sap/ui/model/ChangeReason', 'sap/ui/model/json/JSONModel', 'sap/ui/model/BindingMode', 'sap/ui/core/IconPool', './library', './Table', './Column', './ColumnListItem', './P13nPanel', './P13nColumnsItem', './SearchField', './Text', './Button', './OverflowToolbar', './OverflowToolbarLayoutData', './OverflowToolbarButton', './ToolbarSpacer', "sap/ui/thirdparty/jquery"
+], function(CoreLibrary, ChangeReason, JSONModel, BindingMode, IconPool, library, Table, Column, ColumnListItem, P13nPanel, P13nColumnsItem, SearchField, Text, Button, OverflowToolbar, OverflowToolbarLayoutData, OverflowToolbarButton, ToolbarSpacer, jQuery) {
 	"use strict";
 
 	// shortcut for sap.m.OverflowToolbarPriority
@@ -25,6 +25,8 @@ sap.ui.define([
 
 	// shortcut for sap.m.P13nPanelType
 	var P13nPanelType = library.P13nPanelType;
+
+	var Sticky = library.Sticky;
 
 	/**
 	 * Constructor for a new P13nColumnsPanel.
@@ -96,7 +98,7 @@ sap.ui.define([
 
 				/**
 				 * Event raised when a <code>columnsItem</code> is added.
-				 * @deprecated As of version 1.50, replaced by extended event {@link sap.m.P13nColumnsPanel.html#changeColumnsItems}
+				 * @deprecated As of version 1.50, replaced by extended event {@link sap.m.P13nColumnsPanel#event:changeColumnsItems}
 				 * @since 1.26.0
 				 */
 				addColumnsItem: {
@@ -160,20 +162,17 @@ sap.ui.define([
 				setData: {}
 			}
 		},
-		renderer: function(oRm, oControl) {
-			oRm.write("<div");
-			oRm.writeControlData(oControl);
-			oRm.addClass("sapMP13nColumnsPanel");
-			oRm.writeClasses();
-			oRm.write(">");
-
-			var aContent = oControl.getAggregation("content");
-			if (aContent) {
-				aContent.forEach(function(oContent) {
-					oRm.renderControl(oContent);
+		renderer: {
+			apiVersion: 2,
+			render: function(oRm, oControl){
+				oRm.openStart("div", oControl);
+				oRm.class("sapMP13nColumnsPanel");
+				oRm.openEnd();
+				oControl.getAggregation("content").forEach(function(oChildren){
+					oRm.renderControl(oChildren);
 				});
+				oRm.close("div");
 			}
-			oRm.write("</div>");
 		}
 	});
 
@@ -208,7 +207,6 @@ sap.ui.define([
 
 		// Due to backwards compatibility
 		this._bTableItemsChanged = false;
-		this._bOnAfterRenderingFirstTimeExecuted = false;
 
 		var oModel = new JSONModel({
 			items: [],
@@ -227,49 +225,8 @@ sap.ui.define([
 		this.setTitle(sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("COLUMSPANEL_TITLE"));
 
 		this._createTable();
-		this._createToolbar();
-
-		this.setVerticalScrolling(false);
-		var oScrollContainer = new ScrollContainer({
-			horizontal: false,
-			vertical: true,
-			content: [
-				this._oTable
-			],
-			width: '100%',
-			height: '100%'
-		});
-		this.addAggregation("content", oScrollContainer);
-
-		// Call-back for handling of resizing
-		// jQuery.outerHeight(true)
-		var that = this;
-		this._fnHandleResize = function() {
-			var bChangeResult = false, iScrollContainerHeightOld, iScrollContainerHeightNew;
-			if (that.getParent) {
-				var $dialogCont = null, iContentHeight, iHeaderHeight;
-				var oParent = that.getParent();
-				var oToolbar = that._getToolbar();
-				if (oParent && oParent.$) {
-					$dialogCont = oParent.$("cont");
-					if ($dialogCont.children().length > 0 && oToolbar.$().length > 0) {
-						iScrollContainerHeightOld = oScrollContainer.$()[0].clientHeight;
-
-						iContentHeight = $dialogCont.children()[0].clientHeight;
-						iHeaderHeight = oToolbar ? oToolbar.$()[0].clientHeight : 0;
-
-						iScrollContainerHeightNew = iContentHeight - iHeaderHeight;
-
-						if (iScrollContainerHeightOld !== iScrollContainerHeightNew) {
-							oScrollContainer.setHeight(iScrollContainerHeightNew + 'px');
-							bChangeResult = true;
-						}
-					}
-				}
-			}
-			return bChangeResult;
-		};
-		this._sContainerResizeListener = ResizeHandler.register(oScrollContainer, this._fnHandleResize);
+		this._oTable.setHeaderToolbar(this._createToolbar());
+		this.addAggregation("content", this._oTable);
 	};
 
 	/**
@@ -291,19 +248,6 @@ sap.ui.define([
 		// After each re-render the 'markedTableItem' is re-created. So we have to set the new table item as marked.
 		this._switchMarkedTableItemTo(this._getTableItemByColumnKey(this._getInternalModel().getProperty("/columnKeyOfMarkedItem")));
 		this._updateControlLogic();
-	};
-
-	P13nColumnsPanel.prototype.onAfterRendering = function() {
-		// adapt scroll-container very first time to the right size of the browser
-		if (!this._bOnAfterRenderingFirstTimeExecuted) {
-			this._bOnAfterRenderingFirstTimeExecuted = true;
-
-			window.clearTimeout(this._iLiveChangeTimer);
-			var that = this;
-			this._iLiveChangeTimer = window.setTimeout(function() {
-				that._fnHandleResize();
-			}, 0);
-		}
 	};
 
 	/**
@@ -351,9 +295,6 @@ sap.ui.define([
 	};
 
 	P13nColumnsPanel.prototype.exit = function() {
-		ResizeHandler.deregister(this._sContainerResizeListener);
-		this._sContainerResizeListener = null;
-
 		this._getToolbar().destroy();
 
 		this._oTable.destroy();
@@ -473,9 +414,6 @@ sap.ui.define([
 			return;
 		}
 		sap.ui.getCore().applyChanges();
-		if (!!oItem.getDomRef()) {
-			oItem.focus();
-		}
 	};
 
 	// -------------------------- new --------------------------------------------
@@ -487,12 +425,13 @@ sap.ui.define([
 		this._oTable = new Table({
 			mode: ListMode.MultiSelect,
 			rememberSelections: false,
+			sticky: [Sticky.ColumnHeaders, Sticky.HeaderToolbar],
 			itemPress: jQuery.proxy(this._onItemPressed, this),
 			selectionChange: jQuery.proxy(this._onSelectionChange, this),
 			columns: [
-				new sap.m.Column({
+				new Column({
 					vAlign: CoreLibrary.VerticalAlign.Middle,
-					header: new sap.m.Text({
+					header: new Text({
 						text: {
 							parts: [
 								{
@@ -515,7 +454,7 @@ sap.ui.define([
 				templateShareable: false,
 				template: new ColumnListItem({
 					cells: [
-						new sap.m.Text({
+						new Text({
 							text: "{text}"
 						})
 					],
@@ -532,10 +471,10 @@ sap.ui.define([
 	P13nColumnsPanel.prototype._createToolbar = function() {
 		var that = this;
 		var oRb = sap.ui.getCore().getLibraryResourceBundle("sap.m");
-		var oToolbar = new sap.m.OverflowToolbar(this.getId() + "-toolbar", {
+		var oToolbar = new OverflowToolbar(this.getId() + "-toolbar", {
 			design: ToolbarDesign.Auto,
 			content: [
-				new sap.m.ToolbarSpacer(), new SearchField(this.getId() + "-searchField", {
+				new ToolbarSpacer(), new SearchField(this.getId() + "-searchField", {
 					liveChange: function(oEvent) {
 						var sValue = oEvent.getSource().getValue(), iDelay = (sValue ? 300 : 0); // no delay if value is empty
 
@@ -551,33 +490,33 @@ sap.ui.define([
 					},
 					// execute the standard search
 					search: jQuery.proxy(this._onExecuteSearch, this),
-					layoutData: new sap.m.OverflowToolbarLayoutData({
+					layoutData: new OverflowToolbarLayoutData({
 						minWidth: "12.5rem",
 						maxWidth: "23.077rem",
 						shrinkable: true,
 						moveToOverflow: false,
 						stayInOverflow: false
 					})
-				}), new sap.m.Button({
+				}), new Button(this.getId() + "-showSelected", {
 					text: {
 						path: '/showOnlySelectedItems',
 						formatter: function(bShowOnlySelectedItems) {
 							return bShowOnlySelectedItems ? oRb.getText('COLUMNSPANEL_SHOW_ALL') : oRb.getText('COLUMNSPANEL_SHOW_SELECTED');
 						}
 					},
-					tooltip: {
+					/*tooltip: {
 						path: '/showOnlySelectedItems',
 						formatter: function(bShowOnlySelectedItems) {
 							return bShowOnlySelectedItems ? oRb.getText('COLUMNSPANEL_SHOW_ALL') : oRb.getText('COLUMNSPANEL_SHOW_SELECTED');
 						}
-					},
+					},*/
 					type: ButtonType.Transparent,
 					press: jQuery.proxy(this._onSwitchButtonShowSelected, this),
-					layoutData: new sap.m.OverflowToolbarLayoutData({
+					layoutData: new OverflowToolbarLayoutData({
 						moveToOverflow: true,
 						priority: OverflowToolbarPriority.High
 					})
-				}), new sap.m.OverflowToolbarButton({
+				}), new OverflowToolbarButton({
 					icon: IconPool.getIconURI("collapse-group"),
 					text: oRb.getText('COLUMNSPANEL_MOVE_TO_TOP'),
 					tooltip: oRb.getText('COLUMNSPANEL_MOVE_TO_TOP'),
@@ -586,12 +525,12 @@ sap.ui.define([
 						path: '/isMoveUpButtonEnabled'
 					},
 					press: jQuery.proxy(this.onPressButtonMoveToTop, this),
-					layoutData: new sap.m.OverflowToolbarLayoutData({
+					layoutData: new OverflowToolbarLayoutData({
 						moveToOverflow: true,
 						priority: OverflowToolbarPriority.Low,
 						group: 2
 					})
-				}), new sap.m.OverflowToolbarButton({
+				}), new OverflowToolbarButton({
 					icon: IconPool.getIconURI("slim-arrow-up"),
 					text: oRb.getText('COLUMNSPANEL_MOVE_UP'),
 					tooltip: oRb.getText('COLUMNSPANEL_MOVE_UP'),
@@ -600,12 +539,12 @@ sap.ui.define([
 						path: '/isMoveUpButtonEnabled'
 					},
 					press: jQuery.proxy(this.onPressButtonMoveUp, this),
-					layoutData: new sap.m.OverflowToolbarLayoutData({
+					layoutData: new OverflowToolbarLayoutData({
 						moveToOverflow: true,
 						priority: OverflowToolbarPriority.High,
 						group: 1
 					})
-				}), new sap.m.OverflowToolbarButton({
+				}), new OverflowToolbarButton({
 					icon: IconPool.getIconURI("slim-arrow-down"),
 					text: oRb.getText('COLUMNSPANEL_MOVE_DOWN'),
 					tooltip: oRb.getText('COLUMNSPANEL_MOVE_DOWN'),
@@ -614,12 +553,12 @@ sap.ui.define([
 						path: '/isMoveDownButtonEnabled'
 					},
 					press: jQuery.proxy(this.onPressButtonMoveDown, this),
-					layoutData: new sap.m.OverflowToolbarLayoutData({
+					layoutData: new OverflowToolbarLayoutData({
 						moveToOverflow: true,
 						priority: OverflowToolbarPriority.High,
 						group: 1
 					})
-				}), new sap.m.OverflowToolbarButton({
+				}), new OverflowToolbarButton({
 					icon: IconPool.getIconURI("expand-group"),
 					text: oRb.getText('COLUMNSPANEL_MOVE_TO_BOTTOM'),
 					tooltip: oRb.getText('COLUMNSPANEL_MOVE_TO_BOTTOM'),
@@ -628,7 +567,7 @@ sap.ui.define([
 						path: '/isMoveDownButtonEnabled'
 					},
 					press: jQuery.proxy(this.onPressButtonMoveToBottom, this),
-					layoutData: new sap.m.OverflowToolbarLayoutData({
+					layoutData: new OverflowToolbarLayoutData({
 						moveToOverflow: true,
 						priority: OverflowToolbarPriority.Low,
 						group: 2
@@ -637,7 +576,7 @@ sap.ui.define([
 			]
 		});
 		oToolbar.setModel(this._getInternalModel());
-		this.addAggregation("content", oToolbar);
+		return oToolbar;
 	};
 
 	P13nColumnsPanel.prototype.onPressButtonMoveToTop = function() {
@@ -664,8 +603,6 @@ sap.ui.define([
 		this._scrollToSelectedItem(this._getMarkedTableItem());
 
 		this._updateControlLogic();
-
-		this._fnHandleResize();
 	};
 	P13nColumnsPanel.prototype._onExecuteSearch = function() {
 		this._switchVisibilityOfUnselectedModelItems();
@@ -699,11 +636,26 @@ sap.ui.define([
 
 		this._moveModelItems(iIndexFrom, iIndexTo);
 
+		this._checkButtonFocus(iIndexTo);
 		this._scrollToSelectedItem(this._getMarkedTableItem());
 		this._updateControlLogic();
 		this._fireChangeColumnsItems();
 		this._fireSetData();
 		this._notifyChange();
+	};
+
+	/**
+	 * Used to check whether the item is on the first or last index of the inner Table's <code>items</code> aggregration
+	 * and sets the focus to the 'Show Selected' Button.
+	 *
+	 * @param {int} iIndexTo index to which the item has been moved
+	 */
+	P13nColumnsPanel.prototype._checkButtonFocus = function(iIndexTo) {
+		var iMaxIndex = this._oTable.getItems().length - 1;
+
+		if (iIndexTo === 0 || iIndexTo === iMaxIndex) {
+			sap.ui.getCore().byId(this.getId() + "-showSelected").focus();
+		}
 	};
 
 	/**
@@ -759,6 +711,23 @@ sap.ui.define([
 	};
 
 	P13nColumnsPanel.prototype._sortModelItemsByPersistentIndex = function(aModelItems) {
+		// BCP 0020751294 0000593415 2018
+		var oCollator;
+		var sLanguage;
+		try {
+			sLanguage = sap.ui.getCore().getConfiguration().getLocale().toString();
+			if (typeof window.Intl !== 'undefined') {
+				oCollator = window.Intl.Collator(sLanguage, {
+					numeric: true
+				});
+			}
+		} catch (oException) {
+			// this exception can happen if the configured language is not convertible to BCP47 -> getLocale will deliver an exception
+		}
+		// BCP 0020751295 0000514259 2018
+		aModelItems.forEach(function(oMItem, iIndex) {
+			oMItem.localIndex = iIndex;
+		});
 		aModelItems.sort(function(a, b) {
 			if (a.persistentSelected === true && (b.persistentSelected === false || b.persistentSelected === undefined)) {
 				return -1;
@@ -770,17 +739,16 @@ sap.ui.define([
 				} else if (b.persistentIndex > -1 && a.persistentIndex > b.persistentIndex) {
 					return 1;
 				} else {
-					return 0;
+					return a.localIndex - b.localIndex;
 				}
 			} else if ((a.persistentSelected === false || a.persistentSelected === undefined) && (b.persistentSelected === false || b.persistentSelected === undefined)) {
-				if (a.text < b.text) {
-					return -1;
-				} else if (a.text > b.text) {
-					return 1;
-				} else {
-					return 0;
-				}
+				return oCollator ? oCollator.compare(a.text, b.text) : a.text.localeCompare(b.text, sLanguage, {
+					numeric: true
+				});
 			}
+		});
+		aModelItems.forEach(function(oMItem) {
+			delete oMItem.localIndex;
 		});
 	};
 

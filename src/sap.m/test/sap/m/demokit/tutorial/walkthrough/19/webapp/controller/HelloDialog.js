@@ -1,6 +1,7 @@
 sap.ui.define([
-	"sap/ui/base/ManagedObject"
-], function (ManagedObject) {
+	"sap/ui/base/ManagedObject",
+	"sap/ui/core/Fragment"
+], function (ManagedObject, Fragment) {
 	"use strict";
 
 	return ManagedObject.extend("sap.ui.demo.walkthrough.controller.HelloDialog", {
@@ -15,21 +16,28 @@ sap.ui.define([
 
 		open : function () {
 			var oView = this._oView;
-			var oDialog = oView.byId("helloDialog");
 
 			// create dialog lazily
-			if (!oDialog) {
+			if (!this.pDialog) {
 				var oFragmentController = {
 					onCloseDialog : function () {
-						oDialog.close();
+						oView.byId("helloDialog").close();
 					}
 				};
-				// create dialog via fragment factory
-				oDialog = sap.ui.xmlfragment(oView.getId(), "sap.ui.demo.walkthrough.view.HelloDialog", oFragmentController);
-				// connect dialog to the root view of this component (models, lifecycle)
-				oView.addDependent(oDialog);
+				// load asynchronous XML fragment
+				this.pDialog = Fragment.load({
+					id: oView.getId(),
+					name: "sap.ui.demo.walkthrough.view.HelloDialog",
+					controller: oFragmentController
+				}).then(function (oDialog) {
+					// connect dialog to the root view of this component (models, lifecycle)
+					oView.addDependent(oDialog);
+					return oDialog;
+				});
 			}
-			oDialog.open();
+			this.pDialog.then(function(oDialog) {
+				oDialog.open();
+			});
 		}
 
 	});

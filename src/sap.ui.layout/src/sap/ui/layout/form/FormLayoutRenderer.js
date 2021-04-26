@@ -2,8 +2,12 @@
  * ${copyright}
  */
 
-sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/theming/Parameters", "sap/ui/layout/form/Form"],
-	function(library, coreLibrary, themingParameters, Form) {
+sap.ui.define([
+	'sap/ui/core/library',
+	'sap/ui/core/theming/Parameters',
+	'sap/ui/layout/library',
+	'sap/ui/layout/form/Form'
+	], function(coreLibrary, themingParameters, library, Form) {
 	"use strict";
 
 	// shortcut for sap.ui.core.TitleLevel
@@ -17,18 +21,16 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 	 * @namespace
 	 */
 	var FormLayoutRenderer = {
+		apiVersion: 2
 	};
 
 	/**
 	 * Renders the HTML for the given control, using the provided {@link sap.ui.core.RenderManager}.
 	 *
-	 * @param {sap.ui.core.RenderManager} oRenderManager the RenderManager that can be used for writing to the Render-Output-Buffer
+	 * @param {sap.ui.core.RenderManager} rm the RenderManager that can be used for writing to the Render-Output-Buffer
 	 * @param {sap.ui.core.Control} oLayout an object representation of the control that should be rendered
 	 */
-	FormLayoutRenderer.render = function(oRenderManager, oLayout){
-		// convenience variable
-		var rm = oRenderManager;
-
+	FormLayoutRenderer.render = function(rm, oLayout){
 		var oForm = oLayout.getParent();
 		if (oForm && oForm instanceof Form) {
 			this.renderForm(rm, oLayout, oForm);
@@ -47,15 +49,13 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 
 		var oToolbar = oForm.getToolbar();
 
-		rm.write("<div");
-		rm.writeControlData(oLayout);
-		rm.addClass(this.getMainClass());
+		rm.openStart("div", oLayout);
+		rm.class(this.getMainClass());
 		if (oToolbar) {
-			rm.addClass("sapUiFormToolbar");
+			rm.class("sapUiFormToolbar");
 		}
 		this.addBackgroundClass(rm, oLayout);
-		rm.writeClasses();
-		rm.write(">");
+		rm.openEnd();
 
 		// Form header
 		var sSize;
@@ -66,7 +66,7 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 
 		this.renderContainers(rm, oLayout, oForm);
 
-		rm.write("</div>");
+		rm.close("div");
 	};
 
 	FormLayoutRenderer.getMainClass = function(){
@@ -77,7 +77,7 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 
 		var sBackgroundDesign = oLayout.getBackgroundDesign();
 		if (sBackgroundDesign != BackgroundDesign.Transparent) {
-			rm.addClass("sapUiFormBackgr" + sBackgroundDesign);
+			rm.class("sapUiFormBackgr" + sBackgroundDesign);
 		}
 
 	};
@@ -98,34 +98,31 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 		var oToolbar = oContainer.getToolbar();
 		var oTitle = oContainer.getTitle();
 
-		rm.write("<section");
-		rm.writeElementData(oContainer);
-		rm.addClass("sapUiFormContainer");
+		rm.openStart("section", oContainer);
+		rm.class("sapUiFormContainer");
 
 		if (oToolbar) {
-			rm.addClass("sapUiFormContainerToolbar");
+			rm.class("sapUiFormContainerToolbar");
 		} else if (oTitle) {
-			rm.addClass("sapUiFormContainerTitle");
+			rm.class("sapUiFormContainerTitle");
 		}
 
 		if (oContainer.getTooltip_AsString()) {
-			rm.writeAttributeEscaped('title', oContainer.getTooltip_AsString());
+			rm.attr('title', oContainer.getTooltip_AsString());
 		}
-		rm.writeClasses();
 
 		this.writeAccessibilityStateContainer(rm, oContainer);
 
-		rm.write(">");
+		rm.openEnd();
 
 		this.renderHeader(rm, oToolbar, oTitle, oContainer._oExpandButton, bExpandable, TitleLevel.H4, oContainer.getId());
 
 		if (bExpandable) {
-			rm.write("<div id='" + oContainer.getId() + "-content'");
+			rm.openStart("div", oContainer.getId() + "-content");
 			if (!oContainer.getExpanded()) {
-				rm.addStyle("display", "none");
-				rm.writeStyles();
+				rm.style("display", "none");
 			}
-			rm.write(">");
+			rm.openEnd();
 		}
 
 		var aElements = oContainer.getVisibleFormElements();
@@ -135,9 +132,9 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 		}
 
 		if (bExpandable) {
-			rm.write("</div>");
+			rm.close("div");
 		}
-		rm.write("</section>");
+		rm.close("section");
 
 	};
 
@@ -145,27 +142,25 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 
 		var oLabel = oElement.getLabelControl();
 
-		rm.write("<div");
-		rm.writeElementData(oElement);
-		rm.addClass("sapUiFormElement");
+		rm.openStart("div", oElement);
+		rm.class("sapUiFormElement");
 		if (oLabel) {
-			rm.addClass("sapUiFormElementLbl");
+			rm.class("sapUiFormElementLbl");
 		}
-		rm.writeClasses();
-		rm.write(">");
+		rm.openEnd();
 
 		if (oLabel) {
 			rm.renderControl(oLabel);
 		}
 
-		var aFields = oElement.getFields();
+		var aFields = oElement.getFieldsForRendering();
 		if (aFields && aFields.length > 0) {
 			for (var k = 0, kl = aFields.length; k < kl; k++) {
 				var oField = aFields[k];
 				rm.renderControl(oField);
 			}
 		}
-		rm.write("</div>");
+		rm.close("div");
 
 	};
 
@@ -186,30 +181,35 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 			}
 
 			// just reuse TextView class because there font size & co. is already defined
-			rm.write("<" + sLevel + " ");
-			rm.addClass("sapUiFormTitle");
-			rm.addClass("sapUiFormTitle" + sLevel);
-
-			if (typeof oTitle !== "string") {
-				rm.writeElementData(oTitle);
+			if ( typeof oTitle !== "string" ) {
+				rm.openStart(sLevel.toLowerCase(), oTitle);
 				if (oTitle.getTooltip_AsString()) {
-					rm.writeAttributeEscaped('title', oTitle.getTooltip_AsString());
+					rm.attr('title', oTitle.getTooltip_AsString());
 				}
 				if (oTitle.getEmphasized()) {
-					rm.addClass("sapUiFormTitleEmph");
+					rm.class("sapUiFormTitleEmph");
 				}
 			} else {
-				rm.writeAttribute("id", sContentId + "--title");
+				rm.openStart(sLevel.toLowerCase(), sContentId + "--title");
 			}
-			rm.writeClasses();
-			rm.write(">");
+			rm.class("sapUiFormTitle");
+			rm.class("sapUiFormTitle" + sLevel);
+			if (bExpander && oExpandButton) {
+				rm.class("sapUiFormTitleExpandable");
+			}
+			rm.openEnd();
 
 			if (bExpander && oExpandButton) {
 				rm.renderControl(oExpandButton);
 			}
 			if (typeof oTitle === "string") {
 				// Title is just a string
-				rm.writeEscaped(oTitle, true);
+				oTitle.split(/\n/).forEach(function(sLine, iIndex) {
+					if ( iIndex > 0 ) {
+						rm.voidStart("br").voidEnd();
+					}
+					rm.text(sLine);
+				});
 			} else {
 				// title control
 				var sIcon = oTitle.getIcon();
@@ -221,12 +221,17 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 					};
 
 					mAttributes["id"] = oTitle.getId() + "-ico";
-					rm.writeIcon(sIcon, aClasses, mAttributes);
+					rm.icon(sIcon, aClasses, mAttributes);
 				}
-				rm.writeEscaped(oTitle.getText(), true);
+				oTitle.getText().split(/\n/).forEach(function(sLine, iIndex) {
+					if ( iIndex > 0 ) {
+						rm.voidStart("br").voidEnd();
+					}
+					rm.text(sLine);
+				});
 			}
 
-			rm.write("</" + sLevel + ">");
+			rm.close(sLevel.toLowerCase());
 		}
 
 	};
@@ -255,8 +260,9 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 		var oToolbar = oContainer.getToolbar();
 		if (oToolbar) {
 			if (!oContainer.getAriaLabelledBy() || oContainer.getAriaLabelledBy().length == 0) {
-				// no aria-label -> use complete Toolbar as fallback
-				mAriaProps["labelledby"] = {value: oToolbar.getId(), append: true};
+				// no aria-label -> use Title of Toolbar
+				var sToolbarTitleID = library.form.FormHelper.getToolbarTitle(oToolbar);
+				mAriaProps["labelledby"] = {value: sToolbarTitleID, append: true};
 			}
 		} else if (oTitle) {
 			var sId = "";
@@ -273,7 +279,7 @@ sap.ui.define(["sap/ui/layout/library", "sap/ui/core/library", "sap/ui/core/them
 			mAriaProps["role"] = "form";
 		}
 
-		rm.writeAccessibilityState(oContainer, mAriaProps);
+		rm.accessibilityState(oContainer, mAriaProps);
 
 	};
 

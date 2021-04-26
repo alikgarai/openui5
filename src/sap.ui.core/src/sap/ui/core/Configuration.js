@@ -3,12 +3,40 @@
  */
 
 //Provides class sap.ui.core.Configuration
-sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', './Locale', 'sap/ui/thirdparty/URI', 'jquery.sap.script'],
-	function(jQuery, Device, Global, BaseObject, Locale, URI /*, jQuerySapScript */ ) {
+sap.ui.define([
+	'../Device',
+	'../Global',
+	'../base/Object',
+	'./CalendarType',
+	'./Locale',
+	'sap/ui/thirdparty/URI',
+	"sap/base/util/UriParameters",
+	"sap/base/util/deepEqual",
+	"sap/base/util/Version",
+	"sap/base/Log",
+	"sap/base/assert",
+	"sap/base/util/extend",
+	"sap/base/util/isEmptyObject"
+],
+	function(
+		Device,
+		Global,
+		BaseObject,
+		CalendarType,
+		Locale,
+		URI,
+		UriParameters,
+		deepEqual,
+		Version,
+		Log,
+		assert,
+		extend,
+		isEmptyObject
+	) {
 	"use strict";
 
 	// lazy dependencies. Can't be declared as this would result in cyclic dependencies
-	var CalendarType, LocaleData;
+	var LocaleData;
 
 	/**
 	 * Creates a new Configuration object.
@@ -49,7 +77,6 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 	var Configuration = BaseObject.extend("sap.ui.core.Configuration", /** @lends sap.ui.core.Configuration.prototype */ {
 
 		constructor : function(oCore) {
-
 			this._oCore = oCore;
 
 			function detectLanguage() {
@@ -77,9 +104,10 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					"language"              : { type : "Locale",   defaultValue : detectLanguage() },
 					"formatLocale"          : { type : "Locale",   defaultValue : null },
 					"calendarType"          : { type : "string",   defaultValue : null },
+					"trailingCurrencyCode"  : { type : "boolean",  defaultValue : true },
 					// "timezone"              : "UTC",
 					"accessibility"         : { type : "boolean",  defaultValue : true },
-					"autoAriaBodyRole"      : { type : "boolean",  defaultValue : true,      noUrl:true }, //whether the framework automatically adds automatically the ARIA role 'application' to the html body
+					"autoAriaBodyRole"      : { type : "boolean",  defaultValue : false,      noUrl:true }, //whether the framework automatically adds automatically the ARIA role 'application' to the html body
 					"animation"             : { type : "boolean",  defaultValue : true }, // deprecated, please use animationMode
 					"animationMode"         : { type : Configuration.AnimationMode, defaultValue : undefined }, // If no value is provided, animationMode will be set on instantiation depending on the animation setting.
 					"rtl"                   : { type : "boolean",  defaultValue : null },
@@ -91,7 +119,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					"trace"                 : { type : "boolean",  defaultValue : false,     noUrl:true },
 					"modules"               : { type : "string[]", defaultValue : [],        noUrl:true },
 					"areas"                 : { type : "string[]", defaultValue : null,      noUrl:true },
-					// "libs"               : { type : "string[]", defaultValue : [],        noUrl:true }, deprecated, handled below
+					// "libs"               : { type : "string[]", defaultValue : [],        noUrl:true }, handled below
 					"onInit"                : { type : "code",     defaultValue : undefined, noUrl:true }, // could be either a reference to a JavaScript function, the name of a global function (string value) or the name of a module (indicated with prefix "module:")
 					"uidPrefix"             : { type : "string",   defaultValue : "__",      noUrl:true },
 					"ignoreUrlParams"       : { type : "boolean",  defaultValue : false,     noUrl:true },
@@ -103,12 +131,14 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					"bindingSyntax"         : { type : "string",   defaultValue : "default", noUrl:true }, // default|simple|complex
 					"versionedLibCss"       : { type : "boolean",  defaultValue : false },
 					"manifestFirst"         : { type : "boolean",  defaultValue : false },
-
-					"whitelistService"      : { type : "string",   defaultValue : null,      noUrl: true }, // url/to/service
+					"flexibilityServices"   : { type : "string",   defaultValue : "/sap/bc/lrep"},
+					"whitelistService"      : { type : "string",   defaultValue : null,      noUrl: true }, // deprecated, use allowlistService instead
+					"allowlistService"      : { type : "string",   defaultValue : null,      noUrl: true }, // url/to/service
 					"frameOptions"          : { type : "string",   defaultValue : "default", noUrl: true }, // default/allow/deny/trusted (default => allow)
 					"frameOptionsConfig"    : { type : "object",   defaultValue : undefined, noUrl:true },  // advanced frame options configuration
-					"support"               : { type : "string[]",  defaultValue : null },
-
+					"support"               : { type : "string[]", defaultValue : null },
+					"testRecorder"          : { type : "string[]", defaultValue : null },
+					"activeTerminologies"   : { type : "string[]", defaultValue: undefined},
 					"xx-rootComponentNode"  : { type : "string",   defaultValue : "",        noUrl:true },
 					"xx-appCacheBusterMode" : { type : "string",   defaultValue : "sync" },
 					"xx-appCacheBusterHooks": { type : "object",   defaultValue : undefined, noUrl:true }, // e.g.: { handleURL: fn, onIndexLoad: fn, onIndexLoaded: fn }
@@ -116,7 +146,6 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					"xx-viewCache"          : { type : "boolean",  defaultValue : true },
 					"xx-test-mobile"        : { type : "boolean",  defaultValue : false },
 					"xx-depCache"           : { type : "boolean",  defaultValue : false },
-					"xx-domPatching"        : { type : "boolean",  defaultValue : false },
 					"xx-libraryPreloadFiles": { type : "string[]", defaultValue : [] },
 					"xx-componentPreload"   : { type : "string",   defaultValue : "" },
 					"xx-designMode"         : { type : "boolean",  defaultValue : false },
@@ -130,9 +159,10 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					"xx-cache-excludedKeys" : { type : "string[]", defaultValue : []},
 					"xx-cache-serialization": { type : "boolean",  defaultValue : false},
 					"xx-nosync"             : { type : "string",   defaultValue : "" },
-					"xx-waitForTheme"       : { type : "boolean",  defaultValue : false},
-					"xx-xml-processing"     : { type : "string",  defaultValue : "" },
-					"xx-avoidAriaApplicationRole" : { type : "boolean",  defaultValue : false}, // Avoid ACC role 'application'
+					"xx-waitForTheme"       : { type : "string",  defaultValue : ""}, // rendering|init
+					"xx-hyphenation" : { type : "string",  defaultValue : ""}, // (empty string)|native|thirdparty|disable
+					"xx-flexBundleRequestForced" : { type : "boolean",  defaultValue : false },
+					"xx-cssVariables"       : { type : "string",   defaultValue : "false" }, // false|true|additional (additional just includes the css_variables.css in addition)
 					"statistics"            : { type : "boolean",  defaultValue : false }
 			};
 
@@ -220,31 +250,50 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 				}
 			}
 
+			function getMetaTagValue(sName) {
+				var oMetaTag = document.querySelector("META[name='" + sName + "']"),
+					sMetaContent = oMetaTag && oMetaTag.getAttribute("content");
+				if (sMetaContent) {
+					return sMetaContent;
+				}
+			}
+
+			function validateThemeOrigin(sOrigin) {
+				var sAllowedOrigins = getMetaTagValue("sap-allowedThemeOrigins");
+				return !!sAllowedOrigins && sAllowedOrigins.split(",").some(function(sAllowedOrigin) {
+					return sAllowedOrigin === "*" || sOrigin === sAllowedOrigin.trim();
+				});
+			}
+
 			function validateThemeRoot(sThemeRoot) {
 				var oThemeRoot,
 					sPath;
 
 				try {
-					oThemeRoot = new URI(sThemeRoot, window.location.href).normalize();
-					sPath = oThemeRoot.path();
-					return sPath + (sPath.slice(-1) === '/' ? '' : '/') + "UI5/";
+					// Remove search query as they are not supported for themeRoots/resourceRoots
+					oThemeRoot = new URI(sThemeRoot).search("");
+
+					// If the URL is absolute, validate the origin
+					var sOrigin = oThemeRoot.origin();
+					if (sOrigin && validateThemeOrigin(sOrigin)) {
+						sPath = oThemeRoot.toString();
+					} else {
+						// For relative URLs or not allowed origins
+						// ensure same origin and resolve relative paths based on href
+						sPath = oThemeRoot.absoluteTo(window.location.href).origin(window.location.origin).normalize().toString();
+					}
+					return sPath + (sPath.endsWith('/') ? '' : '/') + "UI5/";
 				} catch (e) {
 					// malformed URL are also not accepted
 				}
 			}
 
-			// 1. collect the defaults
+			// collect the defaults
 			for ( var n in M_SETTINGS ) {
 				config[n] = M_SETTINGS[n].defaultValue;
 			}
 
-			// 2. read server wide sapui5 configuration
-			/* TODO: RETHINK server wide sapui5 configuration to make it optional
-					 currently it is forcing a request which is annoying customers :
-					   - Think about an option which enables loading of server wide config!
-			 */
-
-			// 3.-5. apply settings from global config object (already merged with script tag attributes)
+			// apply settings from global config object (already merged with script tag attributes)
 			var oCfg = window["sap-ui-config"] || {};
 			oCfg.oninit = oCfg.oninit || oCfg["evt-oninit"];
 			for (var n in M_SETTINGS) {
@@ -264,15 +313,15 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 
 			var PARAM_CVERS = "compatversion";
 			var DEFAULT_CVERS = oCfg[PARAM_CVERS];
-			var BASE_CVERS = jQuery.sap.Version("1.14");
+			var BASE_CVERS = Version("1.14");
 			this._compatversion = {};
 
 			function _getCVers(key){
 				var v = !key ? DEFAULT_CVERS || BASE_CVERS.toString()
 						: oCfg[PARAM_CVERS + "-" + key.toLowerCase()] || DEFAULT_CVERS || M_COMPAT_FEATURES[key] || BASE_CVERS.toString();
-				v = jQuery.sap.Version(v.toLowerCase() === "edge" ? Global.version : v);
+				v = Version(v.toLowerCase() === "edge" ? Global.version : v);
 				//Only major and minor version are relevant
-				return jQuery.sap.Version(v.getMajor(), v.getMinor());
+				return Version(v.getMajor(), v.getMinor());
 			}
 
 			this._compatversion._default = _getCVers();
@@ -280,39 +329,31 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 				this._compatversion[n] = _getCVers(n);
 			}
 
-			function getMetaTagValue(sName) {
-				var oMetaTag = document.querySelector("META[name='" + sName + "']"),
-				    sMetaContent = oMetaTag && oMetaTag.getAttribute("content");
-				if (sMetaContent) {
-					return sMetaContent;
-				}
-			}
-
-			// 6. apply the settings from the url (only if not blocked by app configuration)
+			// apply the settings from the url (only if not blocked by app configuration)
 			if ( !config.ignoreUrlParams ) {
 				var sUrlPrefix = "sap-ui-";
-				var oUriParams = jQuery.sap.getUriParameters();
+				var oUriParams = UriParameters.fromQuery(window.location.search);
 
 				// first map SAP parameters, can be overwritten by "sap-ui-*" parameters
-				if ( oUriParams.mParams['sap-language'] ) {
+				if ( oUriParams.has('sap-language') ) {
 					// always remember as SAP Logon language
 					var sValue = config.sapLogonLanguage = oUriParams.get('sap-language');
 					// try to interpret it as a BCP47 language tag, taking some well known  SAP language codes into account
-					var oLocale = sValue && convertToLocaleOrNull(M_ABAP_LANGUAGE_TO_LOCALE[sValue.toUpperCase()] || sValue);
+					var oLocale = Locale.fromSAPLogonLanguage(sValue);
 					if ( oLocale ) {
 						config.language = oLocale;
 					} else if ( sValue && !oUriParams.get('sap-locale') && !oUriParams.get('sap-ui-language')) {
 						// only complain about an invalid sap-language if neither sap-locale nor sap-ui-language are given
-						jQuery.sap.log.warning("sap-language '" + sValue + "' is not a valid BCP47 language tag and will only be used as SAP logon language");
+						Log.warning("sap-language '" + sValue + "' is not a valid BCP47 language tag and will only be used as SAP logon language");
 					}
 				}
 
 				// Check sap-locale after sap-language to ensure compatibility if both parameters are provided (e.g. portal iView).
-				if ( oUriParams.mParams['sap-locale'] ) {
+				if ( oUriParams.has('sap-locale') ) {
 					setValue("language", oUriParams.get('sap-locale'));
 				}
 
-				if (oUriParams.mParams['sap-rtl']) {
+				if (oUriParams.has('sap-rtl')) {
 					// "" = false, "X", "x" = true
 					var sValue = oUriParams.get('sap-rtl');
 					if (sValue === "X" || sValue === "x") {
@@ -322,7 +363,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					}
 				}
 
-				if (oUriParams.mParams['sap-theme']) {
+				if (oUriParams.has('sap-theme')) {
 					var sValue = oUriParams.get('sap-theme');
 					if (sValue === "") {
 						// empty URL parameters set the parameter back to its system default
@@ -332,7 +373,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					}
 				}
 
-				if (oUriParams.mParams['sap-statistics']) {
+				if (oUriParams.has('sap-statistics')) {
 					var sValue = oUriParams.get('sap-statistics');
 					setValue('statistics', sValue);
 				}
@@ -355,13 +396,13 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					}
 				}
 				// handle legacy URL params through format settings
-				if (oUriParams.mParams['sap-ui-legacy-date-format']) {
+				if (oUriParams.has('sap-ui-legacy-date-format')) {
 					this.oFormatSettings.setLegacyDateFormat(oUriParams.get('sap-ui-legacy-date-format'));
 				}
-				if (oUriParams.mParams['sap-ui-legacy-time-format']) {
+				if (oUriParams.has('sap-ui-legacy-time-format')) {
 					this.oFormatSettings.setLegacyTimeFormat(oUriParams.get('sap-ui-legacy-time-format'));
 				}
-				if (oUriParams.mParams['sap-ui-legacy-number-format']) {
+				if (oUriParams.has('sap-ui-legacy-number-format')) {
 					this.oFormatSettings.setLegacyNumberFormat(oUriParams.get('sap-ui-legacy-number-format'));
 				}
 			}
@@ -426,11 +467,13 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 				config["bindingSyntax"] = (config.getCompatibilityVersion("sapCoreBindingSyntax").compareTo("1.26") < 0) ? "simple" : "complex";
 			}
 
-			// Configure whitelistService / frameOptions via <meta> tag if not already defined via UI5 configuration
-			if (!config["whitelistService"]) {
-				var sMetaTagValue = getMetaTagValue('sap.whitelistService');
-				if (sMetaTagValue) {
-					config["whitelistService"] = sMetaTagValue;
+			config["allowlistService"] = config["allowlistService"] || /* fallback to legacy config */ config["whitelistService"];
+
+			// Configure allowlistService / frameOptions via <meta> tag if not already defined via UI5 configuration
+			if (!config["allowlistService"]) {
+				var sAllowlistMetaTagValue = getMetaTagValue('sap.allowlistService') || /* fallback to legacy config */ getMetaTagValue('sap.whitelistService');
+				if (sAllowlistMetaTagValue) {
+					config["allowlistService"] = sAllowlistMetaTagValue;
 					// Set default "frameOptions" to "trusted" instead of "allow"
 					if (config["frameOptions"] === "default") {
 						config["frameOptions"] = "trusted";
@@ -446,6 +489,19 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 
 				// default => allow
 				config["frameOptions"] = "allow";
+			}
+
+			// frameOptionsConfig: Handle compatibility of renamed config option
+			var oFrameOptionsConfig = config["frameOptionsConfig"];
+			if (oFrameOptionsConfig) {
+				oFrameOptionsConfig.allowlist = oFrameOptionsConfig.allowlist || oFrameOptionsConfig.whitelist;
+			}
+
+			// in case the flexibilityServices configuration was set to a non-empty, non-default value, sap.ui.fl becomes mandatory
+			if (config.flexibilityServices
+					&& config.flexibilityServices !== M_SETTINGS.flexibilityServices.defaultValue
+					&& config.modules.indexOf("sap.ui.fl.library") == -1) {
+				config.modules.push("sap.ui.fl.library");
 			}
 
 			var aCSSLibs = config['preloadLibCss'];
@@ -467,13 +523,22 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 				}
 			}
 
+			// default legacy boolean to new enum value
+			// TODO: remove when making the configuration non-experimental
+			if ( config["xx-waitForTheme"] === "true" ) {
+				config["xx-waitForTheme"] = "rendering";
+			}
+			if ( config["xx-waitForTheme"] !== "rendering" && config["xx-waitForTheme"] !== "init" ) {
+				// invalid value or false from legacy boolean setting
+				config["xx-waitForTheme"] = undefined;
+			}
+
 			// log  all non default value
 			for (var n in M_SETTINGS) {
 				if ( config[n] !== M_SETTINGS[n].defaultValue ) {
-					jQuery.sap.log.info("  " + n + " = " + config[n]);
+					Log.info("  " + n + " = " + config[n]);
 				}
 			}
-
 
 			// Setup animation mode. If no animation mode is provided
 			// the value is set depending on the animation setting.
@@ -494,7 +559,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * Similar to <code>sap.ui.version</code>.
 		 *
-		 * @return {jQuery.sap.Version} the version
+		 * @return {module:sap/base/util/Version} the version
 		 * @public
 		 */
 		getVersion : function () {
@@ -502,7 +567,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 				return this._version;
 			}
 
-			this._version = new jQuery.sap.Version(Global.version);
+			this._version = new Version(Global.version);
 			return this._version;
 		},
 
@@ -510,7 +575,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * Returns the used compatibility version for the given feature.
 		 *
 		 * @param {string} sFeature the key of desired feature
-		 * @return {jQuery.sap.Version} the used compatibility version
+		 * @return {module:sap/base/util/Version} the used compatibility version
 		 * @public
 		 */
 		getCompatibilityVersion : function (sFeature) {
@@ -533,7 +598,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		/**
 		 * Allows setting the theme name
 		 * @param {string} sTheme the theme name
-		 * @return {sap.ui.core.Configuration} <code>this</code> to allow method chaining
+		 * @return {this} <code>this</code> to allow method chaining
 		 * @private
 		 */
 		_setTheme : function (sTheme) {
@@ -547,7 +612,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 */
 		_normalizeTheme : function (sTheme, sThemeBaseUrl) {
 			if ( sTheme && sThemeBaseUrl == null && sTheme.match(/^sap_corbu$/i) ) {
-				return "sap_goldreflection"; // TODO: re-check normalization
+				return "sap_fiori_3";
 			}
 			return sTheme;
 		},
@@ -569,9 +634,11 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * <pre>
 		 *    "ZH"  -->  "zh-Hans"         // script 'Hans' added to distinguish it from zh-Hant
 		 *    "ZF"  -->  "zh-Hant"         // ZF is not a valid ISO639 code, use the compliant language + script 'Hant'
-		 "    "1Q"  -->  "en-US-x-saptrc"  // special language code for supportability (tracing),
+		 *    "1Q"  -->  "en-US-x-saptrc"  // special language code for supportability (tracing),
 		 *                                    represented as en-US with a private extension
 		 *    "2Q"  -->  "en-US-x-sappsd"  // special language code for supportability (pseudo translation),
+		 *                                    represented as en-US with a private extension
+		 *    "3Q"  -->  "en-US-x-saprigi" // special language code for the Rigi pseudo language,
 		 *                                    represented as en-US with a private extension
 		 * </pre>
 		 *
@@ -588,23 +655,29 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		/**
 		 * Returns a BCP47-compliant language tag for the current language.
 		 *
-		 * The return value of this method is especially useful for an HTTP <code>Accept</code> header.
+		 * The return value of this method is especially useful for an HTTP <code>Accept-Language</code> header.
 		 *
-		 * @return {string} The language tag for the current language, conforming to BCP47
+		 * Retrieves the modern locale,
+		 * e.g. sr-Latn (Serbian (Cyrillic)), he (Hebrew), yi (Yiddish)
+		 *
+		 * @returns {string} The language tag for the current language, conforming to BCP47
 		 * @public
 		 */
 		getLanguageTag : function () {
-			return this.language.toString();
+			return this.language.toLanguageTag();
 		},
 
 		/**
 		 * Returns an SAP logon language for the current language.
 		 *
+		 * It will be returned in uppercase.
+		 * e.g. "EN", "DE"
+		 *
 		 * @return {string} The SAP logon language code for the current language
 		 * @public
 		 */
 		getSAPLogonLanguage : function () {
-			return this.sapLogonLanguage || this.language.getSAPLogonLanguage();
+			return (this.sapLogonLanguage && this.sapLogonLanguage.toUpperCase()) || this.language.getSAPLogonLanguage();
 		},
 
 		/**
@@ -664,7 +737,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *   as SAP Logon language.
 		 * @throws {Error} When <code>sLanguage</code> can't be interpreted as a BCP47 language or when
 		 *   <code>sSAPLanguage</code> is given and can't be interpreted as SAP language code.
-		 * @return {sap.ui.core.Configuration} <code>this</code> to allow method chaining
+		 * @return {this} <code>this</code> to allow method chaining
 		 *
 		 * @see http://scn.sap.com/docs/DOC-14377
 		 * @public
@@ -718,32 +791,6 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		},
 
 		/**
-		 * The mode for async XMLView processing.
-		 * Potential values are: <code>sequential</code>
-		 * Turned OFF by default
-		 * @since 1.52.1
-		 * @experimental
-		 * @return {string} Asynchronous XML Processing mode
-		 * @public
-		 */
-		getXMLProcessingMode : function () {
-			return this["xx-xml-processing"];
-		},
-
-		/**
-		 * Determines the mode for async XMLView processing.
-		 * @experimental
-		 * @since 1.52.1
-		 * @param {string} sMode Asynchronous XML Processing mode, activated if set to <code>sequential</code>
-		 * @returns {sap.ui.core.Configuration}
-		 * @private
-		 */
-		setXMLProcessingMode : function (sMode) {
-			this["xx-xml-processing"] = sMode;
-			return this;
-		},
-
-		/**
 		 * Checks whether the Cache Manager is switched on.
 		 * @experimental
 		 * @since 1.37.0
@@ -758,7 +805,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * @experimental
 		 * @since 1.37.0
 		 * @param {boolean} on true to switch it on, false if to switch it off
-		 * @returns {sap.ui.core.Configuration}
+		 * @returns {this}
 		 */
 		setUI5CacheOn: function (on) {
 			this["xx-cache-use"] = on;
@@ -780,7 +827,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * @experimental
 		 * @since 1.37.0
 		 * @param {boolean} on true to switch it on, false if to switch it off
-		 * @returns {sap.ui.core.Configuration}
+		 * @returns {this}
 		 */
 		setUI5CacheSerializationSupport: function (on) {
 			this["xx-cache-serialization"] = on;
@@ -810,11 +857,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		getCalendarType :  function() {
 			var sName;
 
-			// lazy load of sap.ui.core library and LocaleData to avoid cyclic dependencies
-			if ( !CalendarType ) {
-				Global.getCore().loadLibrary('sap.ui.core');
-				CalendarType = sap.ui.require("sap/ui/core/library").CalendarType;
-			}
+			// lazy load of LocaleData to avoid cyclic dependencies
 			if ( !LocaleData ) {
 				LocaleData = sap.ui.requireSync("sap/ui/core/LocaleData");
 			}
@@ -826,21 +869,28 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 						return this.calendarType;
 					}
 				}
-				jQuery.sap.log.warning("Parameter 'calendarType' is set to " + this.calendarType + " which isn't a valid value and therefore ignored. The calendar type is determined from format setting and current locale");
+				Log.warning("Parameter 'calendarType' is set to " + this.calendarType + " which isn't a valid value and therefore ignored. The calendar type is determined from format setting and current locale");
 			}
 
 			var sLegacyDateFormat = this.oFormatSettings.getLegacyDateFormat();
 
 			switch (sLegacyDateFormat) {
+				case "1":
+				case "2":
+				case "3":
+				case "4":
+				case "5":
+				case "6":
+					return CalendarType.Gregorian;
+				case "7":
+				case "8":
+				case "9":
+					return CalendarType.Japanese;
 				case "A":
 				case "B":
 					return CalendarType.Islamic;
 				case "C":
 					return CalendarType.Persian;
-				case "7":
-				case "8":
-				case "9":
-					return CalendarType.Japanese;
 			}
 
 			return LocaleData.getInstance(this.getLocale()).getPreferredCalendarType();
@@ -852,7 +902,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @param {sap.ui.core.CalendarType|null} sCalendarType the new calendar type. Set it with null to clear the calendar type
 		 *   and the calendar type is calculated based on the format settings and current locale.
-		 * @return {sap.ui.core.Configuration} <code>this</code> to allow method chaining
+		 * @return {this} <code>this</code> to allow method chaining
 		 * @public
 		 * @since 1.28.6
 		 */
@@ -900,7 +950,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * @param {string|null} sFormatLocale the new format locale as a BCP47 compliant language tag;
 		 *   case doesn't matter and underscores can be used instead of dashes to separate
 		 *   components (compatibility with Java Locale IDs)
-		 * @return {sap.ui.core.Configuration} <code>this</code> to allow method chaining
+		 * @return {this} <code>this</code> to allow method chaining
 		 * @public
 		 * @throws {Error} When <code>sFormatLocale</code> is given, but is not a valid BCP47 language
 		 *   tag or Java locale identifier
@@ -956,13 +1006,6 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 */
 		getAutoAriaBodyRole : function () {
 			return this.autoAriaBodyRole;
-		},
-
-		/**
-		 * @experimental
-		 */
-		getAvoidAriaApplicationRole : function() {
-			return this.getAutoAriaBodyRole() && this["xx-avoidAriaApplicationRole"];
 		},
 
 		/**
@@ -1052,7 +1095,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * <b>Note</b>: See documentation of {@link #setLanguage} for restrictions.
 		 *
 		 * @param {boolean|null} bRTL new character orientation mode or <code>null</code>
-		 * @return {sap.ui.core.Configuration} <code>this</code> to allow method chaining
+		 * @return {this} <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setRTL : function(bRTL) {
@@ -1134,8 +1177,8 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @returns {boolean} whether the design mode is active or not.
 		 * @since 1.13.2
-		 * private
-	 	 * @sap-restricted sap.watt com.sap.webide
+		 * @private
+		 * @ui5-restricted sap.watt, com.sap.webide
 		 */
 		getDesignMode : function() {
 			return this["xx-designMode"];
@@ -1146,8 +1189,8 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @returns {boolean} whether the activation of the controller code is suppressed or not
 		 * @since 1.13.2
-		 * private
-	 	 * @sap-restricted sap.watt com.sap.webide
+		 * @private
+		 * @ui5-restricted sap.watt, com.sap.webide
 		 */
 		getSuppressDeactivationOfControllerCode : function() {
 			return this["xx-suppressDeactivationOfControllerCode"];
@@ -1158,8 +1201,8 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @returns {boolean} whether the activation of the controller code is suppressed or not
 		 * @since 1.26.4
-		 * private
-	 	 * @sap-restricted sap.watt com.sap.webide
+		 * @private
+		 * @ui5-restricted sap.watt, com.sap.webide
 		 */
 		getControllerCodeDeactivated : function() {
 			return this.getDesignMode() && !this.getSuppressDeactivationOfControllerCode();
@@ -1212,7 +1255,8 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * <code>handleURL</code>, <code>onIndexLoad</code> or <code>onIndexLoaded</code>.
 		 *
 		 * @returns {object} object containing the callback functions for the AppCacheBuster
-		 * @sap-restricted
+		 * @private
+		 * @ui5-restricted
 		 */
 		getAppCacheBusterHooks : function() {
 			return this["xx-appCacheBusterHooks"];
@@ -1223,7 +1267,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @returns {boolean} true if customizing is disabled
 		 * @private
-		 * @sap-restricted
+		 * @ui5-restricted
 		 */
 		getDisableCustomizing : function() {
 			return this["xx-disableCustomizing"];
@@ -1239,17 +1283,6 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 */
 		getViewCache : function() {
 			return this["xx-viewCache"];
-		},
-
-		/**
-		 * Determines whether DOM patching is enabled or not.
-		 *
-		 * @see {jQuery.sap#replaceDOM}
-		 * @returns {boolean}
-		 * @private
-		 */
-		getDomPatching : function() {
-			return this["xx-domPatching"];
 		},
 
 		/**
@@ -1285,6 +1318,53 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		},
 
 		/**
+		 * Returns the URL from where the UI5 flexibility services are called;
+		 * if empty, the flexibility services are not called.
+		 *
+		 * @returns {string} URL from where the flexibility services are requested
+		 * @public
+		 * @since 1.60.0
+		 */
+		getFlexibilityServices : function() {
+			if (!this.flexibilityServices) {
+				this.flexibilityServices = [];
+			}
+
+			if (typeof this.flexibilityServices === 'string') {
+				if (this.flexibilityServices[0] === "/") {
+					this.flexibilityServices = [{
+						url : this.flexibilityServices,
+						layers : ["ALL"],
+						connector : "LrepConnector"
+					}];
+				} else {
+					this.flexibilityServices = JSON.parse(this.flexibilityServices);
+				}
+			}
+
+			return this.flexibilityServices;
+		},
+
+		/**
+		 * Sets the UI5 flexibility services configuration.
+		 *
+		 * @param {object[]} aFlexibilityServices Connector configuration
+		 * @param {string} [aFlexibilityServices.connector] Name of the connector
+		 * @param {string} [aFlexibilityServices.applyConnector] Name of the full module name of the custom apply connector
+		 * @param {string} [aFlexibilityServices.writeConnector] Name of the full module name of the custom write connector
+		 * @param {boolean} [aFlexibilityServices.custom=false] Flag to identify the connector as custom or fl owned
+		 * @param {string} [aFlexibilityServices.url] Url for requests sent by the connector
+		 * @param {string} [aFlexibilityServices.path] Path for loading data in the ObjectPath connector
+		 * @param {sap.ui.fl.Layer[]} [aFlexibilityServices.layers] List of layers in which the connector is allowed to write
+		 * @private
+		 * @ui5-restricted sap.ui.fl, other ui5 bootstrapping tools
+		 * @since 1.73.0
+		 */
+		setFlexibilityServices: function (aFlexibilityServices) {
+			this.flexibilityServices = aFlexibilityServices;
+		},
+
+		/**
 		 * Currently active preload mode for components or falsy value.
 		 *
 		 * @returns {string} component preload mode
@@ -1298,7 +1378,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		/**
 		 * Returns a configuration object that bundles the format settings of UI5.
 		 *
-		 * @return {sap.ui.core.Configuration.FormatSettings} A FormatSettings object.
+		 * @returns {sap.ui.core.Configuration.FormatSettings} A FormatSettings object.
 		 * @public
 		 */
 		getFormatSettings : function() {
@@ -1320,9 +1400,22 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @return {string} whitelist service URL
 		 * @public
+		 * @deprecated Since 1.85.0. Use {@link sap.ui.core.Configuration#getAllowlistService} instead.
+		 * SAP strives to replace insensitive terms with inclusive language.
+		 * Since APIs cannot be renamed or immediately removed for compatibility reasons, this API has been deprecated.
 		 */
 		getWhitelistService : function() {
-			return this.whitelistService;
+			return this.getAllowlistService();
+		},
+
+		/**
+		 * URL of the allowlist service.
+		 *
+		 * @return {string} allowlist service URL
+		 * @public
+		 */
+		getAllowlistService : function() {
+			return this.allowlistService;
 		},
 
 		/**
@@ -1333,6 +1426,16 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 */
 		getSupportMode : function() {
 			return this.support;
+		},
+
+		/**
+		 * Whether test tools are enabled.
+		 *
+		 * @return {boolean} test tools are enabled
+		 * @experimental
+		 */
+		getTestRecorderMode : function() {
+			return this["testRecorder"];
 		},
 
 		_collect : function() {
@@ -1394,6 +1497,27 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		},
 
 		/**
+		 * Gets if the hyphenation has to be forced to use only browser-native or only third-party.
+		 *
+		 * @returns {string} empty string, "native" or "thirdparty"
+		 * @private
+		 */
+		getHyphenation : function() {
+			return this["xx-hyphenation"];
+		},
+
+		/**
+		 * Returns the list of active terminologies defined via the Configuration.
+		 *
+		 * @returns {string[]} if no active terminologies are set, the default value <code>undefined</code> is returned.
+		 * @since 1.77.0
+		 * @public
+		 */
+		getActiveTerminologies : function() {
+			return this["activeTerminologies"];
+		},
+
+		/**
 		 * Applies multiple changes to the configuration at once.
 		 *
 		 * If the changed settings contain localization related settings like <code>language</code>
@@ -1422,7 +1546,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * });
 		 *
 		 * @param {object} mSettings Configuration options to apply
-		 * @returns {sap.ui.core.Configuration} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 * @since 1.38.6
 		 */
@@ -1437,12 +1561,12 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 					} else if ( typeof ctx[sMethod] === 'function' ) {
 						ctx[sMethod](m[sName]);
 					} else {
-						jQuery.sap.log.warning("Configuration.applySettings: unknown setting '" + sName + "' ignored");
+						Log.warning("Configuration.applySettings: unknown setting '" + sName + "' ignored");
 					}
 				}
 			}
 
-			jQuery.sap.assert(typeof mSettings === 'object', "mSettings must be an object");
+			assert(typeof mSettings === 'object', "mSettings must be an object");
 
 			this._collect(); // block events
 			applyAll(this, mSettings);
@@ -1510,13 +1634,6 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 	function toLanguageTag(oLocale) {
 		return oLocale ? oLocale.toString() : null;
 	}
-
-	var M_ABAP_LANGUAGE_TO_LOCALE = {
-		"ZH" : "zh-Hans",
-		"ZF" : "zh-Hant",
-		"1Q" : "en-US-x-saptrc",
-		"2Q" : "en-US-x-sappsd"
-	};
 
 	var M_ABAP_DATE_FORMAT_PATTERN = {
 		"" : {pattern: null},
@@ -1616,7 +1733,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 			function fallback(that) {
 				var oLocale = that.oConfiguration.language;
 				// if any user settings have been defined, add the private use subtag "sapufmt"
-				if ( !jQuery.isEmptyObject(that.mSettings) ) {
+				if ( !isEmptyObject(that.mSettings) ) {
 					// TODO move to Locale/LocaleData
 					var l = oLocale.toString();
 					if ( l.indexOf("-x-") < 0 ) {
@@ -1639,7 +1756,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 				delete this.mSettings[sKey];
 			}
 			// report a change only if old and new value differ (null/undefined are treated as the same value)
-			if ( (oOldValue != null || oValue != null) && !jQuery.sap.equal(oOldValue, oValue) ) {
+			if ( (oOldValue != null || oValue != null) && !deepEqual(oOldValue, oValue) ) {
 				var mChanges = this.oConfiguration._collect();
 				mChanges[sKey] = oValue;
 				this.oConfiguration._endCollect();
@@ -1689,7 +1806,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * E.g. In locale 'en' value <code>1</code> would result in <code>1 Bag</code>, while <code>2</code> would result in <code>2 Bags</code>
 		 * @param mUnits {object} custom unit object which replaces the current custom unit definition. Call with <code>null</code> to delete custom units.
-		 * @return {sap.ui.core.Configuration.FormatSettings}
+		 * @returns {this}
 		 */
 		setCustomUnits: function (mUnits) {
 			// add custom units, or remove the existing ones if none are given
@@ -1707,14 +1824,14 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * Adds custom units.
 		 * Similar to {@link sap.ui.core.Configuration#setCustomUnits} but instead of setting the custom units, it will add additional ones.
 		 * @param mUnits {object} custom unit object which replaces the current custom unit definition. Call with <code>null</code> to delete custom units.
-		 * @return {sap.ui.core.Configuration.FormatSettings}
+		 * @returns {this}
 		 * @see sap.ui.core.Configuration#setCustomUnits
 		 */
 		addCustomUnits: function (mUnits) {
 			// add custom units, or remove the existing ones if none are given
 			var mExistingUnits = this.getCustomUnits();
 			if (mExistingUnits){
-				mUnits = jQuery.extend({}, mExistingUnits, mUnits);
+				mUnits = extend({}, mExistingUnits, mUnits);
 			}
 			this.setCustomUnits(mUnits);
 			return this;
@@ -1734,8 +1851,9 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * }
 		 * </code>
 		 * Note: It is possible to create multiple entries per unit key.
+		 * Call with <code>null</code> to delete unit mappings.
 		 * @param mUnitMappings {object} unit mappings
-		 * @return {sap.ui.core.Configuration.FormatSettings}. Call with <code>null</code> to delete unit mappings.
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 */
 		setUnitMappings: function (mUnitMappings) {
 			this._set("unitMappings", mUnitMappings);
@@ -1746,14 +1864,14 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * Adds unit mappings.
 		 * Similar to {@link sap.ui.core.Configuration#setUnitMappings} but instead of setting the unit mappings, it will add additional ones.
 		 * @param mUnitMappings {object} unit mappings
-		 * @return {sap.ui.core.Configuration.FormatSettings}
+		 * @returns {this}
 		 * @see sap.ui.core.Configuration#setUnitMappings
 		 */
 		addUnitMappings: function (mUnitMappings) {
 			// add custom units, or remove the existing ones if none are given
 			var mExistingUnits = this.getUnitMappings();
 			if (mExistingUnits){
-				mUnitMappings = jQuery.extend({}, mExistingUnits, mUnitMappings);
+				mUnitMappings = extend({}, mExistingUnits, mUnitMappings);
 			}
 			this.setUnitMappings(mUnitMappings);
 			return this;
@@ -1775,7 +1893,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * @public
 		 */
 		getDatePattern : function(sStyle) {
-			jQuery.sap.assert(sStyle == "short" || sStyle == "medium" || sStyle == "long" || sStyle == "full", "sStyle must be short, medium, long or full");
+			assert(sStyle == "short" || sStyle == "medium" || sStyle == "long" || sStyle == "full", "sStyle must be short, medium, long or full");
 			return this.mSettings["dateFormats-" + sStyle];
 		},
 
@@ -1794,7 +1912,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @param {string} sStyle must be one of short, medium, long or full.
 		 * @param {string} sPattern the format pattern to be used in LDML syntax.
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setDatePattern : function(sStyle, sPattern) {
@@ -1808,7 +1926,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * @public
 		 */
 		getTimePattern : function(sStyle) {
-			jQuery.sap.assert(sStyle == "short" || sStyle == "medium" || sStyle == "long" || sStyle == "full", "sStyle must be short, medium, long or full");
+			assert(sStyle == "short" || sStyle == "medium" || sStyle == "long" || sStyle == "full", "sStyle must be short, medium, long or full");
 			return this.mSettings["timeFormats-" + sStyle];
 		},
 
@@ -1827,7 +1945,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @param {string} sStyle must be one of short, medium, long or full.
 		 * @param {string} sPattern the format pattern to be used in LDML syntax.
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setTimePattern : function(sStyle, sPattern) {
@@ -1841,7 +1959,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * @public
 		 */
 		getNumberSymbol : function(sType) {
-			jQuery.sap.assert(sType == "decimal" || sType == "group" || sType == "plusSign" || sType == "minusSign", "sType must be decimal, group, plusSign or minusSign");
+			assert(sType == "decimal" || sType == "group" || sType == "plusSign" || sType == "minusSign", "sType must be decimal, group, plusSign or minusSign");
 			return this.mSettings["symbols-latn-" + sType];
 		},
 
@@ -1861,7 +1979,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 *
 		 * @param {string} sStyle must be one of decimal, group, plusSign, minusSign.
 		 * @param {string} sSymbol will be used to represent the given symbol type
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setNumberSymbol : function(sType, sSymbol) {
@@ -1888,13 +2006,31 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 
 		/**
 		 * Sets custom currencies and replaces existing entries.
-		 * E.g.
+		 *
+		 * There is a special currency code named "DEFAULT" that is optional.
+		 * In case it is set it will be used for all currencies not contained
+		 * in the list, otherwise currency digits as defined by the CLDR will
+		 * be used as a fallback.
+		 *
+		 * Example:
+		 * To use CLDR, but override single currencies
 		 * <code>
 		 * {
 		 *  "KWD": {"digits": 3},
 		 *  "TND" : {"digits": 3}
 		 * }
 		 * </code>
+		 *
+		 * To replace the CLDR currency digits completely
+		 * <code>
+		 * {
+		 *   "DEFAULT": {"digits": 2},
+		 *   "ADP": {"digits": 0},
+		 *   ...
+		 *   "XPF": {"digits": 0}
+		 * }
+		 * </code>
+		 *
 		 * Note: To unset the custom currencies: call with <code>undefined</code>
 		 * @public
 		 * @param {object} mCurrencies currency map which is set
@@ -1929,7 +2065,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 			// add custom units, or remove the existing ones if none are given
 			var mExistingCurrencies = this.getCustomCurrencies();
 			if (mExistingCurrencies){
-				mCurrencies = jQuery.extend({}, mExistingCurrencies, mCurrencies);
+				mCurrencies = extend({}, mExistingCurrencies, mCurrencies);
 			}
 			this.setCustomCurrencies(mCurrencies);
 			return this;
@@ -1952,7 +2088,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * for details and restrictions.
 		 *
 		 * @param {int} iValue must be an integer value between 0 and 6
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setFirstDayOfWeek : function(iValue) {
@@ -1962,7 +2098,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		},
 
 		_setDayPeriods : function(sWidth, aTexts) {
-			jQuery.sap.assert(sWidth == "narrow" || sWidth == "abbreviated" || sWidth == "wide", "sWidth must be narrow, abbreviated or wide");
+			assert(sWidth == "narrow" || sWidth == "abbreviated" || sWidth == "wide", "sWidth must be narrow, abbreviated or wide");
 			this._set("dayPeriods-format-" + sWidth, aTexts);
 			return this;
 		},
@@ -1987,7 +2123,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * for details and restrictions.
 		 *
 		 * @param {string} sFormatId id of the ABAP data format (one of '1','2','3','4','5','6','7','8','9','A','B','C')
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setLegacyDateFormat : function(sFormatId) {
@@ -2022,7 +2158,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * for details and restrictions.
 		 *
 		 * @param {string} sFormatId id of the ABAP time format (one of '0','1','2','3','4')
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setLegacyTimeFormat : function(sFormatId) {
@@ -2056,7 +2192,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * for details and restrictions.
 		 *
 		 * @param {string} sFormatId id of the ABAP number format set (one of ' ','X','Y')
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setLegacyNumberFormat : function(sFormatId) {
@@ -2077,7 +2213,7 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 * @param {string} aMappings[].dateFormat The date format
 		 * @param {string} aMappings[].islamicMonthStart The Islamic date
 		 * @param {string} aMappings[].gregDate The corresponding Gregorian date
-		 * @return {sap.ui.core.Configuration.FormatSettings} Returns <code>this</code> to allow method chaining
+		 * @returns {this} Returns <code>this</code> to allow method chaining
 		 * @public
 		 */
 		setLegacyDateCalendarCustomizing : function(aMappings) {
@@ -2097,6 +2233,39 @@ sap.ui.define(['jquery.sap.global', '../Device', '../Global', '../base/Object', 
 		 */
 		getLegacyDateCalendarCustomizing : function() {
 			return this.aLegacyDateCalendarCustomizing;
+		},
+
+		/**
+		 * Define whether the NumberFormatter shall always place the currency code after the numeric value, with
+		 * the only exception of right-to-left locales, where the currency code shall be placed before the numeric value.
+		 * Default configuration setting is <code>true</code>.
+		 *
+		 * When set to <code>false</code> the placement of the currency code is done dynamically, depending on the
+		 * configured locale using data provided by the Unicode Common Locale Data Repository (CLDR).
+		 *
+		 * Each currency instance ({@link sap.ui.core.format.NumberFormat.getCurrencyInstance}) will be created
+		 * with this setting unless overwritten on instance level.
+		 *
+		 * @param {boolean} bTrailingCurrencyCode Whether currency codes shall always be placed after the numeric value
+		 * @returns {this} Returns <code>this</code> to allow method chaining
+		 * @since 1.75.0
+		 * @public
+		 */
+		setTrailingCurrencyCode : function(bTrailingCurrencyCode) {
+			check(typeof bTrailingCurrencyCode === "boolean", "bTrailingCurrencyCode must be a boolean");
+			this.oConfiguration.trailingCurrencyCode = bTrailingCurrencyCode;
+			return this;
+		},
+
+		/**
+		 * Returns current trailingCurrencyCode configuration for new NumberFormatter instances
+		 *
+		 * @return {boolean} Whether currency codes shall always be placed after the numeric value
+		 * @since 1.75.0
+		 * @public
+		 */
+		getTrailingCurrencyCode : function() {
+			return this.oConfiguration.trailingCurrencyCode;
 		},
 
 		/*

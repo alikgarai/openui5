@@ -56,12 +56,16 @@ sap.ui.define(["sap/m/Button", "./library", "./ObjectPageHeaderActionButtonRende
 					defaultValue: library.Importance.High
 				}
 
-			}
+			},
+			designtime: "sap/uxap/designtime/ObjectPageHeaderActionButton.designtime"
 		}
 	});
 
 	ObjectPageHeaderActionButton.prototype.init = function () {
+		Button.prototype.init.call(this);
+
 		this._bInternalVisible = this.getVisible();
+		this._bInternalHiddenText = this.getHideText();
 	};
 
 	ObjectPageHeaderActionButton.prototype.onAfterRendering = function () {
@@ -70,26 +74,24 @@ sap.ui.define(["sap/m/Button", "./library", "./ObjectPageHeaderActionButtonRende
 		}
 	};
 
-	ObjectPageHeaderActionButton.prototype.applySettings = function (mSettings, oScope) {
-
-		if (Button.prototype.applySettings) {
-			Button.prototype.applySettings.call(this, mSettings, oScope);
+	ObjectPageHeaderActionButton.prototype._getText = function() {
+		if (this._bInternalHiddenText && this.getHideText()) {
+			return "";
 		}
 
-		this.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideText", this.getHideText());
-		this.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideIcon", this.getHideIcon());
+		return this.getText();
 	};
 
 	ObjectPageHeaderActionButton.prototype.setHideText = function (bValue, bInvalidate) {
+		this.setProperty("hideText", bValue, bInvalidate);
 
-		this.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideText", bValue);
+		this._bInternalHiddenText = bValue;
 
-		return this.setProperty("hideText", bValue, bInvalidate);
+		return this;
 	};
 
 
 	ObjectPageHeaderActionButton.prototype.setHideIcon = function (bValue, bInvalidate) {
-
 		this.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideIcon", bValue);
 
 		return this.setProperty("hideIcon", bValue, bInvalidate);
@@ -107,9 +109,8 @@ sap.ui.define(["sap/m/Button", "./library", "./ObjectPageHeaderActionButtonRende
 
 	ObjectPageHeaderActionButton.prototype.setVisible = function (bVisible) {
 		var vResult = Button.prototype.setVisible.apply(this, arguments);
-		if (this.getParent() && typeof this.getParent()._adaptLayoutDelayed === "function") {
-			this.getParent()._adaptLayoutDelayed();
-		}
+		this.getParent() && this.getParent().invalidate();
+
 		return vResult;
 	};
 
@@ -130,12 +131,12 @@ sap.ui.define(["sap/m/Button", "./library", "./ObjectPageHeaderActionButtonRende
 		};
 
 		oConfig.onBeforeEnterOverflow = function(oActionButton) {
-			oActionButton.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideText", false, true /* suppress invalidate */);
+			oActionButton._bInternalHiddenText = false;
 			oActionButton.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideIcon", false, true /* suppress invalidate */);
 		};
 
 		oConfig.onAfterExitOverflow = function(oActionButton) {
-			oActionButton.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideText", oActionButton.getHideText(), true /* suppress invalidate */);
+			oActionButton._bInternalHiddenText = oActionButton.getHideText();
 			oActionButton.toggleStyleClass("sapUxAPObjectPageHeaderActionButtonHideIcon", oActionButton.getHideIcon(), true /* suppress invalidate */);
 		};
 

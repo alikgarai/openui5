@@ -1,10 +1,9 @@
 /*!
  *{copyright}
  */
-sap.ui.require([
-	"jquery.sap.global",
+sap.ui.define([
+	"sap/base/Log",
 	"sap/ui/core/Control",
-	"sap/ui/core/LocaleData",
 	"sap/ui/core/format/NumberFormat",
 	"sap/ui/model/FormatException",
 	"sap/ui/model/ParseException",
@@ -12,8 +11,8 @@ sap.ui.require([
 	"sap/ui/model/odata/type/ODataType",
 	"sap/ui/model/odata/type/Single",
 	"sap/ui/test/TestUtils"
-], function (jQuery, Control, LocaleData, NumberFormat, FormatException, ParseException,
-		ValidateException, ODataType, Single, TestUtils) {
+], function (Log, Control, NumberFormat, FormatException, ParseException, ValidateException,
+		ODataType, Single, TestUtils) {
 	/*global QUnit, sinon */
 	"use strict";
 	/*eslint no-warning-comments: 0 */
@@ -23,7 +22,7 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.model.odata.type.Single", {
 		beforeEach : function () {
-			this.oLogMock = this.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(Log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 			sap.ui.getCore().getConfiguration().setLanguage("en-US");
@@ -54,6 +53,26 @@ sap.ui.require([
 			assert.deepEqual(oType.oFormatOptions, null, "no format options");
 			assert.deepEqual(oType.oConstraints, undefined, "default constraints");
 	});
+
+	//*********************************************************************************************
+[
+	undefined,
+	{},
+	{preserveDecimals : true},
+	{preserveDecimals : "yes"},
+	{preserveDecimals : undefined},
+	{preserveDecimals : null},
+	{preserveDecimals : false}
+].forEach(function (oFormatOptions, i) {
+	QUnit.test("constructor: oFormatOptions.preserveDecimals; #" + i, function (assert) {
+		// code under test
+		var oType = new Single(oFormatOptions);
+
+		// format options are taken as they are - preserveDecimals is considered when creating the
+		// formatter instance
+		assert.strictEqual(oType.oFormatOptions, oFormatOptions);
+	});
+});
 
 	//*********************************************************************************************
 	[
@@ -218,14 +237,50 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	[{
+		set : undefined,
+		expect : {groupingEnabled : true, preserveDecimals : true}
+	}, {
+		set : {},
+		expect : {groupingEnabled : true, preserveDecimals : true}
+	}, {
+		set : {preserveDecimals : true},
+		expect : {groupingEnabled : true, preserveDecimals : true}
+	}, {
+		set : {preserveDecimals : "yes"},
+		expect : {groupingEnabled : true, preserveDecimals : "yes"}
+	}, {
+		set : {preserveDecimals : undefined},
+		expect : {groupingEnabled : true, preserveDecimals : undefined}
+	}, {
+		set : {preserveDecimals : null},
+		expect : {groupingEnabled : true, preserveDecimals : null}
+	}, {
+		set : {preserveDecimals : false},
+		expect : {groupingEnabled : true, preserveDecimals : false}
+	}, {
+		set : {style : "short"},
+		expect : {groupingEnabled : true, style : "short"}
+	}, {
+		set : {style : "long"},
+		expect : {groupingEnabled : true, style : "long"}
+	}, {
+		set : {style : "standard"},
+		expect : {groupingEnabled : true, preserveDecimals : true, style : "standard"}
+	}, {
+		set : {preserveDecimals : true, style : "short"},
+		expect : {groupingEnabled : true, preserveDecimals : true, style : "short"}
+	}, {
+		set : {preserveDecimals : true, style : "long"},
+		expect : {groupingEnabled : true, preserveDecimals : true, style : "long"}
+	}, {
 		set : {foo : "bar"},
-		expect : {foo : "bar", groupingEnabled : true}
+		expect : {foo : "bar", groupingEnabled : true, preserveDecimals : true}
 	}, {
 		set : {decimals : 3, groupingEnabled : false},
-		expect : {decimals : 3, groupingEnabled : false}
+		expect : {decimals : 3, groupingEnabled : false, preserveDecimals : true}
 	}, {
 		set : {maxFractionDigits : 3},
-		expect : {groupingEnabled : true, maxFractionDigits : 3}
+		expect : {groupingEnabled : true, maxFractionDigits : 3, preserveDecimals : true}
 	}].forEach(function (oFixture) {
 		QUnit.test("formatOptions: " + JSON.stringify(oFixture.set), function (assert) {
 			var oSpy,

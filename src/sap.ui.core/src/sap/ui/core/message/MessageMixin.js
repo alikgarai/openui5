@@ -3,7 +3,7 @@
  */
 
 // sap.ui.core.message.MessageMixin
-sap.ui.define(["jquery.sap.global", "sap/ui/core/library"], function(jQuery, library) {
+sap.ui.define(["sap/ui/core/library", "sap/base/Log", "sap/ui/core/LabelEnablement"], function(library, Log, LabelEnablement) {
 	"use strict";
 
 	// shortcut for sap.ui.core.ValueState
@@ -22,6 +22,8 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/library"], function(jQuery, lib
 	 */
 	var MessageMixin = function () {
 		this.refreshDataState = refreshDataState;
+		this.fnDestroy = this.destroy;
+		this.destroy = destroy;
 	};
 
 	/**
@@ -31,9 +33,9 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/library"], function(jQuery, lib
 	 * - Propagates the value state
 	 */
 	function refreshDataState (sName, oDataState) {
-		if (oDataState.getChanges().messages) {
+		if (oDataState.getChanges().messages && this.getBinding(sName) && this.getBinding(sName).isA("sap.ui.model.PropertyBinding")) {
 			var aMessages = oDataState.getMessages();
-			var aLabels = sap.ui.core.LabelEnablement.getReferencingLabels(this);
+			var aLabels = LabelEnablement.getReferencingLabels(this);
 			var sLabelId = aLabels[0];
 			var bForceUpdate = false;
 
@@ -45,7 +47,7 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/library"], function(jQuery, lib
 						oMessage.setAdditionalText(oLabel.getText());
 						bForceUpdate = true;
 					} else {
-						jQuery.sap.log.warning(
+						Log.warning(
 							"sap.ui.core.message.Message: Can't create labelText." +
 							"Label with id " + sLabelId + " is no valid sap.ui.core.Label.",
 							this
@@ -54,7 +56,7 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/library"], function(jQuery, lib
 					}
 				}
 				if (oMessage.getControlId() !== this.getId()){
-					oMessage.setControlId(this.getId());
+					oMessage.addControlId(this.getId());
 					bForceUpdate = true;
 				}
 			}.bind(this));
@@ -75,6 +77,23 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/library"], function(jQuery, lib
 				this.setValueStateText('');
 			}
 		}
+	}
+
+	function destroy() {
+		//Remove control id from messages
+		var sControlId = this.getId();
+		function removeControlID(oMessage) {
+			oMessage.removeControlId(sControlId);
+		}
+		for (var sName in this.mBindingInfos) {
+			var oBindingInfo = this.mBindingInfos[sName];
+			if (oBindingInfo.binding) {
+				var oDataState = oBindingInfo.binding.getDataState();
+				var aMessages = oDataState.getMessages();
+				aMessages.forEach(removeControlID);
+			}
+		}
+		this.fnDestroy.apply(this, arguments);
 	}
 
 	return MessageMixin;

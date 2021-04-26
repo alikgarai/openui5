@@ -36,11 +36,16 @@ sap.ui.define(["sap/ui/fl/Utils"], function(FlexUtils) {
 			var oMovedElement = oModifier.bySelector(oMovedElementInfo.selector, oAppComponent, oView),
 				iTargetIndex = oMovedElementInfo.targetIndex;
 
-			oModifier.getAggregation(oControl, ACTION_AGGREGATION_NAME).forEach(function(oButton){
+			oModifier.getAggregation(oControl, ACTION_AGGREGATION_NAME).forEach(function(oButton, iIndex) {
 				if (oModifier.getId(oButton) === oModifier.getId(oMovedElement)) {
 					oModifier.removeAggregation(oControl, ACTION_AGGREGATION_NAME, oButton);
-
 					oModifier.insertAggregation(oControl, "dependents", oButton, undefined, oView);
+
+					oChange.setRevertData({
+						index: iIndex,
+						sourceParent: oModifier.getSelector(oControl, oAppComponent),
+						aggregation: ACTION_AGGREGATION_NAME
+					});
 				}
 			});
 
@@ -62,10 +67,11 @@ sap.ui.define(["sap/ui/fl/Utils"], function(FlexUtils) {
 			var oModifier = mPropertyBag.modifier,
 				oView = mPropertyBag.view,
 				oAppComponent = mPropertyBag.appComponent,
-				oMovedElementInfo = oChange.getDefinition().content.movedElements[0];
+				oMovedElementInfo = oChange.getDefinition().content.movedElements[0],
+				oRevertData = oChange.getRevertData();
 
 			var oMovedElement = oModifier.bySelector(oMovedElementInfo.selector, oAppComponent, oView),
-				iTargetIndex = oMovedElementInfo.targetIndex,
+				iTargetIndex = oRevertData ? oRevertData.index : oMovedElementInfo.targetIndex,
 				iSourceIndex = oMovedElementInfo.sourceIndex;
 
 			oModifier.removeAggregation(oControl, ACTION_AGGREGATION_NAME, oMovedElement, iTargetIndex, oView);
@@ -85,13 +91,16 @@ sap.ui.define(["sap/ui/fl/Utils"], function(FlexUtils) {
 		 * @public
 		 */
 		MoveActions.completeChangeContent = function(oChange, oSpecificChangeInfo, mPropertyBag) {
-
 			var oModifier = mPropertyBag.modifier,
 				oAppComponent = mPropertyBag.appComponent,
 				oChangeData = oChange.getDefinition();
 
 			// We need to add the information about the movedElements together with the source and target index
-			oChangeData.content = {movedElements: []};
+			oChangeData.content = {
+				movedElements: [],
+				targetAggregation: oSpecificChangeInfo.target.aggregation,
+				targetContainer: oSpecificChangeInfo.selector
+			};
 			oSpecificChangeInfo.movedElements.forEach(function (mElement) {
 				var oElement = mElement.element || oModifier.bySelector(mElement.id, oAppComponent);
 				oChangeData.content.movedElements.push({
@@ -100,6 +109,26 @@ sap.ui.define(["sap/ui/fl/Utils"], function(FlexUtils) {
 					targetIndex: mElement.targetIndex
 				});
 			});
+		};
+
+		MoveActions.getCondenserInfo = function(oChange) {
+			var oChangeContent = oChange.getContent();
+			var oRevertData = oChange.getRevertData();
+			return {
+				affectedControl: oChangeContent.movedElements[0].selector,
+				classification: sap.ui.fl.condenser.Classification.Move,
+				sourceContainer: oRevertData.sourceParent,
+				targetContainer: oChangeContent.targetContainer,
+				sourceIndex: oRevertData.index,
+				sourceAggregation: oRevertData.aggregation,
+				targetAggregation: oChangeContent.targetAggregation,
+				setTargetIndex: function(oChange, iNewTargetIndex) {
+					oChange.getContent().movedElements[0].targetIndex = iNewTargetIndex;
+				},
+				getTargetIndex: function(oChange) {
+					return oChange.getContent().movedElements[0].targetIndex;
+				}
+			};
 		};
 
 		return MoveActions;

@@ -1,7 +1,8 @@
 sap.ui.define([
 		"sap/ui/demo/iconexplorer/controller/BaseController",
-		"sap/ui/model/json/JSONModel"
-	], function (BaseController, JSONModel) {
+		"sap/ui/model/json/JSONModel",
+		"sap/base/Log"
+	], function (BaseController, JSONModel, Log) {
 		"use strict";
 
 		return BaseController.extend("sap.ui.demo.iconexplorer.controller.App", {
@@ -12,7 +13,8 @@ sap.ui.define([
 			onInit : function () {
 				var oViewModel,
 					fnSetAppNotBusy,
-					iOriginalBusyDelay = this.getView().getBusyIndicatorDelay();
+					iOriginalBusyDelay = this.getView().getBusyIndicatorDelay(),
+					oComponent = this.getOwnerComponent();
 
 				oViewModel = new JSONModel({
 					busy : true,
@@ -21,7 +23,7 @@ sap.ui.define([
 				this.setModel(oViewModel, "view");
 
 				// reduce the log level to speed up the app performance
-				jQuery.sap.log.setLevel(jQuery.sap.log.Level.WARNING);
+				Log.setLevel(Log.Level.WARNING);
 
 				fnSetAppNotBusy = function() {
 					oViewModel.setProperty("/busy", false);
@@ -33,6 +35,8 @@ sap.ui.define([
 
 				// apply content density mode to root view
 				this.getView().addStyleClass(this.getOwnerComponent().getContentDensityClass());
+
+				oComponent.getCookiesManagement().enable(oComponent.getRootControl());
 			}
 		});
 

@@ -1,35 +1,34 @@
 /*!
  * ${copyright}
  */
-sap.ui.require([
-	"jquery.sap.global",
+sap.ui.define([
+	"sap/base/Log",
+	"sap/ui/base/SyncPromise",
+	"sap/ui/core/Element",
 	"sap/ui/core/message/Message",
 	"sap/ui/model/Binding",
 	"sap/ui/model/BindingMode",
 	"sap/ui/model/Context",
 	"sap/ui/model/Model",
-	"sap/ui/model/odata/type/String",
-	"sap/ui/model/odata/ODataUtils",
 	"sap/ui/model/odata/OperationMode",
+	"sap/ui/model/odata/type/String",
 	"sap/ui/model/odata/v4/Context",
-	"sap/ui/model/odata/v4/lib/_MetadataRequestor",
-	"sap/ui/model/odata/v4/lib/_GroupLock",
-	"sap/ui/model/odata/v4/lib/_Parser",
-	"sap/ui/model/odata/v4/lib/_Requestor",
-	"sap/ui/model/odata/v4/ODataContextBinding",
-	"sap/ui/model/odata/v4/ODataListBinding",
 	"sap/ui/model/odata/v4/ODataMetaModel",
 	"sap/ui/model/odata/v4/ODataModel",
-	"sap/ui/model/odata/v4/ODataPropertyBinding",
 	"sap/ui/model/odata/v4/SubmitMode",
-	"sap/ui/test/TestUtils"
-], function (jQuery, Message, Binding, BindingMode, BaseContext, Model, TypeString,
-		ODataUtils, OperationMode, Context, _MetadataRequestor, _GroupLock, _Parser, _Requestor,
-		ODataContextBinding, ODataListBinding, ODataMetaModel, ODataModel, ODataPropertyBinding,
-		SubmitMode, TestUtils) {
-	/*global QUnit, sinon */
-	/*eslint max-nested-callbacks: 0, no-warning-comments: 0 */
+	"sap/ui/model/odata/v4/lib/_Helper",
+	"sap/ui/model/odata/v4/lib/_MetadataRequestor",
+	"sap/ui/model/odata/v4/lib/_Parser",
+	"sap/ui/model/odata/v4/lib/_Requestor",
+	"sap/ui/test/TestUtils",
+	"sap/ui/core/library"
+], function (Log, SyncPromise, Element, Message, Binding, BindingMode, BaseContext, Model,
+		OperationMode, TypeString, Context, ODataMetaModel, ODataModel, SubmitMode, _Helper,
+		_MetadataRequestor, _Parser, _Requestor, TestUtils, library) {
 	"use strict";
+
+	// shortcut for sap.ui.core.MessageType
+	var MessageType = library.MessageType;
 
 	/*
 	 * You can run various tests in this module against a real OData V4 service using the request
@@ -42,38 +41,13 @@ sap.ui.require([
 			"TEAMS('UNKNOWN')" : {code : 404, source : "TEAMS('UNKNOWN').json"}
 		},
 		sServiceUrl = "/sap/opu/odata4/IWBEP/TEA/default/IWBEP/TEA_BUSI/0001/",
-		TestControl = sap.ui.core.Element.extend("test.sap.ui.model.odata.v4.ODataModel", {
+		TestControl = Element.extend("test.sap.ui.model.odata.v4.ODataModel", {
 			metadata : {
 				properties : {
 					text : "string"
 				}
 			}
 		});
-
-	/**
-	 * Clones the given object
-	 *
-	 * @param {any} v the object
-	 * @returns {any} the clone
-	 */
-	function clone(v) {
-		return v && JSON.parse(JSON.stringify(v));
-	}
-
-	/**
-	 * Creates a V4 OData service for <code>TEA_BUSI</code>.
-	 *
-	 * @param {string} [sQuery] URI query parameters starting with '?'
-	 * @param {object} [mParameters] additional model parameters
-	 * @returns {sap.ui.model.odata.v4.oDataModel} the model
-	 */
-	function createModel(sQuery, mParameters) {
-		mParameters = jQuery.extend({}, mParameters, {
-			serviceUrl : getServiceUrl() + (sQuery || ""),
-			synchronizationMode : "None"
-		});
-		return new ODataModel(mParameters);
-	}
 
 	/**
 	 * Returns a URL within the service that (in case of <code>bRealOData</code>), is passed
@@ -92,11 +66,37 @@ sap.ui.require([
 	QUnit.module("sap.ui.model.odata.v4.ODataModel", {
 		beforeEach : function () {
 			TestUtils.setupODataV4Server(this._oSandbox, mFixture, undefined, sServiceUrl);
-			this.oLogMock = this.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(Log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 			this.mock(sap.ui.getCore().getConfiguration()).expects("getLanguageTag").atLeast(0)
 				.returns("ab-CD");
+		},
+
+		afterEach : function () {
+			return TestUtils.awaitRendering();
+		},
+
+		/**
+		 * Creates a V4 OData service for <code>TEA_BUSI</code>. Blocks prerendering tasks to avoid
+		 * unnecessary calls to setTimeout which may disturb the addPrerenderingTask tests. Tests
+		 * that need addPrerenderingTask must explicitely request it.
+		 *
+		 * @param {string} [sQuery] URI query parameters starting with '?'
+		 * @param {object} [mParameters] additional model parameters
+		 * @param {boolean} [bAllowPrerenderingTasks] avoids that addPrerenderingTasks is blocked
+		 * @returns {sap.ui.model.odata.v4.oDataModel} the model
+		 */
+		createModel : function (sQuery, mParameters, bAllowPrerenderingTasks) {
+			var oModel = new ODataModel(Object.assign({}, mParameters, {
+					serviceUrl : getServiceUrl() + (sQuery || ""),
+					synchronizationMode : "None"
+				}));
+
+			if (!bAllowPrerenderingTasks) {
+				this.stub(oModel, "addPrerenderingTask");
+			}
+			return oModel;
 		}
 	});
 
@@ -106,7 +106,7 @@ sap.ui.require([
 			oMetaModel,
 			oModel,
 			oModelPrototypeMock = this.mock(ODataModel.prototype),
-			mModelOptions = {};
+			mUriParameters = {"sap-client" : "279"};
 
 		assert.throws(function () {
 			return new ODataModel();
@@ -124,39 +124,91 @@ sap.ui.require([
 			return new ODataModel({operationMode : OperationMode.Auto, serviceUrl : "/foo/",
 				synchronizationMode : "None"});
 		}, new Error("Unsupported operation mode: Auto"), "Unsupported OperationMode");
+
 		oModelPrototypeMock.expects("initializeSecurityToken").never();
 
 		// code under test: operation mode Server must not throw an error
-		oModel = createModel("", {operationMode : OperationMode.Server, serviceUrl : "/foo/",
+		oModel = this.createModel("", {operationMode : OperationMode.Server, serviceUrl : "/foo/",
 			synchronizationMode : "None"});
 
 		assert.strictEqual(oModel.sOperationMode, OperationMode.Server);
 
 		this.mock(ODataModel.prototype).expects("buildQueryOptions")
-			.withExactArgs({}, false, true).returns(mModelOptions);
+			.withExactArgs({}, false, true).returns(mUriParameters);
 		this.mock(_MetadataRequestor).expects("create")
-			.withExactArgs({"Accept-Language" : "ab-CD"}, "4.0", sinon.match.same(mModelOptions))
+			.withExactArgs({"Accept-Language" : "ab-CD"}, "4.0", mUriParameters)
 			.returns(oMetadataRequestor);
 		this.mock(ODataMetaModel.prototype).expects("fetchEntityContainer").withExactArgs(true);
 		oModelPrototypeMock.expects("initializeSecurityToken").withExactArgs();
 
 		// code under test
-		oModel = createModel("", {earlyRequests : true, annotationURI : ["my/annotations.xml"]});
+		oModel = this.createModel("",
+			{earlyRequests : true, annotationURI : ["my/annotations.xml"]});
 
 		assert.strictEqual(oModel.sServiceUrl, getServiceUrl());
 		assert.strictEqual(oModel.toString(), sClassName + ": " + getServiceUrl());
-		assert.strictEqual(oModel.mUriParameters, mModelOptions);
+		assert.strictEqual(oModel.mUriParameters, mUriParameters);
 		assert.strictEqual(oModel.getDefaultBindingMode(), BindingMode.TwoWay);
 		assert.strictEqual(oModel.isBindingModeSupported(BindingMode.OneTime), true);
 		assert.strictEqual(oModel.isBindingModeSupported(BindingMode.OneWay), true);
 		assert.strictEqual(oModel.isBindingModeSupported(BindingMode.TwoWay), true);
+		assert.strictEqual(oModel.bSharedRequests, false);
 		assert.deepEqual(oModel.aAllBindings, []);
-		assert.deepEqual(oModel.aLockedGroupLocks, []);
+		assert.strictEqual(oModel.aPrerenderingTasks, null);
 		oMetaModel = oModel.getMetaModel();
 		assert.ok(oMetaModel instanceof ODataMetaModel);
 		assert.strictEqual(oMetaModel.oRequestor, oMetadataRequestor);
 		assert.strictEqual(oMetaModel.sUrl, getServiceUrl() + "$metadata");
 		assert.deepEqual(oMetaModel.aAnnotationUris, ["my/annotations.xml"]);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("metadataUrlParams", function () {
+		var mUriParameters = {
+				"sap-client" : "279",
+				"sap-context-token" : "n/a"
+			};
+
+		this.mock(ODataModel.prototype).expects("buildQueryOptions")
+			.withExactArgs({}, false, true).returns(mUriParameters);
+		this.mock(_MetadataRequestor).expects("create")
+			.withExactArgs({"Accept-Language" : "ab-CD"}, "4.0", {
+				"sap-client" : "279",
+				"sap-context-token" : "20200716120000",
+				"sap-language" : "en"
+			});
+		this.mock(_Requestor).expects("create")
+			.withExactArgs(getServiceUrl(), sinon.match.object, {"Accept-Language" : "ab-CD"},
+				{"sap-client" : "279", "sap-context-token" : "n/a"}, "4.0")
+			.callThrough();
+
+		// code under test
+		this.createModel("", {
+			metadataUrlParams : {
+				"sap-context-token" : "20200716120000",
+				"sap-language" : "en"
+			}
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("sharedRequests", function (assert) {
+		var oModel;
+
+		// code under test
+		oModel = this.createModel("", {sharedRequests : true});
+
+		assert.strictEqual(oModel.getDefaultBindingMode(), BindingMode.OneWay);
+		assert.strictEqual(oModel.isBindingModeSupported(BindingMode.OneTime), true);
+		assert.strictEqual(oModel.isBindingModeSupported(BindingMode.OneWay), true);
+		assert.strictEqual(oModel.isBindingModeSupported(BindingMode.TwoWay), false);
+		assert.strictEqual(oModel.bSharedRequests, true);
+
+		[false, 0, "", undefined, 1, "X"].forEach(function (vSharedRequests) {
+			assert.throws(function () {
+				this.createModel("", {sharedRequests : vSharedRequests});
+			}, new Error("Value for sharedRequests must be true"));
+		});
 	});
 
 	//*********************************************************************************************
@@ -167,75 +219,81 @@ sap.ui.require([
 			oModel;
 
 		// code under test
-		oModel = createModel("", {earlyRequests : true});
+		oModel = this.createModel("", {earlyRequests : true});
 
 		assert.ok(oFetchEntityContainerExpectation.alwaysCalledOn(oModel.getMetaModel()));
 	});
 
 	//*********************************************************************************************
-	QUnit.test("supportReferences", function (assert) {
-		createModel("", {supportReferences : false});
+	QUnit.test("supportReferences", function () {
+		this.createModel("", {supportReferences : false});
 	});
 
 	//*********************************************************************************************
 	QUnit.test("unsupported OData version", function (assert) {
 		assert.throws(function () {
-			createModel("", {odataVersion : "foo"});
+			this.createModel("", {odataVersion : "foo"});
 		}, new Error("Unsupported value for parameter odataVersion: foo"));
 	});
 
 	//*********************************************************************************************
 	["2.0", "4.0"].forEach(function (sODataVersion) {
 		QUnit.test("create requestors for odataVersion: " + sODataVersion, function (assert) {
-			var oModel;
+			var fnMetadataRequestorCreateSpy, oModel, fnRequestorCreateSpy;
 
-			this.mock(_Requestor).expects("create")
+			fnRequestorCreateSpy = this.mock(_Requestor).expects("create")
 				.withExactArgs(getServiceUrl(), sinon.match.object, {"Accept-Language" : "ab-CD"},
 					sinon.match.object, sODataVersion)
-				.returns({});
-
-			this.mock(_MetadataRequestor).expects("create")
+				.returns({
+					checkForOpenRequests : function () {},
+					checkHeaderNames : function () {}
+				});
+			fnMetadataRequestorCreateSpy = this.mock(_MetadataRequestor).expects("create")
 				.withExactArgs({"Accept-Language" : "ab-CD"}, sODataVersion, sinon.match.object)
 				.returns({});
 
 			// code under test
-			oModel = createModel("", {odataVersion : sODataVersion});
+			oModel = this.createModel("", {odataVersion : sODataVersion});
 
 			assert.strictEqual(oModel.getODataVersion(), sODataVersion);
+			assert.notStrictEqual(fnRequestorCreateSpy.args[0][2],
+				fnMetadataRequestorCreateSpy.args[0][0]);
+			assert.strictEqual(fnRequestorCreateSpy.args[0][2], oModel.mHeaders);
+			assert.strictEqual(fnMetadataRequestorCreateSpy.args[0][0], oModel.mMetadataHeaders);
 		});
 	});
 
 	//*********************************************************************************************
 	QUnit.test("with serviceUrl params", function (assert) {
 		var oModel,
-			mModelOptions = {};
+			mUriParameters = {};
 
 		this.mock(ODataModel.prototype).expects("buildQueryOptions")
 			.withExactArgs({"sap-client" : "111"}, false, true)
-			.returns(mModelOptions);
+			.returns(mUriParameters);
 
 		// code under test
-		oModel = createModel("?sap-client=111");
+		oModel = this.createModel("?sap-client=111");
 
 		assert.strictEqual(oModel.sServiceUrl, getServiceUrl());
-		assert.strictEqual(oModel.mUriParameters, mModelOptions);
+		assert.strictEqual(oModel.mUriParameters, mUriParameters);
 	});
 
 	//*********************************************************************************************
 	QUnit.test("Model construction with group ID", function (assert) {
 		var oModel;
 
-		oModel = createModel();
+		oModel = this.createModel();
 		assert.strictEqual(oModel.getGroupId(), "$auto");
 
-		oModel = createModel("", {groupId : "$direct"});
+		oModel = this.createModel("", {groupId : "$direct"});
 		assert.strictEqual(oModel.getGroupId(), "$direct");
 
-		oModel = createModel("", {groupId : "$auto"});
+		oModel = this.createModel("", {groupId : "$auto"});
 		assert.strictEqual(oModel.getGroupId(), "$auto");
 
 		assert.throws(function () {
-			oModel = createModel("", {groupId : "foo"});
+			oModel = this.createModel("", {groupId : "foo"});
 		}, new Error("Group ID must be '$auto' or '$direct'"));
 	});
 
@@ -243,20 +301,20 @@ sap.ui.require([
 	QUnit.test("Model construction with update group ID", function (assert) {
 		var oModel;
 
-		oModel = createModel();
+		oModel = this.createModel();
 		assert.strictEqual(oModel.getUpdateGroupId(), "$auto");
 
-		oModel = createModel("", {groupId : "$direct"});
+		oModel = this.createModel("", {groupId : "$direct"});
 		assert.strictEqual(oModel.getUpdateGroupId(), "$direct");
 
-		oModel = createModel("", {updateGroupId : "$direct"});
+		oModel = this.createModel("", {updateGroupId : "$direct"});
 		assert.strictEqual(oModel.getUpdateGroupId(), "$direct");
 
-		oModel = createModel("", {groupId : "$direct", updateGroupId : "applicationId"});
+		oModel = this.createModel("", {groupId : "$direct", updateGroupId : "applicationId"});
 		assert.strictEqual(oModel.getUpdateGroupId(), "applicationId");
 
 		assert.throws(function () {
-			oModel = createModel("", {updateGroupId : "$foo"});
+			oModel = this.createModel("", {updateGroupId : "$foo"});
 		}, new Error("Invalid update group ID: $foo"));
 	});
 
@@ -274,16 +332,17 @@ sap.ui.require([
 			oModel;
 
 		// code under test
-		oModel = createModel("");
+		oModel = this.createModel("");
 		assert.deepEqual(oModel.mGroupProperties, oDefaultGroupProperties);
 
 		// code under test
-		oModel = createModel("", {groupProperties : oGroupProperties});
+		oModel = this.createModel("", {groupProperties : oGroupProperties});
 		assert.deepEqual(oModel.mGroupProperties,
-			jQuery.extend(oDefaultGroupProperties, oGroupProperties));
+			Object.assign(oDefaultGroupProperties, oGroupProperties));
 
 		// code under test
 		assert.strictEqual(oModel.getGroupProperty("$auto", "submit"), SubmitMode.Auto);
+		assert.strictEqual(oModel.getGroupProperty("$auto.foo", "submit"), SubmitMode.Auto);
 		assert.strictEqual(oModel.getGroupProperty("$direct", "submit"), SubmitMode.Direct);
 		assert.strictEqual(oModel.getGroupProperty("myGroup0", "submit"), SubmitMode.API);
 		assert.strictEqual(oModel.getGroupProperty("myGroup1", "submit"), SubmitMode.Auto);
@@ -318,14 +377,14 @@ sap.ui.require([
 				function (assert) {
 			assert.throws(function () {
 				// code under test
-				createModel("", {groupProperties : oFixture.groupProperties});
+				this.createModel("", {groupProperties : oFixture.groupProperties});
 			}, new Error(oFixture.error));
 		});
 	});
 
 	//*********************************************************************************************
 	QUnit.test("isAutoGroup", function (assert) {
-		var oModel = createModel("", {
+		var oModel = this.createModel("", {
 				groupProperties : {
 					"myAPIGroup" : {submit : SubmitMode.API},
 					"myAutoGroup" : {submit : SubmitMode.Auto},
@@ -335,6 +394,7 @@ sap.ui.require([
 
 		// code under test
 		assert.ok(oModel.isAutoGroup("$auto"));
+		assert.ok(oModel.isAutoGroup("$auto.foo"));
 		assert.notOk(oModel.isAutoGroup("Unknown"));
 		assert.ok(oModel.isAutoGroup("myAutoGroup"));
 		assert.notOk(oModel.isAutoGroup("myAPIGroup"));
@@ -343,7 +403,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("isDirectGroup", function (assert) {
-		var oModel = createModel("", {
+		var oModel = this.createModel("", {
 				groupProperties : {
 					"myAPIGroup" : {submit : SubmitMode.API},
 					"myAutoGroup" : {submit : SubmitMode.Auto},
@@ -363,22 +423,37 @@ sap.ui.require([
 	QUnit.test("Model construction with autoExpandSelect", function (assert) {
 		var oModel;
 
-		oModel = createModel();
+		oModel = this.createModel();
 		assert.strictEqual(oModel.bAutoExpandSelect, false);
 
-		oModel = createModel("", {autoExpandSelect : true});
+		oModel = this.createModel("", {autoExpandSelect : true});
 		assert.strictEqual(oModel.bAutoExpandSelect, true);
 
-		oModel = createModel("", {autoExpandSelect : false});
+		oModel = this.createModel("", {autoExpandSelect : false});
 		assert.strictEqual(oModel.bAutoExpandSelect, false);
 
 		assert.throws(function () {
-			createModel("", {autoExpandSelect : ""});
+			this.createModel("", {autoExpandSelect : ""});
 		}, new Error("Value for autoExpandSelect must be true or false"));
 
 		assert.throws(function () {
-			createModel("", {autoExpandSelect : "X"});
+			this.createModel("", {autoExpandSelect : "X"});
 		}, new Error("Value for autoExpandSelect must be true or false"));
+	});
+
+	//*********************************************************************************************
+	QUnit.test("Model construction with headers", function (assert) {
+		var mHeaders = {"abc" : "123", "accept-language" : "wx-YZ"},
+			oModel;
+
+		this.mock(ODataModel.prototype).expects("changeHttpHeaders")
+			.withExactArgs(mHeaders).callThrough();
+
+		// code under test
+		oModel = this.createModel("", {httpHeaders : mHeaders});
+
+		assert.deepEqual(oModel.mHeaders, mHeaders);
+		assert.deepEqual(oModel.mMetadataHeaders, mHeaders);
 	});
 
 	//*********************************************************************************************
@@ -386,16 +461,33 @@ sap.ui.require([
 		var oExpectedBind0,
 			oExpectedBind1,
 			oExpectedBind2,
+			oExpectedBind3,
+			oExpectedBind4,
 			oExpectedCreate = this.mock(_Requestor).expects("create"),
-			fnFetchEntityContainer = function () {},
-			fnFetchMetadata = function () {},
+			fnFetchEntityContainer = {},
+			fnFetchMetadata = {},
+			fnGetGroupProperty = {},
 			oModel,
 			oModelInterface,
-			oRequestor = {},
+			fnReportBoundMessages = {},
+			fnReportUnboundMessages = {},
+			oRequestor = {
+				checkForOpenRequests : function () {},
+				checkHeaderNames : function () {}
+			},
 			fnSubmitAuto = function () {};
 
 		oExpectedCreate
-			.withExactArgs(getServiceUrl(), sinon.match.object, {"Accept-Language" : "ab-CD"},
+			.withExactArgs(getServiceUrl(), {
+					fetchEntityContainer : sinon.match.same(fnFetchEntityContainer),
+					fetchMetadata : sinon.match.same(fnFetchMetadata),
+					fireSessionTimeout : sinon.match.func,
+					getGroupProperty : sinon.match.same(fnGetGroupProperty),
+					onCreateGroup : sinon.match.func,
+					reportBoundMessages : sinon.match.same(fnReportBoundMessages),
+					reportUnboundMessages : sinon.match.same(fnReportUnboundMessages)
+				},
+				{"Accept-Language" : "ab-CD"},
 				{"sap-client" : "123"}, "4.0")
 			.returns(oRequestor);
 		oExpectedBind0 = this.mock(ODataMetaModel.prototype.fetchEntityContainer).expects("bind")
@@ -403,32 +495,45 @@ sap.ui.require([
 		oExpectedBind1 = this.mock(ODataMetaModel.prototype.fetchObject).expects("bind")
 			.returns(fnFetchMetadata);
 		oExpectedBind2 = this.mock(ODataModel.prototype.getGroupProperty).expects("bind")
-			.returns(ODataModel.prototype.getGroupProperty);
+			.returns(fnGetGroupProperty);
+		oExpectedBind3 = this.mock(ODataModel.prototype.reportUnboundMessages).expects("bind")
+			.returns(fnReportUnboundMessages);
+		oExpectedBind4 = this.mock(ODataModel.prototype.reportBoundMessages).expects("bind")
+			.returns(fnReportBoundMessages);
 
 		// code under test
-		oModel = createModel("?sap-client=123");
+		oModel = this.createModel("?sap-client=123", {}, true);
 
 		assert.ok(oModel instanceof Model);
 		assert.strictEqual(oModel.oRequestor, oRequestor);
 		assert.strictEqual(oExpectedBind0.firstCall.args[0], oModel.oMetaModel);
 		assert.strictEqual(oExpectedBind1.firstCall.args[0], oModel.oMetaModel);
 		assert.strictEqual(oExpectedBind2.firstCall.args[0], oModel);
+		assert.strictEqual(oExpectedBind3.firstCall.args[0], oModel);
+		assert.strictEqual(oExpectedBind4.firstCall.args[0], oModel);
+		assert.strictEqual(oExpectedCreate.firstCall.args[1], oModel.oInterface);
 
 		this.mock(oModel._submitBatch).expects("bind")
-			.withExactArgs(sinon.match.same(oModel), "$auto")
+			.withExactArgs(sinon.match.same(oModel), "$auto", true)
 			.returns(fnSubmitAuto);
-		this.mock(sap.ui.getCore()).expects("addPrerenderingTask")
+		this.mock(oModel).expects("addPrerenderingTask")
 			.withExactArgs(fnSubmitAuto);
 
-		// code under test - call fnOnCreateGroup
+		// code under test - call onCreateGroup
 		oModelInterface = oExpectedCreate.firstCall.args[1];
-		oModelInterface.fnOnCreateGroup("$auto");
-		oModelInterface.fnOnCreateGroup("foo");
+		oModelInterface.onCreateGroup("$auto");
+		oModelInterface.onCreateGroup("foo");
+
+		this.mock(oModel).expects("fireEvent")
+			.withExactArgs("sessionTimeout");
+
+		// code under test - call fireSessionTimeout
+		oModelInterface.fireSessionTimeout();
 	});
 
 	//*********************************************************************************************
 	QUnit.test("Property access from ManagedObject w/o context binding", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel("", {}, true), // this test uses $batch w/ $auto
 			oControl = new TestControl({models : oModel}),
 			done = assert.async();
 
@@ -446,7 +551,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.skip("Property access from ManagedObject w/ context binding", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
 			oControl = new TestControl({models : oModel}),
 			done = assert.async();
 
@@ -465,7 +570,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("requestCanonicalPath", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
 			oEntityContext = Context.create(oModel, null, "/EMPLOYEES/42");
 
 		this.mock(oEntityContext).expects("requestCanonicalPath").withExactArgs()
@@ -479,20 +584,23 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.test("refresh", function (assert) {
 		var oError = new Error(),
-			oModel = createModel(),
+			oModel = this.createModel(),
 			oModelMock = this.mock(oModel),
 			oBaseContext = oModel.createBindingContext("/TEAMS('42')"),
 			oContext = Context.create(oModel, undefined, "/TEAMS('43')"),
 			oListBinding = oModel.bindList("/TEAMS"),
+			oListBindingMock = this.mock(oListBinding),
 			oListBinding2 = oModel.bindList("/TEAMS"),
 			oListBinding3 = oModel.bindList("TEAM_2_EMPLOYEES"),
+			oListBinding3Mock = this.mock(oListBinding3),
 			oRelativeContextBinding = oModel.bindContext("TEAM_2_MANAGER", oContext, {}),
 			oPropertyBinding = oModel.bindProperty("Name"),
-			oPropertyBinding2 = oModel.bindProperty("Team_Id");
+			oPropertyBinding2 = oModel.bindProperty("Team_Id"),
+			oPropertyBinding2Mock = this.mock(oPropertyBinding2);
 
 		oListBinding3.setContext(oBaseContext);
 		this.mock(oPropertyBinding2).expects("fetchCache");
-		this.mock(oPropertyBinding2).expects("checkUpdate");
+		this.mock(oPropertyBinding2).expects("checkUpdateInternal");
 		oPropertyBinding2.setContext(oBaseContext);
 
 		oListBinding.attachChange(function () {});
@@ -500,9 +608,9 @@ sap.ui.require([
 		oPropertyBinding.attachChange(function () {});
 		oPropertyBinding2.attachChange(function () {});
 		oRelativeContextBinding.attachChange(function () {});
-		this.mock(oListBinding).expects("refresh").withExactArgs("myGroup");
-		this.mock(oListBinding3).expects("refresh").withExactArgs("myGroup");
-		this.mock(oPropertyBinding2).expects("refresh").withExactArgs("myGroup");
+		oListBindingMock.expects("refresh").withExactArgs("myGroup");
+		oListBinding3Mock.expects("refresh").withExactArgs("myGroup");
+		oPropertyBinding2Mock.expects("refresh").withExactArgs("myGroup");
 		// check: only bindings with change event handler are refreshed
 		this.mock(oListBinding2).expects("refresh").never();
 		// check: no refresh on binding with relative path
@@ -513,18 +621,42 @@ sap.ui.require([
 		// code under test
 		oModel.refresh("myGroup");
 
+		oModelMock.expects("checkGroupId").never();
+		oModelMock.expects("getBindings").never();
+
+		// code under test
+		assert.throws(function () {
+			oModel.refresh(true);
+		}, new Error("Unsupported parameter bForceUpdate"));
+
 		oModelMock.expects("checkGroupId").withExactArgs("$Invalid").throws(oError);
 
 		// code under test
 		assert.throws(function () {
 			oModel.refresh("$Invalid");
 		}, oError);
+
+		oModelMock.expects("checkGroupId").withExactArgs("myGroup2");
+		oModelMock.expects("getBindings").withExactArgs().returns([oListBinding, oListBinding3,
+			oPropertyBinding, oPropertyBinding2, oRelativeContextBinding]);
+		oPropertyBinding2Mock.expects("refresh").withExactArgs("myGroup2");
+
+		oListBinding.suspend();
+		oListBinding2.suspend();
+		oListBinding3.suspend();
+
+		oListBindingMock.expects("refresh").withExactArgs(undefined);
+		oListBinding3Mock.expects("refresh").withExactArgs(undefined);
+
+		// code under test (ignore group ID for suspended bindings)
+		oModel.refresh("myGroup2");
+
 	});
 
 	//*********************************************************************************************
 	QUnit.test("oModel.aBindings modified during refresh", function (assert) {
 		var iCallCount = 0,
-			oModel = createModel(),
+			oModel = this.createModel(),
 			oListBinding = oModel.bindList("/TEAMS"),
 			oListBinding2 = oModel.bindList("/TEAMS");
 
@@ -548,45 +680,58 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.test("_submitBatch: success", function (assert) {
 		var oBatchResult = {},
-			oModel = createModel();
+			sGroupId = {/*string*/},
+			oModel = this.createModel();
 
-		this.mock(oModel.oRequestor).expects("submitBatch").withExactArgs("groupId")
-			.returns(Promise.resolve(oBatchResult));
+		this.mock(oModel.oRequestor).expects("submitBatch")
+			.withExactArgs(sinon.match.same(sGroupId))
+			.returns(SyncPromise.resolve(Promise.resolve(oBatchResult)));
 
 		// code under test
-		return oModel._submitBatch("groupId").then(function (oResult) {
+		return oModel._submitBatch(sGroupId).then(function (oResult) {
 			assert.strictEqual(oResult, oBatchResult);
 		});
 	});
 
 	//*********************************************************************************************
-	QUnit.test("_submitBatch, failure", function (assert) {
-		var oExpectedError = new Error("deliberate failure"),
-			oModel = createModel();
+	[undefined, false, true].forEach(function (bCatch) {
+		QUnit.test("_submitBatch, failure, bCatch: " + bCatch, function (assert) {
+			var oExpectedError = new Error("deliberate failure"),
+				oModel = this.createModel(),
+				oPromise;
 
-		this.mock(oModel.oRequestor).expects("submitBatch")
-			.withExactArgs("groupId")
-			.returns(Promise.reject(oExpectedError));
-		this.mock(oModel).expects("reportError")
-			.withExactArgs("$batch failed", sClassName, oExpectedError.message);
+			this.mock(oModel.oRequestor).expects("submitBatch")
+				.withExactArgs("groupId")
+				.returns(SyncPromise.resolve(Promise.reject(oExpectedError)));
+			this.mock(oModel).expects("reportError")
+				.withExactArgs("$batch failed", sClassName, oExpectedError);
 
-		// code under test
-		return oModel._submitBatch("groupId").then(function () {
-			assert.ok(false);
-		}, function (oError) {
-			assert.strictEqual(oError, oExpectedError);
+			// code under test
+			oPromise = oModel._submitBatch("groupId", bCatch).then(function (vResult) {
+				assert.ok(bCatch);
+				assert.strictEqual(vResult, undefined);
+			}, function (oError) {
+				assert.notOk(bCatch);
+				assert.strictEqual(oError, oExpectedError);
+			});
+
+			assert.ok(oPromise instanceof SyncPromise);
+
+			return oPromise;
 		});
 	});
 
 	//*********************************************************************************************
 	QUnit.test("submitBatch", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel("", {}, true),
 			oModelMock = this.mock(oModel),
 			oSubmitPromise = {};
 
-		oModelMock.expects("checkDeferredGroupId").withExactArgs("groupId");
+		oModelMock.expects("checkBatchGroupId").withExactArgs("groupId");
+		oModelMock.expects("isAutoGroup").withExactArgs("groupId").returns(false);
+		this.mock(oModel.oRequestor).expects("addChangeSet").withExactArgs("groupId");
 		oModelMock.expects("_submitBatch").never(); // not yet
-		this.mock(sap.ui.getCore()).expects("addPrerenderingTask").callsFake(function (fnCallback) {
+		oModelMock.expects("addPrerenderingTask").callsFake(function (fnCallback) {
 			setTimeout(function () {
 				// make sure that _submitBatch is called within fnCallback
 				oModelMock.expects("_submitBatch").withExactArgs("groupId")
@@ -598,7 +743,7 @@ sap.ui.require([
 		// code under test
 		return oModel.submitBatch("groupId").then(function (oResult) {
 			// this proves that submitBatch() returns a promise which is resolved with the result
-			// of _submitBatch(), which in reality is of course a promise itself
+			// of _submitBatch(), which in reality is of course a sync promise itself
 			assert.strictEqual(oResult, oSubmitPromise);
 		});
 	});
@@ -606,23 +751,53 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.test("submitBatch, invalid group ID", function (assert) {
 		var oError = new Error(),
-			oModel = createModel(),
+			oModel = this.createModel(),
 			oModelMock = this.mock(oModel);
 
 		oModelMock.expects("_submitBatch").never();
-		oModelMock.expects("checkDeferredGroupId").withExactArgs("$auto").throws(oError);
+		oModelMock.expects("checkBatchGroupId").withExactArgs("$direct").throws(oError);
 
 		assert.throws(function () {
 			//code under test
-			oModel.submitBatch("$auto");
+			oModel.submitBatch("$direct");
 		}, oError);
 	});
 
 	//*********************************************************************************************
-	QUnit.test("resetChanges with group ID", function (assert) {
-		var oModel = createModel();
+	QUnit.test("submitBatch: $auto", function (assert) {
+		var oModel = this.createModel("", {}, true),
+			oModelMock = this.mock(oModel),
+			oSubmitPromise = {};
 
-		this.mock(oModel).expects("checkDeferredGroupId").withExactArgs("groupId");
+		oModelMock.expects("checkBatchGroupId").withExactArgs("groupId");
+		oModelMock.expects("isAutoGroup").withExactArgs("groupId").returns(true);
+		this.mock(oModel.oRequestor).expects("relocateAll")
+			.withExactArgs("$parked.groupId", "groupId");
+		this.mock(oModel.oRequestor).expects("addChangeSet").never();
+		oModelMock.expects("_submitBatch").never(); // not yet
+		oModelMock.expects("addPrerenderingTask").callsFake(function (fnCallback) {
+			setTimeout(function () {
+				// make sure that _submitBatch is called within fnCallback
+				oModelMock.expects("_submitBatch").withExactArgs("groupId")
+					.returns(oSubmitPromise);
+				fnCallback();
+			}, 0);
+		});
+
+		// code under test
+		return oModel.submitBatch("groupId").then(function (oResult) {
+			// this proves that submitBatch() returns a promise which is resolved with the result
+			// of _submitBatch(), which in reality is of course a sync promise itself
+			assert.strictEqual(oResult, oSubmitPromise);
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("resetChanges with group ID", function () {
+		var oModel = this.createModel();
+
+		this.mock(oModel).expects("checkBatchGroupId").withExactArgs("groupId");
+		this.mock(oModel).expects("isAutoGroup").withExactArgs("groupId").returns(false);
 		this.mock(oModel.oRequestor).expects("cancelChanges").withExactArgs("groupId");
 
 		// code under test
@@ -631,15 +806,38 @@ sap.ui.require([
 	// TODO reset the POST requests in this group
 
 	//*********************************************************************************************
-	QUnit.test("resetChanges w/o group ID", function (assert) {
-		var oModel = createModel("", {updateGroupId : "updateGroupId"}),
+	QUnit.test("resetChanges with $auto group", function () {
+		var oModel = this.createModel("", {updateGroupId : "$auto"}),
+			oBinding1 = oModel.bindList("/EMPLOYEES"),
+			oBinding2 = oModel.bindProperty("/EMPLOYEES('1')/AGE"),
+			oBinding3 = oModel.bindContext("/EMPLOYEES('1')", undefined, {
+				$$updateGroupId : "anotherGroup"
+			}),
+			oRequestorMock = this.mock(oModel.oRequestor);
+
+		this.mock(oModel).expects("checkBatchGroupId").withExactArgs("$auto");
+		this.mock(oModel).expects("isAutoGroup").withExactArgs("$auto").returns(true);
+		oRequestorMock.expects("cancelChanges").withExactArgs("$parked.$auto");
+		oRequestorMock.expects("cancelChanges").withExactArgs("$auto");
+		this.mock(oBinding1).expects("resetInvalidDataState").withExactArgs();
+		this.mock(oBinding2).expects("resetInvalidDataState").withExactArgs();
+		this.mock(oBinding3).expects("resetInvalidDataState").never();
+
+		// code under test
+		oModel.resetChanges("$auto");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("resetChanges w/o group ID", function () {
+		var oModel = this.createModel("", {updateGroupId : "updateGroupId"}),
 			oBinding1 = oModel.bindList("/EMPLOYEES"),
 			oBinding2 = oModel.bindProperty("/EMPLOYEES('1')/AGE"),
 			oBinding3 = oModel.bindContext("/EMPLOYEES('1')", undefined, {
 				$$updateGroupId : "anotherGroup"
 			});
 
-		this.mock(oModel).expects("checkDeferredGroupId").withExactArgs("updateGroupId");
+		this.mock(oModel).expects("checkBatchGroupId").withExactArgs("updateGroupId");
+		this.mock(oModel).expects("isAutoGroup").withExactArgs("updateGroupId").returns(false);
 		this.mock(oModel.oRequestor).expects("cancelChanges").withExactArgs("updateGroupId");
 		this.mock(oBinding1).expects("resetInvalidDataState").withExactArgs();
 		this.mock(oBinding2).expects("resetInvalidDataState").withExactArgs();
@@ -652,9 +850,9 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.test("resetChanges, invalid group ID", function (assert) {
 		var oError = new Error(),
-			oModel = createModel();
+			oModel = this.createModel();
 
-		this.mock(oModel).expects("checkDeferredGroupId").withExactArgs("$auto").throws(oError);
+		this.mock(oModel).expects("checkBatchGroupId").withExactArgs("$auto").throws(oError);
 		this.mock(oModel.oRequestor).expects("cancelChanges").never();
 
 		assert.throws(function () {
@@ -664,7 +862,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("forbidden", function (assert) {
-		var oModel = createModel();
+		var oModel = this.createModel();
 
 		assert.throws(function () { //TODO implement
 			oModel.bindTree();
@@ -701,7 +899,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("events", function (assert) {
-		var oModel = createModel();
+		var oModel = this.createModel();
 
 		assert.throws(function () {
 			oModel.attachParseError();
@@ -721,6 +919,30 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
+	QUnit.test("event: sessionTimeout", function (assert) {
+		var oModel = this.createModel(),
+			oModelMock = this.mock(oModel),
+			fnFunction = {},
+			oListener = {};
+
+		oModelMock.expects("attachEvent")
+			.withExactArgs("sessionTimeout", sinon.match.same(fnFunction),
+				sinon.match.same(oListener))
+			.returns(oModel);
+
+		// code under test
+		assert.strictEqual(oModel.attachSessionTimeout(fnFunction, oListener), oModel);
+
+		oModelMock.expects("detachEvent")
+			.withExactArgs("sessionTimeout", sinon.match.same(fnFunction),
+				sinon.match.same(oListener))
+			.returns(oModel);
+
+		// code under test
+		assert.strictEqual(oModel.detachSessionTimeout(fnFunction, oListener), oModel);
+	});
+
+	//*********************************************************************************************
 	[{
 		stack : "Failure\n    at _Helper.createError", // like Chrome
 		message : "Failure\n    at _Helper.createError"
@@ -730,28 +952,28 @@ sap.ui.require([
 	}, {
 		stack : "_Helper.createError@_Helper.js", // like FF
 		message : "Failure\n_Helper.createError@_Helper.js"
-	}].forEach(function (oFixture) {
-		QUnit.test("reportError", function (assert) {
+	}].forEach(function (oFixture, i) {
+		QUnit.test("reportError, i:" + i, function () {
 			var sClassName = "sap.ui.model.odata.v4.ODataPropertyBinding",
-				oError = {
-					message : "Failure",
-					stack : oFixture.stack
-				},
+				oError = new Error("Failure"),
 				sLogMessage = "Failed to read path /Product('1')/Unknown",
-				oMessageManager = sap.ui.getCore().getMessageManager(),
-				oModel = createModel();
+				oModel = this.createModel();
 
+			oError.stack = oFixture.stack;
 			this.oLogMock.expects("error").withExactArgs(sLogMessage, oFixture.message, sClassName)
 				.twice();
-			this.mock(oMessageManager).expects("addMessages")
+			this.mock(oModel).expects("reportBoundMessages").never();
+			this.mock(oModel).expects("reportUnboundMessages")
 				.once()// add each error only once to the MessageManager
-				.withExactArgs(sinon.match(function (oMessage) {
-					return oMessage instanceof Message
-						&& oMessage.message === oError.message
-						&& oMessage.processor === oModel
-						&& oMessage.technical === true
-						&& oMessage.type === "Error";
-				}));
+				.withExactArgs([{
+					additionalTargets : undefined,
+					code : undefined,
+					message : oError.message,
+					technical : true,
+					"@$ui5.error" : sinon.match.same(oError),
+					"@$ui5.originalMessage" : sinon.match.same(oError),
+					numericSeverity : 4 // Error
+				}]);
 
 			// code under test
 			oModel.reportError(sLogMessage, sClassName, oError);
@@ -760,54 +982,355 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	QUnit.test("reportError on canceled error", function (assert) {
-		var oError = {canceled : true, message : "Canceled", stack: "Canceled\n    at foo.bar"};
+[true, false].forEach(function (bIgnoreTopLevel) {
+	var sTitle = "reportError: JSON response, top-level unbound and details, $ignoreTopLevel = "
+			+ bIgnoreTopLevel;
 
-		this.oLogMock.expects("debug")
-			.withExactArgs("Failure", "Canceled\n    at foo.bar", "class");
-		this.mock(sap.ui.getCore().getMessageManager()).expects("addMessages").never();
+	QUnit.test(sTitle, function () {
+		var sClassName = "sap.ui.model.odata.v4.ODataPropertyBinding",
+			sResourcePath = "/Product('1')",
+			oError = {
+				"error" : {
+					"@Common.longtextUrl" : "top/longtext",
+					"code" : "top",
+					"$ignoreTopLevel" : bIgnoreTopLevel,
+					"details" : [{
+						"@com.sap.vocabularies.Common.v1.longtextUrl" : "bound/longtext",
+						"@com.sap.vocabularies.Common.v1.numericSeverity" : 3,
+						"code" : "bound",
+						"message" : "Value must be greater than 0",
+						"target" : "Quantity"
+					}, {
+						"@Common.numericSeverity" : 3,
+						"code" : "unbound",
+						"message" : "some unbound message"
+					}, {
+						"@Common.additionalTargets" : ["ProductID", "Name"],
+						"@Common.numericSeverity" : 2,
+						"@foo" : "bar",
+						"code" : "bound",
+						"message" : "some other Quantity message",
+						"target" : "Quantity"
+					}],
+					"message" : "Error occurred while processing the request"
+				},
+				"message" : "Failure",
+				"requestUrl" : "/service/Product",
+				"resourcePath" : sResourcePath + "?foo=bar"
+			},
+			oHelperMock = this.mock(_Helper),
+			sLogMessage = "Failed to read path /Product('1')/Unknown",
+			oModel = this.createModel(),
+			aUnboundMessages = [{
+				additionalTargets : undefined,
+				code : oError.error.code,
+				longtextUrl : "/service/Product/top/longtext",
+				message : oError.error.message,
+				numericSeverity : 4, // Error
+				technical : true,
+				"@$ui5.error" : sinon.match.same(oError),
+				"@$ui5.originalMessage" : sinon.match.same(oError.error)
+			}, {
+				additionalTargets : undefined,
+				code : "unbound",
+				message : "some unbound message",
+				numericSeverity : 3,
+				technical : undefined,
+				"@$ui5.error" : sinon.match.same(oError),
+				"@$ui5.originalMessage" : sinon.match.same(oError.error.details[1])
+			}];
+
+		this.oLogMock.expects("error").withExactArgs(sLogMessage, oError.message, sClassName);
+		oHelperMock.expects("getAdditionalTargets").exactly(bIgnoreTopLevel ? 0 : 1)
+			.withExactArgs(sinon.match.same(oError.error))
+			.returns(undefined);
+		oHelperMock.expects("getAdditionalTargets")
+			.withExactArgs(sinon.match.same(oError.error.details[0]))
+			.returns(undefined);
+		oHelperMock.expects("getAdditionalTargets")
+			.withExactArgs(sinon.match.same(oError.error.details[1]))
+			.returns(undefined);
+		oHelperMock.expects("getAdditionalTargets")
+			.withExactArgs(sinon.match.same(oError.error.details[2]))
+			.returns("~additionalTargets~");
+		oHelperMock.expects("makeAbsolute")
+			.withExactArgs("top/longtext", oError.requestUrl)
+			.exactly(bIgnoreTopLevel ? 0 : 1)
+			.returns("/service/Product/top/longtext");
+		oHelperMock.expects("makeAbsolute")
+			.withExactArgs("bound/longtext", oError.requestUrl)
+			.returns("/service/Product/bound/longtext");
+		this.mock(oModel).expects("reportUnboundMessages")
+			.withExactArgs(bIgnoreTopLevel ? aUnboundMessages.slice(1) : aUnboundMessages);
+		this.mock(oModel).expects("reportBoundMessages")
+			.withExactArgs(sResourcePath, {
+				"" : [{
+					additionalTargets : undefined,
+					code : "bound",
+					longtextUrl : "/service/Product/bound/longtext",
+					message : "Value must be greater than 0",
+					numericSeverity : 3,
+					target : "Quantity",
+					technical : undefined,
+					transition : true,
+					"@$ui5.error" : sinon.match.same(oError),
+					"@$ui5.originalMessage" : sinon.match.same(oError.error.details[0])
+				}, {
+					additionalTargets : "~additionalTargets~",
+					code : "bound",
+					message : "some other Quantity message",
+					numericSeverity : 2,
+					target : "Quantity",
+					technical : undefined,
+					transition : true,
+					"@$ui5.error" : sinon.match.same(oError),
+					"@$ui5.originalMessage" : sinon.match.same(oError.error.details[2])
+				}]
+			}, []);
 
 		// code under test
-		createModel().reportError("Failure", "class", oError);
+		oModel.reportError(sLogMessage, sClassName, oError);
+	});
+});
+
+	//*********************************************************************************************
+	QUnit.test("reportError: invoked by an action", function () {
+		var sClassName = "sap.ui.model.odata.v4.ODataPropertyBinding",
+			aBoundMessages = [{
+				additionalTargets : undefined,
+				code :  "param",
+				message : "TeamID is wrong",
+				numericSeverity : 3,
+				target : "/Employees('1')/service.ChangeEmployee(...)/$Parameter/TeamID",
+				technical : undefined,
+				transition : true
+			}, {
+				additionalTargets : undefined,
+				code :  "bindingParam",
+				message : "Status is not there",
+				numericSeverity : 3,
+				target : "/Employees('1')/STATUS",
+				technical : undefined,
+				transition : true
+			}],
+			oError = {
+				code : "top",
+				error : {
+					details : [{
+						"@.numericSeverity" : 3,
+						code :  "param",
+						message : "TeamID is wrong",
+						target : "/Employees('1')/service.ChangeEmployee(...)/$Parameter/TeamID"
+					}, {
+						"@.numericSeverity" : 3,
+						code :  "bindingParam",
+						message : "Status is not there",
+						target : "/Employees('1')/STATUS"
+					}]
+				},
+				message : "Failure",
+				requestUrl : "/Employees('1')/service.ChangeTeamOfEmployee(...)",
+				resourcePath : "Employees('1')"
+			},
+			sLogMessage = "Action could not be executed",
+			oModel = this.createModel();
+
+		aBoundMessages[0]["@$ui5.error"] = sinon.match.same(oError);
+		aBoundMessages[0]["@$ui5.originalMessage"] = Object.assign({}, oError.error.details[0]);
+		aBoundMessages[1]["@$ui5.error"] = sinon.match.same(oError);
+		aBoundMessages[1]["@$ui5.originalMessage"] = Object.assign({}, oError.error.details[1]);
+
+		this.oLogMock.expects("error").withExactArgs(sLogMessage, oError.message, sClassName);
+		this.mock(_Helper).expects("makeAbsolute").never();
+		this.mock(oModel).expects("reportBoundMessages")
+			.withExactArgs("Employees('1')", {"" : aBoundMessages}, []);
+		this.mock(oModel).expects("reportUnboundMessages").once(/* don't care*/);
+
+		// code under test
+		oModel.reportError(sLogMessage, sClassName, oError);
 	});
 
 	//*********************************************************************************************
-	QUnit.test("reportError on canceled error, no debug log", function (assert) {
-		var oError = {canceled : "noDebugLog"};
+	QUnit.test("reportError: JSON response, top-level bound, no details", function () {
+		var sClassName = "sap.ui.model.odata.v4.ODataPropertyBinding",
+			oError = {
+				"error" : {
+					"code" : "top",
+					"message" : "Value must be greater than 0",
+					"target" : "Quantity",
+					"@foo.additionalTargets" : ["ProductID"]
+				},
+				"message" : "Failure",
+				"resourcePath" : "/Product('1')"
+			},
+			sLogMessage = "Failed to read path /Product('1')/Unknown",
+			oModel = this.createModel();
 
-		this.oLogMock.expects("debug").never();
-		this.mock(sap.ui.getCore().getMessageManager()).expects("addMessages").never();
+		this.oLogMock.expects("error").withExactArgs(sLogMessage, oError.message, sClassName);
+		this.mock(_Helper).expects("getAdditionalTargets")
+			.withExactArgs(sinon.match.same(oError.error)).returns("~additionalTargets~");
+		this.mock(oModel).expects("reportUnboundMessages")
+			.withExactArgs([]);
+		this.mock(oModel).expects("reportBoundMessages")
+			.withExactArgs(oError.resourcePath, {"" : [{
+				additionalTargets : "~additionalTargets~",
+				code : "top",
+				message : "Value must be greater than 0",
+				numericSeverity : 4, // Error
+				target : "Quantity",
+				technical : true,
+				transition : true,
+				"@$ui5.error" : sinon.match.same(oError),
+				"@$ui5.originalMessage" : sinon.match.same(oError.error)
+			}]}, []);
 
 		// code under test
-		createModel().reportError("Failure", "class", oError);
+		oModel.reportError(sLogMessage, sClassName, oError);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("reportError: JSON response, top-level bound to query option", function () {
+		var sClassName = "sap.ui.model.odata.v4.ODataPropertyBinding",
+			oError = {
+				"error" : {
+					"@Common.longtextUrl" : "/long/text",
+					"code" : "top",
+					"message" : "Invalid token 'name' at position '1'",
+					"target" : "$filter"
+				},
+				"message" : "Failure",
+				"requestUrl" : "/service/SalesOrderList",
+				"resourcePath" : "/SalesOrderList"
+			},
+			sLogMessage = "Failed to read path /SalesOrderList?$filter=name eq 'Hugo'",
+			oModel = this.createModel();
+
+		this.oLogMock.expects("error").withExactArgs(sLogMessage, oError.message, sClassName);
+		this.mock(oModel).expects("reportBoundMessages").never();
+		this.mock(oModel).expects("reportUnboundMessages")
+			.withExactArgs([{
+				additionalTargets : undefined,
+				code : "top",
+				message : "$filter: Invalid token 'name' at position '1'",
+				longtextUrl : "/long/text",
+				numericSeverity : 4, // Error
+				technical : true,
+				"@$ui5.error" : sinon.match.same(oError),
+				"@$ui5.originalMessage" : sinon.match.same(oError.error)
+			}]);
+
+		// code under test
+		oModel.reportError(sLogMessage, sClassName, oError);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("reportError on canceled error", function () {
+		var oError = {canceled : true, message : "Canceled", stack: "Canceled\n    at foo.bar"},
+			oModel = this.createModel();
+
+		this.oLogMock.expects("debug")
+			.withExactArgs("Failure", "Canceled\n    at foo.bar", "class");
+		this.mock(oModel).expects("fireMessageChange").never();
+
+		// code under test
+		oModel.reportError("Failure", "class", oError);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("reportError on canceled error, no debug log", function () {
+		var oError = {canceled : "noDebugLog"},
+			oModel = this.createModel();
+
+		this.oLogMock.expects("debug").never();
+		this.mock(oModel).expects("fireMessageChange").never();
+
+		// code under test
+		oModel.reportError("Failure", "class", oError);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("reportError: no message for $reported", function () {
+		var sClassName = "class",
+			oError = {$reported : true, message : "Reported"},
+			sLogMessage = "Failure",
+			oModel = this.createModel();
+
+		this.oLogMock.expects("error").withExactArgs(sLogMessage, oError.message, sClassName);
+		this.mock(oModel).expects("fireMessageChange").never();
+
+		// code under test
+		oModel.reportError(sLogMessage, sClassName, oError);
 	});
 
 	//*********************************************************************************************
 	QUnit.test("destroy", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
 			oModelPrototypeMock = this.mock(Model.prototype);
 
+		this.mock(oModel.oRequestor).expects("destroy").withExactArgs();
 		oModelPrototypeMock.expects("destroy").on(oModel).withExactArgs(1, 2, 3).returns("foo");
 		oModelPrototypeMock.expects("destroy").on(oModel.getMetaModel()).withExactArgs();
 
 		// code under test
 		assert.strictEqual(oModel.destroy(1, 2, 3), "foo");
+
+		assert.strictEqual(oModel.mHeaders, undefined);
+		assert.strictEqual(oModel.mMetadataHeaders, undefined);
 	});
 
 	//*********************************************************************************************
 	QUnit.test("hasPendingChanges", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
+			oModelMock = this.mock(oModel),
+			oRequestorMock = this.mock(oModel.oRequestor),
 			oResult = {};
 
-		this.mock(oModel.oRequestor).expects("hasPendingChanges").withExactArgs().returns(oResult);
+		oModelMock.expects("checkBatchGroupId").never();
+		oRequestorMock.expects("hasPendingChanges").withExactArgs(undefined).returns(oResult);
 
-		// code under test
+		// code under test (all groups)
 		assert.strictEqual(oModel.hasPendingChanges(), oResult);
+
+		oModelMock.expects("checkBatchGroupId").withExactArgs("update");
+		oModelMock.expects("isAutoGroup").withExactArgs("update").returns(false);
+		oRequestorMock.expects("hasPendingChanges").withExactArgs("update").returns(oResult);
+
+		// code under test (only given API group)
+		assert.strictEqual(oModel.hasPendingChanges("update"), oResult);
+
+		oModelMock.expects("checkBatchGroupId").withExactArgs("$auto");
+		oModelMock.expects("isAutoGroup").withExactArgs("$auto").returns(true);
+		oRequestorMock.expects("hasPendingChanges").withExactArgs("$parked.$auto").returns(true);
+
+		// code under test ($auto (check also parked))
+		assert.strictEqual(oModel.hasPendingChanges("$auto"), true);
+
+		oModelMock.expects("checkBatchGroupId").withExactArgs("$auto");
+		oModelMock.expects("isAutoGroup").withExactArgs("$auto").returns(true);
+		oRequestorMock.expects("hasPendingChanges").withExactArgs("$parked.$auto").returns(false);
+		oRequestorMock.expects("hasPendingChanges").withExactArgs("$auto").returns(oResult);
+
+		// code under test ($auto (check also parked))
+		assert.strictEqual(oModel.hasPendingChanges("$auto"), oResult);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("hasPendingChanges, invalid groupId", function (assert) {
+		var oError = new Error("Invalid batch group"),
+			oModel = this.createModel(),
+			oModelMock = this.mock(oModel);
+
+		oModelMock.expects("checkBatchGroupId").withExactArgs("").throws(oError);
+
+		assert.throws(function () {
+			// code under test (invalid groupId)
+			oModel.hasPendingChanges("");
+		}, oError);
 	});
 
 	//*********************************************************************************************
 	QUnit.test("getDependentBindings: binding", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
 			oParentBinding = {},
 			oContext = Context.create(oModel, oParentBinding, "/absolute"),
 			oBinding = new Binding(oModel, "relative", oContext);
@@ -836,7 +1359,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("getDependentBindings: base context", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
 			oParentBinding = {},
 			oContext = new BaseContext(oModel, "/foo"),
 			oBinding = new Binding(oModel, "relative", oContext);
@@ -852,7 +1375,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("getDependentBindings: context", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
 			oParentContext = Context.create(oModel, null, "/absolute"),
 			oBinding = new Binding(oModel, "relative", oParentContext);
 
@@ -874,10 +1397,10 @@ sap.ui.require([
 		"/foo",
 		"/EMPLOYEES('4711')/#com.sap.foo.bar.AcFoo",
 		"/EMPLOYEES('4711')/#com.sap.foo.bar.AcFoo/Title"
-	].forEach(function(sPath) {
+	].forEach(function (sPath) {
 		QUnit.test("createBindingContext - absolute path, no context " + sPath, function (assert) {
 			var oBindingContext,
-				oModel = createModel();
+				oModel = this.createModel();
 
 			// code under test
 			oBindingContext = oModel.createBindingContext(sPath);
@@ -897,13 +1420,13 @@ sap.ui.require([
 	}, {
 		entityPath : "/foo",
 		propertyPath : "#com.sap.foo.bar.AcBar/Title"
-	}].forEach(function(oFixture) {
+	}].forEach(function (oFixture) {
 		var sResolvedPath = oFixture.entityPath + "/" + oFixture.propertyPath,
 			sTitle = "createBindingContext - relative path and context " + sResolvedPath;
 
 		QUnit.test(sTitle, function (assert) {
 			var oBindingContext,
-				oModel = createModel(),
+				oModel = this.createModel(),
 				oModelMock = this.mock(oModel),
 				oContext = new BaseContext(oModel, oFixture.entityPath);
 
@@ -960,7 +1483,7 @@ sap.ui.require([
 			}
 			QUnit.test("createBindingContext - go to metadata " + sPath, function (assert) {
 				var oContext = {},
-					oModel = createModel(),
+					oModel = this.createModel(),
 					oMetaContext = {},
 					oMetaModel = oModel.getMetaModel(),
 					oMetaModelMock = this.mock(oMetaModel),
@@ -980,7 +1503,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("createBindingContext - error cases", function (assert) {
-		var oModel = createModel(),
+		var oModel = this.createModel(),
 			oEntityContext = Context.create(oModel, null, "/EMPLOYEES/42");
 
 		assert.throws(function () {
@@ -1000,11 +1523,13 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("checkGroupId", function (assert) {
-		var oModel = createModel();
+		var oModel = this.createModel();
 
 		// valid group IDs
 		oModel.checkGroupId("myGroup");
 		oModel.checkGroupId("$auto");
+		oModel.checkGroupId("$auto.foo");
+		oModel.checkGroupId("$auto.1");
 		oModel.checkGroupId("$direct");
 		oModel.checkGroupId(undefined);
 		oModel.checkGroupId("myGroup", true);
@@ -1030,158 +1555,45 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	QUnit.test("checkDeferredGroupId", function (assert) {
-		var oModel = createModel("", {
-				groupProperties : {
-					"myAPIGroup" : {submit : SubmitMode.API},
-					"myAutoGroup" : {submit : SubmitMode.Auto},
-					"myDirectGroup" : {submit : SubmitMode.Direct}
-				}
-			});
+	QUnit.test("checkBatchGroupId: success", function () {
+		var sGroupId = {/*string*/},
+			oModel = this.createModel();
 
-		// valid group IDs
-		// code under test
-		assert.strictEqual(oModel.checkDeferredGroupId("myAPIGroup"), undefined);
-
-		// invalid group IDs, others already tested by checkGroupId
-		["myAutoGroup", "myDirectGroup"].forEach(function (sGroupId) {
-			assert.throws(function () {
-				// code under test
-				oModel.checkDeferredGroupId(sGroupId);
-			}, new Error("Group ID is not deferred: " + sGroupId));
-		});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("buildBindingParameters, $$aggregation", function (assert) {
-		var aAggregation = [],
-			aAllowed = ["$$aggregation"],
-			oModel = createModel(),
-			mParameters = {$$aggregation : aAggregation},
-			mResult;
+		this.mock(oModel).expects("checkGroupId").withExactArgs(sinon.match.same(sGroupId));
+		this.mock(oModel).expects("isDirectGroup").withExactArgs(sinon.match.same(sGroupId))
+			.returns(false);
 
 		// code under test
-		mResult = oModel.buildBindingParameters(mParameters, aAllowed);
-
-		assert.deepEqual(mResult, mParameters);
-		assert.strictEqual(mResult.$$aggregation, aAggregation);
+		oModel.checkBatchGroupId(sGroupId);
 	});
 
 	//*********************************************************************************************
-	QUnit.test("buildBindingParameters, $$groupId", function (assert) {
-		var aAllowedParams = ["$$groupId"],
-			oModel = createModel();
+	QUnit.test("checkBatchGroupId: checkGroupId fails", function (assert) {
+		var oError = new Error(),
+			sGroupId = {/*string*/},
+			oModel = this.createModel();
 
-		assert.deepEqual(oModel.buildBindingParameters(undefined), {});
-		assert.deepEqual(oModel.buildBindingParameters({}), {});
-		assert.deepEqual(oModel.buildBindingParameters({$$groupId : "$auto"}, aAllowedParams),
-			{$$groupId : "$auto"});
-		assert.deepEqual(oModel.buildBindingParameters(
-			{$$groupId : "$direct", custom : "foo"}, aAllowedParams), {$$groupId : "$direct"});
+		this.mock(oModel).expects("checkGroupId").withExactArgs(sinon.match.same(sGroupId))
+			.throws(oError);
+		this.mock(oModel).expects("isDirectGroup").never();
 
 		assert.throws(function () {
-			oModel.buildBindingParameters({$$unsupported : "foo"});
-		}, new Error("Unsupported binding parameter: $$unsupported"));
-
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$groupId : ""}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$groupId': "));
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$groupId : "~invalid"}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$groupId': ~invalid"));
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$groupId : "$auto"});
-		}, new Error("Unsupported binding parameter: $$groupId"));
+			// code under test
+			oModel.checkBatchGroupId(sGroupId);
+		}, oError);
 	});
 
 	//*********************************************************************************************
-	QUnit.test("buildBindingParameters, $$inheritExpandSelect", function (assert) {
-		var aAllowedParams = ["$$inheritExpandSelect"],
-			oModel = createModel();
+	QUnit.test("checkBatchGroupId: fails due to isDirectGroup", function (assert) {
+		var oModel = this.createModel();
+
+		this.mock(oModel).expects("checkGroupId").withExactArgs("foo");
+		this.mock(oModel).expects("isDirectGroup").withExactArgs("foo").returns(true);
 
 		assert.throws(function () {
-			oModel.buildBindingParameters({$$inheritExpandSelect : undefined}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$inheritExpandSelect': undefined"));
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$inheritExpandSelect : "foo"}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$inheritExpandSelect': foo"));
-
-		assert.deepEqual(oModel.buildBindingParameters({$$inheritExpandSelect : true},
-				aAllowedParams),
-			{$$inheritExpandSelect : true});
-		assert.deepEqual(oModel.buildBindingParameters({$$inheritExpandSelect : false},
-				aAllowedParams),
-			{$$inheritExpandSelect : false});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("buildBindingParameters, $$operationMode", function (assert) {
-		var aAllowedParams = ["$$operationMode"],
-			oModel = createModel();
-
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$operationMode : "Client"}, aAllowedParams);
-		}, new Error("Unsupported operation mode: Client"));
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$operationMode : SubmitMode.Auto}, aAllowedParams);
-		}, new Error("Unsupported operation mode: Auto"));
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$operationMode : "any"}, aAllowedParams);
-		}, new Error("Unsupported operation mode: any"));
-
-		assert.deepEqual(oModel.buildBindingParameters({$$operationMode : "Server"},
-				aAllowedParams),
-			{$$operationMode : "Server"});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("buildBindingParameters, $$ownRequest", function (assert) {
-		var aAllowedParams = ["$$ownRequest"],
-			oModel = createModel();
-
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$ownRequest : "foo"}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$ownRequest': foo"));
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$ownRequest : false}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$ownRequest': false"));
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$ownRequest : undefined}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$ownRequest': undefined"));
-
-		assert.deepEqual(oModel.buildBindingParameters({$$ownRequest : true},
-				aAllowedParams),
-			{$$ownRequest : true});
-	});
-
-	//*********************************************************************************************
-	QUnit.test("buildBindingParameters, $$updateGroupId", function (assert) {
-		var aAllowedParams = ["$$updateGroupId"],
-			oModel = createModel();
-
-		assert.deepEqual(oModel.buildBindingParameters({$$updateGroupId : "myGroup"},
-				aAllowedParams),
-			{$$updateGroupId : "myGroup"});
-		assert.deepEqual(oModel.buildBindingParameters(
-			{$$updateGroupId : "$direct", custom : "foo"}, aAllowedParams),
-			{$$updateGroupId : "$direct"});
-
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$unsupported : "foo"}, aAllowedParams);
-		}, new Error("Unsupported binding parameter: $$unsupported"));
-
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$updateGroupId : "~invalid"}, aAllowedParams);
-		}, new Error("Unsupported value for binding parameter '$$updateGroupId': ~invalid"));
-	});
-
-	//*********************************************************************************************
-	QUnit.test("buildBindingParameters, unknown $$-parameter", function (assert) {
-		var oModel = createModel();
-
-		assert.throws(function () {
-			oModel.buildBindingParameters({$$someName : "~"}, ["$$someName"]);
-		}, new Error("Unknown binding-specific parameter: $$someName"));
+			// code under test
+			oModel.checkBatchGroupId("foo");
+		}, new Error("Group ID does not use batch requests: foo"));
 	});
 
 	//*********************************************************************************************
@@ -1218,6 +1630,13 @@ sap.ui.require([
 	}, {
 		mParameters : {"sap-client" : "111"},
 		bSapAllowed : true
+	}, {
+		mParameters : {
+			"sap-valid-" : "now",
+			"sap-valid-foo" : "bar",
+			"sap-valid-*" : "n/a"
+		},
+		bSapAllowed : false // always allowed
 	},{
 		mParameters : {
 			$expand : { "TEAM_2_MANAGER" : {} },
@@ -1253,7 +1672,7 @@ sap.ui.require([
 				"TEAM_2_EMPLOYEES" : null,
 				"FOO1" : 42,
 				"FOO2" : false,
-//TODO undefined values are removed by jQuery.extend, but should also be normalized to {}
+//TODO undefined values are removed by _Helper.clone, but should also be normalized to {}
 				//"FOO3" : undefined
 				"FOO4" : {
 					$count : false
@@ -1302,13 +1721,14 @@ sap.ui.require([
 	}].forEach(function (oFixture) {
 		QUnit.test("buildQueryOptions success " + JSON.stringify(oFixture), function (assert) {
 			var mOptions,
-				mOriginalParameters = clone(oFixture.mParameters);
+				sOriginalParameters = JSON.stringify(oFixture.mParameters);
 
+			// code under test
 			mOptions = ODataModel.prototype.buildQueryOptions(oFixture.mParameters,
 				oFixture.bSystemQueryOptionsAllowed, oFixture.bSapAllowed);
 
 			assert.deepEqual(mOptions, oFixture.expected || oFixture.mParameters || {});
-			assert.deepEqual(oFixture.mParameters, mOriginalParameters, "unchanged");
+			assert.strictEqual(JSON.stringify(oFixture.mParameters), sOriginalParameters);
 		});
 	});
 
@@ -1398,7 +1818,7 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("resolve", function (assert) {
-		var oModel = createModel();
+		var oModel = this.createModel();
 
 		// relative path w/o context
 		assert.strictEqual(
@@ -1482,114 +1902,910 @@ sap.ui.require([
 	});
 
 	//*********************************************************************************************
-	QUnit.test("initializeSecurityToken", function (assert) {
-		var oModel = createModel("");
+	QUnit.test("initializeSecurityToken", function () {
+		var oModel = this.createModel("");
 
-		this.mock(oModel.oRequestor).expects("refreshSecurityToken").withExactArgs();
+		this.mock(oModel.oRequestor).expects("refreshSecurityToken").withExactArgs()
+			.rejects(new Error()); // simulate that the request failed
 
-		// code under test
+		// code under test - must not cause "Uncaught in promise"
 		oModel.initializeSecurityToken();
 	});
 
 	//*********************************************************************************************
-	QUnit.test("lockGroup: non-blocking", function (assert) {
-		var oGroupLock1,
-			oGroupLock2,
-			oModel = createModel("");
+	[
+		{numericSeverity : 1, type : MessageType.Success},
+		{numericSeverity : 2, type : MessageType.Information},
+		{numericSeverity : 3, type : MessageType.Warning},
+		{numericSeverity : 4, type : MessageType.Error},
+		{numericSeverity : 0, type : MessageType.None},
+		{numericSeverity : 5, type : MessageType.None},
+		{numericSeverity : null, type : MessageType.None},
+		{numericSeverity : undefined, type : MessageType.None}
+	].forEach(function (oFixture, i) {
+		QUnit.test("reportUnboundMessages, " + i, function () {
+			var oHelperMock = this.mock(_Helper),
+				aMessages = [{
+					code : 42,
+					message : "foo0",
+					longtextUrl : "foo/bar0",
+					numericSeverity : oFixture.numericSeverity
+				}, {
+					code : 78,
+					message : "foo2",
+					numericSeverity : oFixture.numericSeverity
+				}, {
+					code : 79,
+					message : "foo3",
+					numericSeverity : oFixture.numericSeverity,
+					technical : true
+				}],
+				oModel = this.createModel(),
+				sResourcePath = "Foo('42')/to_Bar",
+				aTechnicalDetails = [{}, {}, {}];
 
-		// code under test
-		oGroupLock1 = oModel.lockGroup("foo");
+			oHelperMock.expects("makeAbsolute")
+				.withExactArgs(aMessages[0].longtextUrl, oModel.sServiceUrl + sResourcePath)
+				.returns("~URL~");
+			oHelperMock.expects("createTechnicalDetails").withExactArgs(aMessages[0]).twice()
+				.returns(aTechnicalDetails[0]);
+			oHelperMock.expects("createTechnicalDetails").withExactArgs(aMessages[1]).twice()
+				.returns(aTechnicalDetails[1]);
+			oHelperMock.expects("createTechnicalDetails").withExactArgs(aMessages[2]).twice()
+				.returns(aTechnicalDetails[2]);
+			this.mock(oModel).expects("fireMessageChange").twice()
+				.withExactArgs(sinon.match(function (mArguments) {
+					var aMessages0 = mArguments.newMessages;
 
-		assert.ok(oGroupLock1 instanceof _GroupLock);
-		assert.strictEqual(oGroupLock1.getGroupId(), "foo");
-		assert.notOk(oGroupLock1.isLocked());
+					return aMessages0.length === aMessages.length
+						&& aMessages0.every(function (oMessage, j) {
+							var sExpectedUrl = j === 0 ? "~URL~" : aMessages[j].longtextUrl;
 
-		// code under test
-		oGroupLock1 = oModel.lockGroup();
+							return oMessage instanceof Message
+								&& oMessage.getCode() === aMessages[j].code
+								&& oMessage.getDescriptionUrl() ===
+									(sResourcePath ? sExpectedUrl : aMessages[j].longtextUrl)
+								&& oMessage.getMessage() === aMessages[j].message
+								&& oMessage.getMessageProcessor() === oModel
+								&& oMessage.getPersistent() === true
+								&& oMessage.getTarget() === ""
+								&& oMessage.getTechnical() === (j === 2)
+								&& oMessage.getTechnicalDetails() === aTechnicalDetails[j]
+								&& oMessage.getType() === oFixture.type;
+						});
+				}));
 
-		assert.strictEqual(oGroupLock1.getGroupId(), undefined);
-		assert.notOk(oGroupLock1.isLocked());
+			// code under test
+			oModel.reportUnboundMessages(aMessages, sResourcePath);
 
-		// code under test
-		oGroupLock2 = oModel.lockGroup("foo", oGroupLock1);
+			// code under test
+			oModel.reportUnboundMessages([], sResourcePath);
 
-		assert.strictEqual(oGroupLock1, oGroupLock2);
-		assert.strictEqual(oGroupLock1.getGroupId(), "foo");
+			// code under test
+			oModel.reportUnboundMessages(null, sResourcePath);
+
+			sResourcePath = undefined;
+
+			// code under test
+			// w/o sResourcePath the longtext URLs should be absolute and remain unchanged
+			oModel.reportUnboundMessages(aMessages, sResourcePath);
+		});
 	});
 
 	//*********************************************************************************************
-	QUnit.test("lockGroup: blocking", function (assert) {
-		var oGroupLock,
-			oModel = createModel("");
+	[
+		{numericSeverity : 1, type : MessageType.Success},
+		{numericSeverity : 2, type : MessageType.Information},
+		{numericSeverity : 3, type : MessageType.Warning},
+		{numericSeverity : 4, type : MessageType.Error},
+		{numericSeverity : 0, type : MessageType.None},
+		{numericSeverity : 5, type : MessageType.None},
+		{numericSeverity : null, type : MessageType.None},
+		{numericSeverity : undefined, type : MessageType.None}
+	].forEach(function (oFixture, i) {
+		QUnit.test("reportBoundMessages #" + i, function (assert) {
+			var oHelperlMock = this.mock(_Helper),
+				aMessages = [{
+					"additionalTargets" : ["additionalTarget1", "additionalTarget2", ""],
+					"code" : "F42",
+					"longtextUrl" : "/service/Messages(3)/LongText/$value",
+					"message" : "foo0",
+					"numericSeverity" : oFixture.numericSeverity,
+					"target" : "Name",
+					"technical" : true,
+					"transition" : false
+				}, {
+					"code" : "UF1",
+					"longtextUrl" : "/service/baz",
+					"message" : "foo1",
+					"numericSeverity" : oFixture.numericSeverity,
+					"target" : "",
+					"transition" : true
+				}],
+				oModel = this.createModel(),
+				oModelMock = this.mock(oModel),
+				aTechnicalDetails = [{}, {}];
 
-		oGroupLock = oModel.lockGroup("foo", true);
+			oHelperlMock.expects("createTechnicalDetails").withExactArgs(aMessages[0])
+				.returns(aTechnicalDetails[0]);
+			oHelperlMock.expects("createTechnicalDetails").withExactArgs(aMessages[1])
+				.returns(aTechnicalDetails[1]);
+			oModelMock.expects("fireMessageChange").withExactArgs(sinon.match.object)
+				.callsFake(function (mArguments) {
+					var aNewMessages = mArguments.newMessages,
+						aOldMessages = mArguments.oldMessages;
 
-		assert.ok(oGroupLock instanceof _GroupLock);
-		assert.strictEqual(oGroupLock.getGroupId(), "foo");
-		assert.ok(oGroupLock.isLocked());
+					assert.strictEqual(aNewMessages.length, aMessages.length);
+					assert.strictEqual(aOldMessages.length, 0);
+
+					aNewMessages.forEach(function (oMessage, j) {
+						assert.ok(oMessage instanceof Message);
+						assert.strictEqual(oMessage.getCode(), aMessages[j].code);
+						assert.strictEqual(oMessage.getDescriptionUrl(), aMessages[j].longtextUrl);
+						assert.strictEqual(oMessage.getMessage(), aMessages[j].message);
+						assert.strictEqual(oMessage.getMessageProcessor(), oModel);
+						assert.strictEqual(oMessage.getPersistent(), aMessages[j].transition);
+						assert.strictEqual(oMessage.getTechnicalDetails(), aTechnicalDetails[j]);
+						assert.strictEqual(oMessage.getTechnical(), j === 0);
+						assert.strictEqual(oMessage.getType(), oFixture.type);
+					});
+					// Tests for targets
+					assert.strictEqual(aNewMessages[0].getTarget(), "/Team('42')/foo/bar/Name");
+					assert.deepEqual(aNewMessages[0].getTargets(), [
+						"/Team('42')/foo/bar/Name",
+						"/Team('42')/foo/bar/additionalTarget1",
+						"/Team('42')/foo/bar/additionalTarget2",
+						"/Team('42')/foo/bar"
+					]);
+
+					assert.strictEqual(aNewMessages[1].getTarget(), "/Team('42')/foo/bar");
+					assert.deepEqual(aNewMessages[1].getTargets(), ["/Team('42')/foo/bar"]);
+				});
+
+			// code under test
+			oModel.reportBoundMessages("Team('42')", {"foo/bar" : aMessages});
+
+			oModelMock.expects("fireMessageChange").never();
+
+			// code under test
+			oModel.reportBoundMessages("Team('42')", {});
+		});
 	});
 
 	//*********************************************************************************************
-	QUnit.test("_submitBatch: group locks", function (assert) {
-		var oBarGroupLock,
-			oBarPromise,
-			oBazPromise,
-			oFooGroupLock,
-			oFooPromise,
-			oModel = createModel(""),
-			oRequestorMock = this.mock(oModel.oRequestor),
-			that = this;
+	QUnit.test("reportBoundMessages: absolute target, sResourcePath ignored", function (assert) {
+		var oModel = this.createModel();
 
-		oRequestorMock.expects("submitBatch").never();
-
-		oFooGroupLock = oModel.lockGroup("foo", true);
-		oBarGroupLock = oModel.lockGroup("bar", true);
-
-		this.oLogMock.expects("info")
-			.withExactArgs("submitBatch('foo') is waiting for locks", null, sClassName);
+		this.mock(oModel).expects("fireMessageChange").withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				assert.strictEqual(mArguments.newMessages[0].getTarget(), "/Team('42')/Name");
+				assert.deepEqual(mArguments.newMessages[0].getTargets(), [
+					"/Team('42')/Name",
+					"/Team('43')/Name",
+					"/Team('44')/Name"
+				]);
+			});
 
 		// code under test
-		oFooPromise = oModel._submitBatch("foo");
+		oModel.reportBoundMessages(undefined, {
+			"~any~" : [{
+				target : "/Team('42')/Name",
+				additionalTargets : ["/Team('43')/Name", "/Team('44')/Name"]
+			}]
+		});
+	});
 
-		assert.ok(oFooPromise instanceof Promise);
+	//*********************************************************************************************
+	QUnit.test("reportBoundMessages: special targets", function (assert) {
+		var oModel = this.createModel(),
+			oModelMock = this.mock(oModel);
 
-		this.oLogMock.expects("info")
-			.withExactArgs("submitBatch('bar') is waiting for locks", null, sClassName);
+		oModelMock.expects("fireMessageChange").withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				assert.strictEqual(mArguments.newMessages[0].getTarget(), "/Team('42')/Name");
+				assert.deepEqual(mArguments.newMessages[0].getTargets(), [
+					"/Team('42')/Name",
+					"/Team('43')/Name",
+					"/Team('44')/Name"
+				]);
+			});
 
 		// code under test
-		oBarPromise = oModel._submitBatch("bar");
+		oModel.reportBoundMessages("Team", {
+			"" : [{
+				target : "('42')/Name",
+				additionalTargets : ["('43')/Name", "('44')/Name"]
+			}]
+		});
 
-		oRequestorMock.expects("submitBatch").withExactArgs("baz").returns(Promise.resolve());
+		oModelMock.expects("fireMessageChange").withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				assert.strictEqual(mArguments.newMessages[0].getTarget(), "/Team('42')/Name");
+				assert.deepEqual(mArguments.newMessages[0].getTargets(), [
+					"/Team('42')/Name",
+					"/Team('42')/Name1",
+					"/Team('42')/Name2"
+				]);
+			});
 
 		// code under test
-		oBazPromise = oModel._submitBatch("baz");
+		oModel.reportBoundMessages("Team", {
+			"('42')" : [{
+				target : "Name",
+				additionalTargets : ["Name1", "Name2"]
+			}]
+		});
+	});
 
-		this.oLogMock.expects("info")
-			.withExactArgs("submitBatch('foo') continues", null, sClassName);
-		oRequestorMock.expects("submitBatch").withExactArgs("foo").returns(Promise.resolve());
+	//*********************************************************************************************
+	QUnit.test("reportBoundMessages: longtextUrl special cases", function (assert) {
+		var aMessages = [{longtextUrl : "", target : ""}, {target : ""}],
+			oModel = this.createModel();
+
+		this.mock(oModel).expects("fireMessageChange")
+			.withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				assert.strictEqual(mArguments.newMessages[0].getDescriptionUrl(), undefined);
+				assert.strictEqual(mArguments.newMessages[1].getDescriptionUrl(), undefined);
+			});
 
 		// code under test
-		oFooGroupLock.unlock();
+		oModel.reportBoundMessages("Team('42')", {"" : aMessages});
+	});
 
-		return Promise.all([
-			oFooPromise.then(function () {
-				assert.deepEqual(oModel.aLockedGroupLocks, [oBarGroupLock]);
+	//*********************************************************************************************
+	QUnit.test("reportBoundMessages: remove old messages w/o key predicates", function (assert) {
+		var mMessages = {
+				"/FOO('1')" : [{}, {}],
+				// TODO use Message.getPersistent() instead of Message.persistent?
+				"/FOO('1')/bar" : [{persistent : true}, {}, {persistent : true}, {}],
+				"/FOO('2')" : [{}],
+				"/FOO('3')/NavSingle" : [{}],
+				"/FOO('3')/NavSingle/Name" : [{}, {}],
+				"/FOO('3')/NavSingleBar/Name" : [{}]
+			},
+			oModel = this.createModel(),
+			oModelMock = this.mock(oModel);
 
-				that.oLogMock.expects("info")
-					.withExactArgs("submitBatch('bar') continues", null, sClassName);
-				oRequestorMock.expects("submitBatch").withExactArgs("bar")
-					.returns(Promise.resolve());
+		oModel.mMessages = mMessages;
 
-				// code under test
-				oBarGroupLock.unlock();
-			}),
-			oBarPromise.then(function () {
-				assert.deepEqual(oModel.aLockedGroupLocks, []);
-			}),
-			oBazPromise
-		]);
+		oModelMock.expects("fireMessageChange")
+			.withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				var aNewMessages = mArguments.newMessages,
+					aOldMessages = mArguments.oldMessages;
+
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')/bar"][0]) < 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')/bar"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')/bar"][2]) < 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')/bar"][3]) >= 0);
+				assert.strictEqual(aNewMessages.length, 0);
+				assert.strictEqual(aOldMessages.length, 4);
+			});
+
+		// code under test
+		oModel.reportBoundMessages("FOO('1')", {});
+
+		oModelMock.expects("fireMessageChange")
+			.withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				var aNewMessages = mArguments.newMessages,
+					aOldMessages = mArguments.oldMessages;
+
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingle"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingle/Name"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingle/Name"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingleBar/Name"][0]) < 0);
+				assert.strictEqual(aNewMessages.length, 0);
+				assert.strictEqual(aOldMessages.length, 3);
+			});
+
+		// code under test
+		oModel.reportBoundMessages("FOO('3')/NavSingle", {});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("reportBoundMessages: remove old messages with key predicates", function (assert) {
+		var oHelperMock = this.mock(_Helper),
+			mMessages = {
+				"/FOO('1')" : [{}, {}],
+				"/FOO('1')/bar" : [{}],
+				"/FOO('2')" : [{persistent : true}, {}, {persistent : true}, {}],
+				"/FOO('3')/NavSingle" : [{}],
+				"/FOO('3')/NavSingle/Name" : [{}, {}],
+				"/FOO('3')/NavSingleBar/Name" : [{}]
+			},
+			oModel = this.createModel(),
+			oModelMock = this.mock(oModel);
+
+		oModel.mMessages = mMessages;
+		oHelperMock.expects("buildPath").withExactArgs("/FOO", "('1')").returns("/FOO('1')");
+		oHelperMock.expects("buildPath").withExactArgs("/FOO", "('2')").returns("/FOO('2')");
+		oModelMock.expects("fireMessageChange")
+			.withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				var aNewMessages = mArguments.newMessages,
+					aOldMessages = mArguments.oldMessages;
+
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')/bar"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][0]) < 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][2]) < 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][3]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingleBar/Name"][0]) < 0);
+				assert.strictEqual(aNewMessages.length, 0);
+				assert.strictEqual(aOldMessages.length, 5);
+			});
+
+		// code under test - only keys 1 and 2 were read
+		oModel.reportBoundMessages("FOO", {}, ["('1')", "('2')"]);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("reportBoundMessages: remove old messages - complete collection", function (assert) {
+		var mMessages = {
+				"/FOO('1')" : [{}, {}],
+				"/FOO('1')/bar" : [{}],
+				"/FOO('2')" : [{persistent : true}, {}, {persistent : true}, {}],
+				"/FOO('3')/NavSingle" : [{}],
+				"/FOO('3')/NavSingle/Name" : [{}, {}],
+				"/FOO('3')/NavSingleBar/Name" : [{}]
+			},
+			oModel = this.createModel(),
+			oModelMock = this.mock(oModel);
+
+		oModel.mMessages = mMessages;
+		oModelMock.expects("fireMessageChange")
+			.withExactArgs(sinon.match.object)
+			.callsFake(function (mArguments) {
+				var aNewMessages = mArguments.newMessages,
+					aOldMessages = mArguments.oldMessages;
+
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('1')/bar"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][0]) < 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][2]) < 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('2')"][3]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingle"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingle/Name"][0]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingle/Name"][1]) >= 0);
+				assert.ok(aOldMessages.indexOf(mMessages["/FOO('3')/NavSingleBar/Name"][0]) >= 0);
+				assert.strictEqual(aNewMessages.length, 0);
+				assert.strictEqual(aOldMessages.length, 9);
+			});
+
+		// code under test
+		oModel.reportBoundMessages("FOO", {});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("getAllBindings", function (assert) {
+		var oModel = this.createModel(),
+			oBinding1 = new Binding(oModel, "relative"),
+			oBinding2 = new Binding(oModel, "/absolute");
+
+		assert.deepEqual(oModel.aAllBindings, []);
+
+		// code under test
+		assert.deepEqual(oModel.getAllBindings(), oModel.aAllBindings);
+		assert.notStrictEqual(oModel.getAllBindings(), oModel.aAllBindings);
+
+		oModel.bindingCreated(oBinding1);
+		oModel.bindingCreated(oBinding2);
+		assert.deepEqual(oModel.aAllBindings, [oBinding1, oBinding2]);
+
+		// code under test
+		assert.deepEqual(oModel.getAllBindings(), oModel.aAllBindings);
+		assert.notStrictEqual(oModel.getAllBindings(), oModel.aAllBindings);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("withUnresolvedBindings", function (assert) {
+		var oAbsoluteBinding = {
+				isResolved : function () {}
+			},
+			oModel = this.createModel(),
+			vParameter = {},
+			oResolvedBinding = {
+				isResolved : function () {}
+			},
+			oUnresolvedBinding0 = {
+				anyCallback : function () {},
+				isResolved : function () {}
+			},
+			oUnresolvedBinding0Mock = this.mock(oUnresolvedBinding0),
+			oUnresolvedBinding1 = {
+				anyCallback : function () {},
+				isResolved : function () {}
+			},
+			oUnresolvedBinding2 = {
+				anyCallback : function () {},
+				isResolved : function () {}
+			},
+			oUnresolvedBinding2Mock = this.mock(oUnresolvedBinding2);
+
+		this.mock(oModel).expects("getAllBindings").never();
+		oModel.aAllBindings = [];
+
+		// code under test
+		assert.strictEqual(oModel.withUnresolvedBindings(), false);
+
+		oModel.aAllBindings = [oResolvedBinding, oUnresolvedBinding0, oAbsoluteBinding,
+			oUnresolvedBinding1, oUnresolvedBinding2];
+
+		this.mock(oResolvedBinding).expects("isResolved").withExactArgs().returns(true);
+		oUnresolvedBinding0Mock.expects("isResolved").withExactArgs().returns(false);
+		oUnresolvedBinding0Mock.expects("anyCallback").withExactArgs(sinon.match.same(vParameter))
+			.returns(false);
+		this.mock(oAbsoluteBinding).expects("isResolved").withExactArgs().returns(true);
+		this.mock(oUnresolvedBinding1).expects("isResolved").withExactArgs().returns(false);
+		this.mock(oUnresolvedBinding1).expects("anyCallback")
+			.withExactArgs(sinon.match.same(vParameter))
+			.returns(true);
+		oUnresolvedBinding2Mock.expects("isResolved").withExactArgs().returns(false);
+		oUnresolvedBinding2Mock.expects("anyCallback").never();
+
+		// code under test
+		assert.strictEqual(oModel.withUnresolvedBindings("anyCallback", vParameter), true);
+
+		oModel.aAllBindings = [oUnresolvedBinding0, oUnresolvedBinding2];
+
+		oUnresolvedBinding0Mock.expects("isResolved").withExactArgs().returns(false);
+		oUnresolvedBinding0Mock.expects("anyCallback").withExactArgs(sinon.match.same(vParameter))
+			.returns(false);
+		oUnresolvedBinding2Mock.expects("isResolved").withExactArgs().returns(false);
+		oUnresolvedBinding2Mock.expects("anyCallback").withExactArgs(sinon.match.same(vParameter))
+			.returns();
+
+		// code under test
+		assert.strictEqual(oModel.withUnresolvedBindings("anyCallback", vParameter), false);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("lockGroup", function (assert) {
+		var fnCancel = {},
+			sGroupId = {/*string*/},
+			oGroupLock = {},
+			bLocked  = {/*boolean*/},
+			oModel = this.createModel(),
+			bModifying = {/*boolean*/},
+			oOwner = {};
+
+		this.mock(oModel.oRequestor).expects("lockGroup")
+			.withExactArgs(sinon.match.same(sGroupId), sinon.match.same(oOwner),
+				sinon.match.same(bLocked), sinon.match.same(bModifying), sinon.match.same(fnCancel))
+			.returns(oGroupLock);
+
+		// code under test
+		assert.strictEqual(oModel.lockGroup(sGroupId, oOwner, bLocked, bModifying, fnCancel),
+			oGroupLock);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("changeHttpHeaders", function (assert) {
+		var oModel = this.createModel(),
+			mHeaders = oModel.mHeaders,
+			mMetadataHeaders = oModel.mMetadataHeaders,
+			mMyHeaders = {abc : undefined, def : undefined, "x-CsRf-ToKeN" : "abc123"},
+			oRequestorMock = this.mock(oModel.oRequestor);
+
+		assert.deepEqual(mHeaders, {"Accept-Language" : "ab-CD"});
+		oRequestorMock.expects("checkHeaderNames").withExactArgs(sinon.match.object);
+		oRequestorMock.expects("checkForOpenRequests").withExactArgs().exactly(5);
+
+		// code under test
+		oModel.changeHttpHeaders({aBc : "xyz"});
+
+		assert.strictEqual(oModel.mHeaders, mHeaders);
+		assert.strictEqual(oModel.mMetadataHeaders, mMetadataHeaders);
+		assert.deepEqual(mHeaders, {"Accept-Language" : "ab-CD", aBc : "xyz"});
+		assert.deepEqual(mMetadataHeaders, {"Accept-Language" : "ab-CD", aBc : "xyz"});
+
+		oRequestorMock.expects("checkHeaderNames").withExactArgs(sinon.match.object);
+
+		// code under test
+		oModel.changeHttpHeaders({AbC : "12 [3] $4: ~"});
+
+		assert.deepEqual(mMetadataHeaders, {AbC : "12 [3] $4: ~", "Accept-Language" : "ab-CD"});
+		assert.deepEqual(mHeaders, {AbC : "12 [3] $4: ~", "Accept-Language" : "ab-CD"});
+
+		oRequestorMock.expects("checkHeaderNames").withExactArgs(sinon.match.same(mMyHeaders));
+
+		// code under test
+		oModel.changeHttpHeaders(mMyHeaders);
+
+		assert.deepEqual(mMetadataHeaders, {"Accept-Language" : "ab-CD"});
+		assert.deepEqual(mHeaders, {"Accept-Language" : "ab-CD", "X-CSRF-Token" : "abc123"});
+		assert.deepEqual(mMyHeaders, {abc : undefined, def : undefined, "x-CsRf-ToKeN" : "abc123"});
+
+		oRequestorMock.expects("checkHeaderNames").withExactArgs(undefined);
+
+		// code under test
+		oModel.changeHttpHeaders();
+
+		assert.deepEqual(mMetadataHeaders, {"Accept-Language" : "ab-CD"});
+		assert.deepEqual(mHeaders, {"Accept-Language" : "ab-CD", "X-CSRF-Token" : "abc123"});
+
+		oRequestorMock.expects("checkHeaderNames").withExactArgs(null);
+
+		// code under test
+		oModel.changeHttpHeaders(null);
+
+		assert.deepEqual(mMetadataHeaders, {"Accept-Language" : "ab-CD"});
+		assert.deepEqual(mHeaders, {"Accept-Language" : "ab-CD", "X-CSRF-Token" : "abc123"});
+	});
+
+	//*********************************************************************************************
+[true, 42, NaN, {}, null, function () {}, "", "Motörhead", "a\r\nb: c"].forEach(function (vValue) {
+	QUnit.test("changeHttpHeaders: unsupported header value: " + vValue, function (assert) {
+		var oModel = this.createModel();
+
+		oModel.changeHttpHeaders({def : "123"});
+
+		// code under test
+		assert.throws(function () {
+			oModel.changeHttpHeaders({def : undefined, abc : vValue});
+		}, new Error("Unsupported value for header 'abc': " + vValue));
+
+		assert.deepEqual(oModel.mHeaders, {"Accept-Language" : "ab-CD", def : "123"});
+		assert.deepEqual(oModel.mMetadataHeaders, {"Accept-Language" : "ab-CD", def : "123"});
 	});
 });
+
+	//*********************************************************************************************
+["123", undefined].forEach(function (sValue) {
+	QUnit.test("changeHttpHeaders: duplicate header name, value: " + sValue, function (assert) {
+		var oModel = this.createModel();
+
+		// code under test
+		assert.throws(function () {
+			oModel.changeHttpHeaders({aBc : sValue, AbC : "456"});
+		}, new Error("Duplicate header AbC"));
+
+		assert.deepEqual(oModel.mHeaders, {"Accept-Language" : "ab-CD"});
+		assert.deepEqual(oModel.mMetadataHeaders, {"Accept-Language" : "ab-CD"});
+	});
+});
+
+	//*********************************************************************************************
+	QUnit.test("changeHttpHeaders: error on open requests", function (assert) {
+		var oError = new Error("message"),
+			oModel = this.createModel();
+
+		this.mock(oModel.oRequestor).expects("checkForOpenRequests").withExactArgs().throws(oError);
+
+		// code under test
+		assert.throws(function () {
+			oModel.changeHttpHeaders({abc : "123"});
+		}, oError);
+
+		assert.deepEqual(oModel.mHeaders, {"Accept-Language" : "ab-CD"});
+		assert.deepEqual(oModel.mMetadataHeaders, {"Accept-Language" : "ab-CD"});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("getHttpHeaders", function (assert) {
+		var oModel = this.createModel();
+
+		// code under test
+		assert.deepEqual(oModel.getHttpHeaders(), {"Accept-Language" : "ab-CD"});
+
+		// code under test
+		assert.deepEqual(oModel.getHttpHeaders(true), {"Accept-Language" : "ab-CD"});
+
+		// code under test
+		assert.notStrictEqual(oModel.getHttpHeaders(), oModel.getHttpHeaders(), "no copy on write");
+
+		assert.deepEqual(oModel.mHeaders, {"Accept-Language" : "ab-CD"},
+			"model's headers unchanged");
+
+		// SAP-ContextId is the only header not changeable via #changeHttpHeaders that is set to
+		// oModel.mHeaders in our coding
+		oModel.mHeaders["SAP-ContextId"] = "123";
+		// X-CSRF-Token header is set to null if the response does not contain this header
+		oModel.mHeaders["X-CSRF-Token"] = null;
+
+		// code under test
+		assert.deepEqual(oModel.getHttpHeaders(), {"Accept-Language" : "ab-CD"});
+
+		// code under test
+		assert.deepEqual(oModel.getHttpHeaders(true),
+			{"Accept-Language" : "ab-CD", "SAP-ContextId" : "123"});
+
+		assert.deepEqual(oModel.mHeaders, {
+			"Accept-Language" : "ab-CD",
+			"SAP-ContextId" : "123",
+			"X-CSRF-Token" : null
+		}, "model's headers unchanged");
+
+		oModel.mHeaders["X-CSRF-Token"] = "xyz";
+
+		// code under test
+		assert.deepEqual(oModel.getHttpHeaders(),
+			{"Accept-Language" : "ab-CD", "X-CSRF-Token" : "xyz"});
+
+		// code under test
+		assert.deepEqual(oModel.getHttpHeaders(true),
+			{"Accept-Language" : "ab-CD", "SAP-ContextId" : "123", "X-CSRF-Token" : "xyz"});
+
+		assert.deepEqual(oModel.mHeaders, {
+			"Accept-Language" : "ab-CD",
+			"SAP-ContextId" : "123",
+			"X-CSRF-Token" : "xyz"
+		}, "model's headers unchanged");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("getMessages", function (assert) {
+		var oContext = {
+				getPath : function () { return "~path~"; }
+			},
+			aMessagesByPath = [/*unsorted*/],
+			oModel = this.createModel();
+
+		this.mock(oModel).expects("getMessagesByPath").withExactArgs("~path~", true)
+			.returns(aMessagesByPath);
+		this.mock(aMessagesByPath).expects("sort").withExactArgs(Message.compare)
+			.returns("~messagesByPathSorted~");
+
+		// code under test
+		assert.strictEqual(oModel.getMessages(oContext), "~messagesByPathSorted~");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("addPrerenderingTask: queue", function (assert) {
+		var oExpectation = this.mock(sap.ui.getCore()).expects("addPrerenderingTask")
+				.withExactArgs(sinon.match.func),
+			fnFirstPrerenderingTask = "first",
+			fnPrerenderingTask0 = "0",
+			fnPrerenderingTask1 = "1",
+			oModel = this.createModel("", {}, true);
+
+		this.mock(window).expects("setTimeout"); // avoid prerendering timers
+		assert.strictEqual(oModel.aPrerenderingTasks, null);
+
+		// code under test
+		oModel.addPrerenderingTask(fnPrerenderingTask0);
+
+		oExpectation.verify();
+		assert.deepEqual(oModel.aPrerenderingTasks, [fnPrerenderingTask0]);
+
+		// code under test
+		oModel.addPrerenderingTask(fnPrerenderingTask1);
+
+		assert.deepEqual(oModel.aPrerenderingTasks, [fnPrerenderingTask0, fnPrerenderingTask1]);
+
+		// code under test
+		oModel.addPrerenderingTask(fnFirstPrerenderingTask, /*bFirst*/true);
+
+		assert.deepEqual(oModel.aPrerenderingTasks,
+			[fnFirstPrerenderingTask, fnPrerenderingTask0, fnPrerenderingTask1]);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("addPrerenderingTask: rendering before 1st setTimeout", function (assert) {
+		var oAddTaskMock,
+			fnFirstTask = this.spy(),
+			fnLastTask = this.spy(),
+			oModel = this.createModel("", {}, true),
+			fnPrerenderingTask0 = this.spy(function () {
+				assert.notStrictEqual(oModel.aPrerenderingTasks, null);
+				oModel.addPrerenderingTask(fnFirstTask, /*bFirst*/true);
+			}),
+			fnPrerenderingTask1 = this.spy(function () {
+				oModel.addPrerenderingTask(fnLastTask);
+			});
+
+		oAddTaskMock = this.mock(sap.ui.getCore()).expects("addPrerenderingTask")
+			.withExactArgs(sinon.match.func);
+		this.mock(window).expects("setTimeout").withExactArgs(sinon.match.func, 0).returns(42);
+		oModel.addPrerenderingTask(fnPrerenderingTask0);
+		oModel.addPrerenderingTask(fnPrerenderingTask1);
+		this.mock(window).expects("clearTimeout").withExactArgs(42);
+
+		// code under test - run core prerendering task
+		oAddTaskMock.firstCall.args[0]();
+
+		assert.ok(fnPrerenderingTask0.calledOnce);
+		assert.ok(fnPrerenderingTask0.calledOn());
+		assert.ok(fnPrerenderingTask0.calledWithExactly());
+
+		assert.ok(fnFirstTask.calledOnce);
+		assert.ok(fnFirstTask.calledOn());
+		assert.ok(fnFirstTask.calledWithExactly());
+		assert.ok(fnFirstTask.calledAfter(fnPrerenderingTask0));
+
+		assert.ok(fnPrerenderingTask1.calledOnce);
+		assert.ok(fnPrerenderingTask1.calledOn());
+		assert.ok(fnPrerenderingTask1.calledWithExactly());
+		assert.ok(fnPrerenderingTask1.calledAfter(fnFirstTask));
+
+		assert.ok(fnLastTask.calledOnce);
+		assert.ok(fnLastTask.calledOn());
+		assert.ok(fnLastTask.calledWithExactly());
+		assert.ok(fnLastTask.calledAfter(fnPrerenderingTask1));
+
+		assert.strictEqual(oModel.aPrerenderingTasks, null);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("addPrerenderingTask: rendering before 2nd setTimeout", function (assert) {
+		var oAddTaskExpectation,
+			oModel = this.createModel("", {}, true),
+			oSetTimeoutExpectation,
+			fnTask = this.spy(),
+			oWindowMock = this.mock(window);
+
+		oAddTaskExpectation = this.mock(sap.ui.getCore()).expects("addPrerenderingTask")
+			.withExactArgs(sinon.match.func);
+		oSetTimeoutExpectation = oWindowMock.expects("setTimeout")
+			.withExactArgs(sinon.match.func, 0);
+
+		// code under test
+		oModel.addPrerenderingTask(fnTask);
+
+		assert.ok(fnTask.notCalled);
+		oWindowMock.expects("setTimeout").withExactArgs(sinon.match.func, 0).returns(42);
+
+		// code under test - run the first setTimeout task
+		oSetTimeoutExpectation.args[0][0]();
+
+		assert.ok(fnTask.notCalled);
+
+		oWindowMock.expects("clearTimeout").withExactArgs(42);
+
+		// code under test - run core prerendering task
+		oAddTaskExpectation.firstCall.args[0]();
+
+		assert.ok(fnTask.calledOnce);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("addPrerenderingTask: via setTimeout", function (assert) {
+		var oAddTaskExpectation,
+			oModel = this.createModel("", {}, true),
+			oSetTimeoutExpectation,
+			fnTask1 = this.spy(),
+			fnTask2 = "~task~2~";
+
+		oAddTaskExpectation = this.mock(sap.ui.getCore()).expects("addPrerenderingTask").twice()
+			.withExactArgs(sinon.match.func);
+		oSetTimeoutExpectation = this.mock(window).expects("setTimeout").thrice()
+			.withExactArgs(sinon.match.func, 0);
+
+		// code under test
+		oModel.addPrerenderingTask(fnTask1);
+
+		assert.ok(fnTask1.notCalled);
+
+		// code under test - run the first setTimeout task
+		oSetTimeoutExpectation.args[0][0]();
+
+		assert.ok(fnTask1.notCalled);
+
+		// code under test - run the second setTimeout task
+		oSetTimeoutExpectation.args[1][0]();
+
+		assert.ok(fnTask1.calledOnce);
+
+		// code under test
+		oModel.addPrerenderingTask(fnTask2);
+
+		// code under test - run core prerendering task
+		oAddTaskExpectation.firstCall.args[0]();
+
+		assert.deepEqual(oModel.aPrerenderingTasks, [fnTask2]);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("requestSideEffects", function (assert) {
+		var oBinding1 = {
+				isRoot : function () { return  true; },
+				requestAbsoluteSideEffects : function () {}
+			},
+			oBinding2 = { // has requestAbsoluteSideEffects, but is not root
+				isRoot : function () { return  false; },
+				requestAbsoluteSideEffects : function () {}
+			},
+			oBinding3 = {
+				isRoot : function () { return  true; },
+				requestAbsoluteSideEffects : function () {}
+			},
+			oBinding4 = { // is root, but has no requestAbsoluteSideEffects
+				isRoot : function () { return  true; }
+			},
+			oModel = this.createModel(),
+			aPaths = ["/foo", "/bar/baz"],
+			oPromise;
+
+		oModel.aAllBindings = [oBinding1, oBinding2, oBinding3, oBinding4];
+		this.mock(oBinding1).expects("requestAbsoluteSideEffects")
+			.withExactArgs("group", sinon.match.same(aPaths)).resolves("~1");
+		this.mock(oBinding2).expects("requestAbsoluteSideEffects").never();
+		this.mock(oBinding3).expects("requestAbsoluteSideEffects")
+			.withExactArgs("group", sinon.match.same(aPaths)).resolves("~3");
+
+		// code under test
+		oPromise = oModel.requestSideEffects("group", aPaths);
+
+		assert.notOk(oPromise.isFulfilled());
+		return oPromise.then(function (aResults) {
+			assert.deepEqual(aResults, ["~1", "~3"]);
+		});
+	});
+
+	//*********************************************************************************************
+	QUnit.test("requestSideEffects: nothing to do", function (assert) {
+		var oBinding = {
+				isRoot : function () { return  true; },
+				requestAbsoluteSideEffects : function () {}
+			},
+			oModel = this.createModel();
+
+		oModel.aAllBindings = [oBinding];
+		this.mock(oBinding).expects("requestAbsoluteSideEffects").never();
+
+		assert.strictEqual(oModel.requestSideEffects("group", []), undefined);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("filterMatchingMessages: no match", function (assert) {
+		var oModel = this.createModel();
+
+		this.mock(_Helper).expects("hasPathPrefix").withExactArgs("/target", "/prefix")
+			.returns(false);
+
+		// code under test
+		assert.deepEqual(oModel.filterMatchingMessages("/target", "/prefix"), []);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("filterMatchingMessages: match", function (assert) {
+		var aMessages = [],
+			oModel = this.createModel();
+
+		oModel.mMessages = {
+			"/target" : aMessages
+		};
+		this.mock(_Helper).expects("hasPathPrefix").withExactArgs("/target", "/prefix")
+			.returns(true);
+
+		// code under test
+		assert.strictEqual(oModel.filterMatchingMessages("/target", "/prefix"), aMessages);
+	});
+
+	//*********************************************************************************************
+[Promise, SyncPromise].forEach(function (oThenable) {
+	QUnit.test("getReporter " + oThenable, function () {
+		var oError1 = new Error("failed intentionally"),
+			oError2 = new Error("already reported"),
+			oModel = this.createModel(),
+			oPromise1 = oThenable.reject(oError1),
+			oPromise2 = oThenable.reject(oError2);
+
+		this.mock(oModel).expects("reportError").withExactArgs(
+			oError1.message, sClassName, sinon.match.same(oError1));
+
+		// code under test
+		oPromise1.catch(oModel.getReporter());
+
+		oError2.$reported = true;
+
+		// code under test
+		oPromise2.catch(oModel.getReporter());
+
+		return Promise.all([oPromise1, oPromise2])
+			.catch(function () {/* avoid that the test fails */});
+	});
+});
+});
+
 //TODO constructor: test that the service root URL is absolute?
 //TODO read: support the mParameters context, urlParameters, filters, sorters, batchGroupId
 //TODO read etc.: provide access to "abort" functionality
@@ -1606,7 +2822,7 @@ sap.ui.require([
 // }
 //TODO can we make use of @odata.context in response data?
 //TODO etag handling
-//TODO use 'sap/ui/thirdparty/URI' for URL handling?
+//TODO use standard APIs like URL/URLSearchParams for URL handling?
 
 //TODO support "/#" syntax, e.g. "/EMPLOYEES(ID='1')/ENTRYDATE/#Type/QualifiedName"
 //     do it for bindings, not as a JS API (getMetaModel().getMetaContext() etc. is already there)

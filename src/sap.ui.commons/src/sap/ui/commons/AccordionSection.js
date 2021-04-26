@@ -3,8 +3,8 @@
  */
 
 // Provides control sap.ui.commons.AccordionSection.
-sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
-	function(jQuery, library, Element) {
+sap.ui.define(['./library', 'sap/ui/core/Element'],
+	function(library, Element) {
 	"use strict";
 
 
@@ -172,16 +172,16 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
 		//Bind the scroll event (does not bubble)
 		var fnScrollProxy = this.__scrollproxy__;
 		if (!fnScrollProxy) {
-			fnScrollProxy = this.__scrollproxy__ = jQuery.proxy(this.onscroll, this);
+			fnScrollProxy = this.__scrollproxy__ = typeof this.onscroll === "function" ? this.onscroll.bind(this) : undefined; // function seems not to exist?
 		}
-		this.$("cont").bind("scroll", fnScrollProxy);
+		this.$("cont").on("scroll", fnScrollProxy);
 
 	};
 
 	AccordionSection.prototype.onBeforeRendering = function() {
 		var fnScrollProxy = this.__scrollproxy__;
 		if (fnScrollProxy) {
-			this.$("cont").unbind("scroll", fnScrollProxy);
+			this.$("cont").off("scroll", fnScrollProxy);
 		}
 	};
 
@@ -189,7 +189,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
 	 * Property setter for the "enabled" state
 	 *
 	 * @param {boolean} bEnabled Whether the AccordionSection is enabled or not
-	 * @return {sap.ui.commons.AccordionSection} 'this' to allow method chaining
+	 * @return {this} 'this' to allow method chaining
 	 * @public
 	 */
 	AccordionSection.prototype.setEnabled = function(bEnabled) {
@@ -198,9 +198,9 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
 		if (root) {
 			// if already rendered, adapt rendered control without complete re-rendering
 			if (bEnabled) {
-				jQuery(root).removeClass("sapUiAcdSectionDis");
+				this.$().removeClass("sapUiAcdSectionDis");
 			} else {
-				jQuery(root).addClass("sapUiAcdSectionDis");
+				this.$().addClass("sapUiAcdSectionDis");
 			}
 		}
 		return this;
@@ -222,7 +222,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
 	 * Property setter for the "collapsed" state
 	 *
 	 * @param {boolean} bCollapsed Whether the AccordionSection is collapsed or not
-	 * @return {sap.ui.commons.AccordionSection} 'this' to allow method chaining
+	 * @return {this} 'this' to allow method chaining
 	 * @public
 	 */
 	AccordionSection.prototype.setCollapsed = function(bCollapsed) {
@@ -257,7 +257,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
 				if (!this.getParent().getWidth()) {
 					this.getDomRef().style.width = this.getDomRef().offsetWidth + "px"; // maintain the current width
 				}
-				jQuery(this.getDomRef()).addClass("sapUiAcdSectionColl");
+				this.$().addClass("sapUiAcdSectionColl");
 				if (tb) {
 					tb.style.display = "none";
 				}
@@ -279,7 +279,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
 					this.invalidate();
 				} else {
 					// content exists already, just make it visible again
-					jQuery(this.getDomRef()).removeClass("sapUiAcdSectionColl");
+					this.$().removeClass("sapUiAcdSectionColl");
 					if (tb) {
 						tb.style.display = "block";
 					}
@@ -333,4 +333,4 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element'],
 
 	return AccordionSection;
 
-}, /* bExport= */ true);
+});

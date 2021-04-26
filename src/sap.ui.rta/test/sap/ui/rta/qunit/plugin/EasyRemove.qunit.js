@@ -1,8 +1,7 @@
 /*global QUnit*/
 
-QUnit.config.autostart = false;
-
-sap.ui.require([
+sap.ui.define([
+	"sap/ui/thirdparty/jquery",
 	"sap/ui/qunit/QUnitUtils",
 	"sap/ui/dt/DesignTime",
 	"sap/ui/rta/command/CommandFactory",
@@ -12,9 +11,12 @@ sap.ui.require([
 	"sap/uxap/ObjectPageLayout",
 	"sap/uxap/ObjectPageSubSection",
 	"sap/m/Button",
-	"sap/ui/thirdparty/sinon"
+	"sap/ui/fl/Utils",
+	"sap/ui/fl/registry/ChangeRegistry",
+	"sap/ui/thirdparty/sinon-4"
 ],
-function(
+function (
+	jQuery,
 	QUnitUtils,
 	DesignTime,
 	CommandFactory,
@@ -24,10 +26,11 @@ function(
 	ObjectPageLayout,
 	ObjectPageSubSection,
 	Button,
+	FlUtils,
+	ChangeRegistry,
 	sinon
 ) {
 	"use strict";
-	QUnit.start();
 
 	var oMockedAppComponent = {
 		getLocalId: function () {
@@ -45,74 +48,79 @@ function(
 		},
 		getManifest: function () {
 			return {
-				"sap.app" : {
-					applicationVersion : {
-						version : "1.2.3"
+				"sap.app": {
+					applicationVersion: {
+						version: "1.2.3"
 					}
 				}
 			};
 		},
 		getModel: function () {}
 	};
-	sinon.stub(sap.ui.fl.Utils, "getAppComponentForControl").returns(oMockedAppComponent);
+	var oGetAppComponentForControlStub = sinon.stub(FlUtils, "getAppComponentForControl").returns(oMockedAppComponent);
+
+	QUnit.done(function () {
+		oGetAppComponentForControlStub.restore();
+	});
 
 	QUnit.module("Given a designTime and EasyRemove plugin are instantiated", {
-		beforeEach : function(assert) {
+		beforeEach: function(assert) {
 			var done = assert.async();
 
-			var oChangeRegistry = sap.ui.fl.registry.ChangeRegistry.getInstance();
-			oChangeRegistry.registerControlsForChanges({
-				"sap.uxap.ObjectPageSection" : {
-					"stashControl": {
-						"changeHandler": "default",
-						"layers": {
-							"USER": true
+			var oChangeRegistry = ChangeRegistry.getInstance();
+			return oChangeRegistry.registerControlsForChanges({
+				"sap.uxap.ObjectPageSection": {
+					stashControl: {
+						changeHandler: "default",
+						layers: {
+							USER: true
 						}
 					}
 				}
-			});
+			})
+			.then(function() {
+				//	layout
+				//		section
+				//			subsection
+				//				Button
+				//		section2
+				//			subsection2
+				//				Button
 
-			this.oEasyRemovePlugin = new EasyRemove({
-				commandFactory : new CommandFactory()
-			});
+				this.oEasyRemovePlugin = new EasyRemove({
+					commandFactory: new CommandFactory()
+				});
+				var oSubSection = new ObjectPageSubSection("subsection", {
+					blocks: [new Button({text: "firstSubSection"})]
+				});
+				var oSubSection2 = new ObjectPageSubSection("subsection2", {
+					blocks: [new Button({text: "secondSubSection"})]
+				});
+				this.oSection = new ObjectPageSection("section", {
+					subSections: [oSubSection]
+				});
+				this.oSection2 = new ObjectPageSection("section2", {
+					subSections: [oSubSection2]
+				});
+				this.oLayout = new ObjectPageLayout("layout", {
+					sections: [this.oSection, this.oSection2]
+				}).placeAt("qunit-fixture");
+				sap.ui.getCore().applyChanges();
 
-			//	layout
-			//		section
-			//			subsection
-			//				Button
-			//		section2
-			//			subsection2
-			//				Button
-			var oSubSection = new ObjectPageSubSection("subsection", {
-				blocks: [new Button({text: "firstSubSection"})]
-			});
-			var oSubSection2 = new ObjectPageSubSection("subsection2", {
-				blocks: [new Button({text: "secondSubSection"})]
-			});
-			this.oSection = new ObjectPageSection("section", {
-				subSections: [oSubSection]
-			});
-			this.oSection2 = new ObjectPageSection("section2", {
-				subSections: [oSubSection2]
-			});
-			this.oLayout = new ObjectPageLayout("layout", {
-				sections : [this.oSection, this.oSection2]
-			}).placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
+				this.oDesignTime = new DesignTime({
+					rootElements: [this.oLayout],
+					plugins: [this.oEasyRemovePlugin]
+				});
 
-			this.oDesignTime = new DesignTime({
-				rootElements : [this.oLayout],
-				plugins : [this.oEasyRemovePlugin]
-			});
-
-			this.oDesignTime.attachEventOnce("synced", function() {
-				this.oLayoutOverlay = OverlayRegistry.getOverlay(this.oLayout);
-				this.oSectionOverlay = OverlayRegistry.getOverlay(this.oSection);
-				this.oSectionOverlay2 = OverlayRegistry.getOverlay(this.oSection2);
-				done();
+				this.oDesignTime.attachEventOnce("synced", function() {
+					this.oLayoutOverlay = OverlayRegistry.getOverlay(this.oLayout);
+					this.oSectionOverlay = OverlayRegistry.getOverlay(this.oSection);
+					this.oSectionOverlay2 = OverlayRegistry.getOverlay(this.oSection2);
+					done();
+				}.bind(this));
 			}.bind(this));
 		},
-		afterEach : function(assert) {
+		afterEach: function () {
 			this.oLayout.destroy();
 			this.oDesignTime.destroy();
 		}
@@ -159,48 +167,48 @@ function(
 
 
 	QUnit.module("Given a designTime and EasyRemove plugin are instantiated with a OP-Section without stableID", {
-		beforeEach : function(assert) {
+		beforeEach: function(assert) {
 			var done = assert.async();
 
-			var oChangeRegistry = sap.ui.fl.registry.ChangeRegistry.getInstance();
-			oChangeRegistry.registerControlsForChanges({
-				"sap.uxap.ObjectPageSection" : {
-					"stashControl": {
-						"changeHandler": "default",
-						"layers": {
-							"USER": true
+			var oChangeRegistry = ChangeRegistry.getInstance();
+			return oChangeRegistry.registerControlsForChanges({
+				"sap.uxap.ObjectPageSection": {
+					stashControl: {
+						changeHandler: "default",
+						layers: {
+							USER: true
 						}
 					}
 				}
-			});
+			})
+			.then(function() {
+				this.oEasyRemovePlugin = new EasyRemove({
+					commandFactory: new CommandFactory()
+				});
+				this.oSubSection = new ObjectPageSubSection("subsection", {
+					blocks: [new Button({text: "abc"})]
+				});
+				this.oSection = new ObjectPageSection({
+					subSections: [this.oSubSection]
+				});
+				this.oLayout = new ObjectPageLayout("layout", {
+					sections: [this.oSection]
+				}).placeAt("qunit-fixture");
+				sap.ui.getCore().applyChanges();
 
-			this.oEasyRemovePlugin = new EasyRemove({
-				commandFactory : new CommandFactory()
-			});
+				this.oDesignTime = new DesignTime({
+					rootElements: [this.oLayout],
+					plugins: [this.oEasyRemovePlugin]
+				});
 
-			this.oSubSection = new ObjectPageSubSection("subsection", {
-				blocks: [new Button({text: "abc"})]
-			});
-			this.oSection = new ObjectPageSection({
-				subSections: [this.oSubSection]
-			});
-			this.oLayout = new ObjectPageLayout("layout", {
-				sections : [this.oSection]
-			}).placeAt("qunit-fixture");
-			sap.ui.getCore().applyChanges();
-
-			this.oDesignTime = new DesignTime({
-				rootElements : [this.oLayout],
-				plugins : [this.oEasyRemovePlugin]
-			});
-
-			this.oDesignTime.attachEventOnce("synced", function() {
-				this.oLayoutOverlay = OverlayRegistry.getOverlay(this.oLayout);
-				this.oSectionOverlay = OverlayRegistry.getOverlay(this.oSection);
-				done();
+				this.oDesignTime.attachEventOnce("synced", function() {
+					this.oLayoutOverlay = OverlayRegistry.getOverlay(this.oLayout);
+					this.oSectionOverlay = OverlayRegistry.getOverlay(this.oSection);
+					done();
+				}.bind(this));
 			}.bind(this));
 		},
-		afterEach : function(assert) {
+		afterEach: function () {
 			this.oLayout.destroy();
 			this.oDesignTime.destroy();
 		}
@@ -209,5 +217,9 @@ function(
 			var oDeleteButton = sap.ui.getCore().byId(this.oSectionOverlay.getId() + "-DeleteIcon");
 			assert.notOk(oDeleteButton, "then the Delete-Icon is not displayed");
 		});
+	});
+
+	QUnit.done(function () {
+		jQuery("#qunit-fixture").hide();
 	});
 });

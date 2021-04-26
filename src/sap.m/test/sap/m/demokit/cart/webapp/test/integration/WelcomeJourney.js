@@ -2,12 +2,12 @@
  global QUnit
  */
 sap.ui.define([
-	'sap/ui/test/opaQunit',
-	'./pages/Home',
-	'./pages/Welcome',
-	'./pages/Product',
-	'./pages/Category',
-	'./pages/Cart'
+	"sap/ui/test/opaQunit",
+	"./pages/Home",
+	"./pages/Welcome",
+	"./pages/Product",
+	"./pages/Category",
+	"./pages/Cart"
 ], function (opaTest) {
 	"use strict";
 
@@ -45,7 +45,7 @@ sap.ui.define([
 
 	opaTest("Should press back button and navigate to welcome view", function (Given, When, Then) {
 		// Actions
-		When.onTheCategory.iPressTheBackButtonInProduct();
+		When.onTheCategory.iPressTheBackButtonInCategory();
 		// Assertions
 		Then.onTheWelcomePage.iShouldSeeTheWelcomePage();
 	});
@@ -54,7 +54,7 @@ sap.ui.define([
 		// Actions
 		When.onHome.iPressOnTheFlatScreensCategory();
 		When.onTheWelcomePage.iPressOnTheCartButton();
-		When.onTheCategory.iGoToTheCartPage();
+		When.onTheWelcomePage.iToggleTheCart();
 		// Assertions
 		Then.onTheCart.iShouldSeeTheProductInMyCart();
 		// Cleanup

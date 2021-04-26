@@ -1,56 +1,109 @@
 /* global QUnit*/
-QUnit.config.autostart = false;
 
-sap.ui.require([
-	"sap/ui/rta/service/ControllerExtension",
+sap.ui.define([
 	"sap/ui/rta/RuntimeAuthoring",
+	"sap/ui/dt/OverlayRegistry",
 	"sap/ui/fl/Utils",
-	"sap/ui/dt/Util",
+	"sap/ui/core/UIComponent",
+	"sap/ui/core/ComponentContainer",
+	"sap/ui/core/mvc/XMLView",
+	"sap/ui/fl/write/api/ChangesWriteAPI",
+	"sap/ui/fl/write/api/PersistenceWriteAPI",
 	"sap/ui/thirdparty/sinon-4"
 ],
 function(
-	ControllerExtension,
 	RuntimeAuthoring,
+	OverlayRegistry,
 	FlexUtils,
-	DtUtil,
+	UIComponent,
+	ComponentContainer,
+	XMLView,
+	ChangesWriteAPI,
+	PersistenceWriteAPI,
 	sinon
 ) {
 	"use strict";
 
 	var sandbox = sinon.sandbox.create();
+	var server;
 
-	QUnit.module("Given that RuntimeAuthoring and ControllerExtension service are created and add function is called...", {
-		beforeEach: function(assert) {
-			this.oRta = new RuntimeAuthoring();
-			this.iCreateBaseChangeCounter = 0;
-			this.iAddPreparedChangeCounter = 0;
-			sandbox.stub(this.oRta, "_getFlexController").returns({
-				createBaseChange: function(oChangeSpecificData) {
-					this.iCreateBaseChangeCounter ++;
-					this.oCreateBaseChangeParameter = oChangeSpecificData;
-					return {
-						getDefinition: function() {
-							return {definition: "definition"};
+	function before() {
+		QUnit.config.fixture = null;
+		return XMLView.create({
+			definition: '<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns:core="sap.ui.core"></mvc:View>'
+		}).then(function(oView) {
+			this.oView = oView;
+			var FixtureComponent = UIComponent.extend("fixture.UIComponent", {
+				metadata: {
+					manifest: {
+						"sap.app": {
+							id: "fixture.application"
 						}
-					};
-				}.bind(this),
-				addPreparedChange: function() {
-					this.iAddPreparedChangeCounter ++;
+					}
+				},
+				createContent: function() {
+					return this.oView;
 				}.bind(this)
 			});
-			sandbox.stub(FlexUtils, "getAppComponentForControl");
-			return this.oRta.getService("controllerExtension").then(function(oService) {
-				this.oControllerExtension = oService;
+
+			this.oComponent = new FixtureComponent('Comp');
+			this.oComponentContainer = new ComponentContainer('CompCont', {
+				component: this.oComponent
+			});
+			this.oComponentContainer.placeAt('qunit-fixture');
+			sap.ui.getCore().applyChanges();
+		}.bind(this));
+	}
+
+	function after() {
+		QUnit.config.fixture = '';
+		this.oView.destroy();
+		// this.oComponent.destroy();
+		this.oComponentContainer.destroy();
+	}
+
+	QUnit.module("Given that RuntimeAuthoring and ControllerExtension service are created and 'add' is called", {
+		before: before,
+		after: after,
+		beforeEach: function () {
+			this.oRta = new RuntimeAuthoring({
+				showToolbars: false,
+				rootControl: this.oComponent
+			});
+			this.iCreateChangeCounter = 0;
+			this.iAddChangeCounter = 0;
+			sandbox.stub(ChangesWriteAPI, "create").callsFake(function (mPropertyBag) {
+				this.iCreateChangeCounter++;
+				this.oCreateChangeParameter = mPropertyBag.changeSpecificData;
+				return {
+					getDefinition: function () {
+						return {definition: "definition"};
+					}
+				};
+			}.bind(this));
+
+			sandbox.stub(PersistenceWriteAPI, "add").callsFake(function() {
+				this.iAddChangeCounter ++;
+			}.bind(this));
+			sandbox.stub(FlexUtils, "getComponentClassName").returns("sap.ui.rta.service.controllerExtension.Component");
+			sandbox.stub(PersistenceWriteAPI, "getResetAndPublishInfo").resolves({
+				isResetEnabled: true,
+				isPublishEnabled: true
+			});
+			sandbox.stub(this.oRta, "_determineReload").resolves(false);
+			return this.oRta.start().then(function () {
+				return this.oRta.getService("controllerExtension").then(function(oService) {
+					this.oControllerExtension = oService;
+				}.bind(this));
 			}.bind(this));
 		},
 		afterEach: function() {
 			this.oRta.destroy();
 			sandbox.restore();
 		}
-	}, function() {
+	}, function () {
 		QUnit.test("with correct parameters and developer mode = true", function(assert) {
-			var oView = new sap.ui.core.mvc.View({});
-			sandbox.stub(oView, "getController").returns({
+			sandbox.stub(this.oView, "getController").returns({
 				getMetadata: function() {
 					return {
 						getName: function() {
@@ -59,14 +112,22 @@ function(
 					};
 				}
 			});
+			sandbox.stub(FlexUtils, "buildLrepRootNamespace");
+			this.oRta.setFlexSettings({
+				developerMode: true,
+				scenario: "scenario"
+			});
 
-			return this.oControllerExtension.add("foo.js", oView.getId()).then(function(oDefinition) {
+			return this.oControllerExtension.add("coding/foo.js", this.oView.getId()).then(function (oDefinition) {
 				assert.deepEqual(oDefinition, {definition: "definition"}, "the function returns the definition of the change");
-				assert.equal(this.iCreateBaseChangeCounter, 1, "and FlexController.createBaseChange was called once");
-				assert.equal(this.iAddPreparedChangeCounter, 1, "and FlexController.addPreparedChange was called once");
-				assert.equal(this.oCreateBaseChangeParameter.changeType, "codeExt", "the changeType was set correctly");
-				assert.equal(this.oCreateBaseChangeParameter.selector.controllerName, "controllerName", "the controllerName was set correctly");
-				assert.equal(this.oCreateBaseChangeParameter.content.codeRef, "foo.js", "the codeRef was set correctly");
+				assert.equal(this.iCreateChangeCounter, 1, "and ChangesWriteAPI.create was called once");
+				assert.equal(this.iAddChangeCounter, 1, "and PersistenceWriteAPI.add was called once");
+				assert.equal(this.oCreateChangeParameter.changeType, "codeExt", "the changeType was set correctly");
+				assert.equal(this.oCreateChangeParameter.selector.controllerName, "controllerName", "the controllerName was set correctly");
+				assert.equal(this.oCreateChangeParameter.content.codeRef, "coding/foo.js", "the codeRef was set correctly");
+				assert.equal(this.oCreateChangeParameter.developerMode, true, "the developerMode was set correctly");
+				assert.equal(this.oCreateChangeParameter.scenario, "scenario", "the scenario was set correctly");
+				assert.equal(this.oCreateChangeParameter.moduleName, "sap/ui/rta/service/controllerExtension/changes/coding/foo", "the scenario was set correctly");
 			}.bind(this));
 		});
 
@@ -79,8 +140,8 @@ function(
 			})
 			.catch(function(oError) {
 				assert.equal(oError.message, "code extensions can only be created in developer mode", "then ControllerExtension.add throws an error");
-				assert.equal(this.iCreateBaseChangeCounter, 0, "and FlexController.createBaseChange was not called");
-				assert.equal(this.iAddPreparedChangeCounter, 0, "and FlexController.addPreparedChange was not called");
+				assert.equal(this.iCreateChangeCounter, 0, "and ChangesWriteAPI.create was not called");
+				assert.equal(this.iAddChangeCounter, 0, "and PersistenceWriteAPI.add was not called");
 			}.bind(this));
 		});
 
@@ -91,8 +152,8 @@ function(
 			})
 			.catch(function(oError) {
 				assert.equal(oError.message, "can't create controller extension without codeRef", "then ControllerExtension.add throws an error");
-				assert.equal(this.iCreateBaseChangeCounter, 0, "and FlexController.createBaseChange was not called");
-				assert.equal(this.iAddPreparedChangeCounter, 0, "and FlexController.addPreparedChange was not called");
+				assert.equal(this.iCreateChangeCounter, 0, "and ChangesWriteAPI.create was not called");
+				assert.equal(this.iAddChangeCounter, 0, "and PersistenceWriteAPI.add was not called");
 			}.bind(this));
 		});
 
@@ -103,11 +164,88 @@ function(
 			})
 			.catch(function(oError) {
 				assert.equal(oError.message, "codeRef has to end with 'js'", "then ControllerExtension.add throws an error");
-				assert.equal(this.iCreateBaseChangeCounter, 0, "and FlexController.createBaseChange was not called");
-				assert.equal(this.iAddPreparedChangeCounter, 0, "and FlexController.addPreparedChange was not called");
+				assert.equal(this.iCreateChangeCounter, 0, "and ChangesWriteAPI.create was not called");
+				assert.equal(this.iAddChangeCounter, 0, "and PersistenceWriteAPI.add was not called");
 			}.bind(this));
 		});
 	});
 
-	QUnit.start();
+	QUnit.module("Given that RuntimeAuthoring and ControllerExtension service are created and 'getTemplate' is called", {
+		before: before,
+		after: after,
+		beforeEach: function () {
+			server = sinon.fakeServer.create();
+			server.respondImmediately = true;
+
+			sandbox.stub(PersistenceWriteAPI, "getResetAndPublishInfo").resolves({
+				isResetEnabled: true,
+				isPublishEnabled: true
+			});
+
+			this.oRta = new RuntimeAuthoring({
+				showToolbars: false,
+				rootControl: this.oComponent
+			});
+			sandbox.stub(this.oRta, "_determineReload").resolves(false);
+			return this.oRta.start().then(function () {
+				return this.oRta.getService("controllerExtension").then(function(oService) {
+					this.oControllerExtension = oService;
+					this.oViewOverlay = OverlayRegistry.getOverlay(this.oView);
+				}.bind(this));
+			}.bind(this));
+		},
+		afterEach: function() {
+			this.oRta.destroy();
+			sandbox.restore();
+			server.restore();
+		}
+	}, function () {
+		QUnit.test("with a template available in debug sources", function(assert) {
+			var sPath = "sap/ui/rta/service/ControllerExtension";
+			sandbox.stub(this.oViewOverlay.getDesignTimeMetadata(), "getControllerExtensionTemplate").returns(sPath);
+
+			server.respondWith(sap.ui.require.toUrl(sPath) + "-dbg.js", [200, {"Content-Type": "html/text"}, "abc"]);
+			return this.oControllerExtension.getTemplate(this.oView.getId()).then(function(sTemplate) {
+				assert.equal(sTemplate, "abc", "the service returned the template");
+			});
+		});
+
+		QUnit.test("with a template available, but no debug sources", function(assert) {
+			var sPath = "sap/ui/rta/service/ControllerExtension";
+			sandbox.stub(this.oViewOverlay.getDesignTimeMetadata(), "getControllerExtensionTemplate").returns(sPath);
+			server.respondWith(sap.ui.require.toUrl(sPath) + "-dbg.js", [404, {}, ""]);
+			server.respondWith(sap.ui.require.toUrl(sPath) + ".js", [200, {"Content-Type": "html/text"}, "def"]);
+
+			return this.oControllerExtension.getTemplate(this.oView.getId()).then(function(sTemplate) {
+				assert.equal(sTemplate, "def", "the service returned the template");
+			});
+		});
+
+		QUnit.test("with no overlay for the given view ID", function(assert) {
+			return this.oControllerExtension.getTemplate("invalidID").then(function() {
+				assert.ok(false, "should never go here");
+			})
+			.catch(function(oError) {
+				assert.equal(oError.message, "no overlay found for the given view ID", "then ControllerExtension.getTemplate throws an error");
+			});
+		});
+
+		QUnit.test("with template available that can't be found", function(assert) {
+			sandbox.stub(this.oViewOverlay.getDesignTimeMetadata(), "getControllerExtensionTemplate").returns("undefined");
+			server.respondWith(sap.ui.require.toUrl("undefined") + "-dbg.js", [404, {}, ""]);
+			server.respondWith(sap.ui.require.toUrl("undefined") + ".js", [404, {}, ""]);
+
+			return this.oControllerExtension.getTemplate(this.oView.getId())
+			.then(function() {
+				assert.ok(false, "should not go in here");
+			})
+			.catch(function(oError) {
+				assert.ok(oError, "an error was thrown");
+			});
+		});
+	});
+
+	QUnit.done(function () {
+		jQuery("#qunit-fixture").hide();
+	});
 });

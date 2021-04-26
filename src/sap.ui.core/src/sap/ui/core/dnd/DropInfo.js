@@ -2,8 +2,8 @@
  * ${copyright}
  */
 
-sap.ui.define(["jquery.sap.global", "./DragDropBase"],
-	function(jQuery, DragDropBase) {
+sap.ui.define(["./DragDropBase"],
+	function(DragDropBase) {
 	"use strict";
 
 	/**
@@ -129,9 +129,7 @@ sap.ui.define(["jquery.sap.global", "./DragDropBase"],
 
 		// droppable by default
 		var sTargetAggregation = this.getTargetAggregation();
-		var oMetadata = oDropTarget.getMetadata().getDragDropInfo(sTargetAggregation);
-		if (!oMetadata.droppable) {
-			jQuery.sap.log.warning((sTargetAggregation ? sTargetAggregation + " aggregation of " : "") + oDropTarget + " is not configured to be droppable");
+		if (!this.checkMetadata(oDropTarget, sTargetAggregation, "droppable")) {
 			return false;
 		}
 
@@ -221,4 +219,4 @@ sap.ui.define(["jquery.sap.global", "./DragDropBase"],
 
 	return DropInfo;
 
-}, /* bExport= */ true);
+});

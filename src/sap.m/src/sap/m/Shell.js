@@ -4,13 +4,16 @@
 
 // Provides control sap.m.Shell.
 sap.ui.define([
-	'jquery.sap.global',
 	'./library',
+	'sap/ui/core/Core',
 	'sap/ui/core/Control',
 	'sap/ui/core/library',
-	'sap/m/ShellRenderer'
+	'sap/m/ShellRenderer',
+	"sap/ui/util/Mobile",
+	"sap/base/Log",
+	"sap/ui/thirdparty/jquery"
 ],
-	function(jQuery, library, Control, coreLibrary, ShellRenderer) {
+	function(library, Core, Control, coreLibrary, ShellRenderer, Mobile, Log, jQuery) {
 		"use strict";
 
 
@@ -50,6 +53,9 @@ sap.ui.define([
 
 				/**
 				 * Defines the logo to be displayed next to the App when the screen is sufficiently large.
+				 *
+				 * Note: If property value isn't set, then the logo address is taken from the theme parameters.
+				 * For reference please see: {@link sap.ui.core.theming.Parameters}
 				 */
 				logo : {type : "sap.ui.core.URI", group : "Appearance", defaultValue : null},
 
@@ -146,20 +152,28 @@ sap.ui.define([
 
 		Shell.prototype.init = function() {
 			// theme change might change the logo
-			sap.ui.getCore().attachThemeChanged(jQuery.proxy(function(){
-				var $hdr = this.$("hdr");
-				if ($hdr.length) {
-					$hdr.find(".sapMShellLogo").remove(); // remove old logo, if present
-					var html = ShellRenderer.getLogoImageHtml(this);
-					$hdr.prepend(jQuery(html)); // insert new logo
+			Core.attachThemeChanged(jQuery.proxy(function(){
+				var $hdr = this.$("hdr"),
+					sImgSrc = this._getImageSrc();
+
+				if ($hdr.length && sImgSrc) {
+					this._getImage().setSrc(sImgSrc);
+					this._getImage().rerender();
 				}
 			}, this));
 
 
-			jQuery.sap.initMobile({
+			Mobile.init({
 				statusBar: "default",
 				hideBrowser: true
 			});
+		};
+
+		Shell.prototype.onBeforeRendering = function() {
+			var sImgSrc = this._getImageSrc();
+			if (sImgSrc) {
+				this._getImage().setSrc(sImgSrc);
+			}
 		};
 
 		Shell.prototype.onAfterRendering = function () {
@@ -180,6 +194,12 @@ sap.ui.define([
 				}
 			}
 			this.$("content").css("height", "");
+		};
+
+		Shell.prototype.exit = function() {
+			if (this.oImg) {
+				this.oImg.destroy();
+			}
 		};
 
 		Shell.prototype.ontap = function(oEvent) {
@@ -216,7 +236,7 @@ sap.ui.define([
 
 		Shell.prototype.setBackgroundOpacity = function(fOpacity) {
 			if (fOpacity > 1 || fOpacity < 0) {
-				jQuery.sap.log.warning("Invalid value " + fOpacity + " for Shell.setBackgroundOpacity() ignored. Valid values are: floats between 0 and 1.");
+				Log.warning("Invalid value " + fOpacity + " for Shell.setBackgroundOpacity() ignored. Valid values are: floats between 0 and 1.");
 				return this;
 			}
 			this.$("BG").css("opacity", fOpacity);
@@ -225,8 +245,32 @@ sap.ui.define([
 
 		Shell.prototype.setHomeIcon = function(oIcons) {
 			this.setProperty("homeIcon", oIcons, true); // no rerendering
-			jQuery.sap.setIcons(oIcons);
+			Mobile.setIcons(oIcons);
 			return this;
+		};
+
+		Shell.prototype._getImage = function() {
+			if (!this.oImg) {
+				this.oImg = new sap.m.Image(this.getId() + "-logo", {
+					decorative: false,
+					alt: sap.ui.getCore().getLibraryResourceBundle("sap.m").getText("SHELL_ARIA_LOGO")
+				});
+
+				this.oImg.addStyleClass("sapMShellLogoImg");
+			}
+
+			return this.oImg;
+		};
+
+		Shell.prototype._getImageSrc = function() {
+			var sImage = this.getLogo(); // configured logo
+			if (!sImage) {
+				//TODO: global jquery call found
+				jQuery.sap.require("sap.ui.core.theming.Parameters");
+				sImage = sap.ui.require("sap/ui/core/theming/Parameters")._getThemeImage(); // theme logo
+			}
+
+			return sImage;
 		};
 
 		return Shell;

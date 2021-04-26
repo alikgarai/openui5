@@ -3,25 +3,27 @@
  */
 // Provides control sap.m.SelectionDetails.
 sap.ui.define([
-	'jquery.sap.global',
 	'./library',
 	'sap/ui/core/Control',
 	'sap/m/Button',
 	'sap/ui/base/Interface',
 	'sap/ui/Device',
 	'sap/ui/core/library',
-	'./SelectionDetailsRenderer'
+	'./SelectionDetailsRenderer',
+	"sap/base/util/uid",
+	"sap/ui/thirdparty/jquery"
 ],
 function(
-	jQuery,
 	library,
 	Control,
 	Button,
 	Interface,
 	Device,
 	CoreLibrary,
-	SelectionDetailsRenderer
-	) {
+	SelectionDetailsRenderer,
+	uid,
+	jQuery
+) {
 	"use strict";
 
 	/**
@@ -147,6 +149,9 @@ function(
 	/* Lifecycle methods                                           */
 	/* =========================================================== */
 	SelectionDetails.prototype.init = function() {
+		// Indicates whether the labels are wrapped
+		this._bWrapLabels = false;
+
 		this._oRb = sap.ui.getCore().getLibraryResourceBundle("sap.m");
 		this.setAggregation("_button", new Button({
 			id: this.getId() + "-button",
@@ -158,6 +163,10 @@ function(
 
 	SelectionDetails.prototype.onBeforeRendering = function() {
 		this._updateButton();
+	};
+
+	SelectionDetails.prototype.onAfterRendering = function() {
+		document.getElementById(this.getAggregation("_button").getId()).setAttribute("aria-haspopup", "dialog");
 	};
 
 	SelectionDetails.prototype.exit = function() {
@@ -194,7 +203,7 @@ function(
 
 	/**
 	 * Closes SelectionDetails if open.
-	 * @returns {sap.m.SelectionDetails} To ensure method chaining, return the SelectionDetails.
+	 * @returns {this} To ensure method chaining, return the SelectionDetails.
 	 * @public
 	 * @function
 	 * @name sap.m.SelectionDetailsFacade#close
@@ -214,7 +223,7 @@ function(
 	 *
 	 * @param {string} title The title property of the {@link sap.m.Page page} control to which the navigation should occur.
 	 * @param {sap.ui.core.Control} content The content of the control to which the navigation should occur.
-	 * @returns {sap.m.SelectionDetails} To ensure method chaining, return the SelectionDetails.
+	 * @returns {this} To ensure method chaining, return the SelectionDetails.
 	 * @public
 	 * @function
 	 * @name sap.m.SelectionDetailsFacade#navTo
@@ -229,6 +238,35 @@ function(
 		return this;
 	};
 
+	/**
+	 * Returns <code>true</code> if the labels of the {@link sap.m.SelectionDetailsItemLine} elements are wrapped, <code>false</code> otherwise.
+	 * @returns {boolean} True if the labels of the {@link sap.m.SelectionDetailsItemLine} elements are wrapped, false otherwise.
+	 * @public
+	 * @function
+	 * @name sap.m.SelectionDetailsFacade#getWrapLabels
+	 */
+	SelectionDetails.prototype.getWrapLabels = function () {
+		return this._bWrapLabels;
+	};
+
+	/**
+	 * Enables line wrapping for the labels of the of the {@link sap.m.SelectionDetailsItemLine} elements.
+	 * @param {boolean} bWrap True to apply wrapping to the labels of the {@link sap.m.SelectionDetailsItemLine} elements.
+	 * @returns {this} To ensure method chaining, returns SelectionDetails.
+	 * @public
+	 * @function
+	 * @name sap.m.SelectionDetailsFacade#setWrapLabels
+	 */
+	SelectionDetails.prototype.setWrapLabels = function (bWrap) {
+		var oPopover = this.getAggregation("_popover");
+		this._bWrapLabels = bWrap;
+
+		if (oPopover && oPopover.isOpen()) {
+			oPopover.invalidate();
+		}
+		return this;
+	};
+
 	/* =========================================================== */
 	/* Protected API methods                                       */
 	/* =========================================================== */
@@ -236,7 +274,7 @@ function(
 	 * Sets the popover to modal or non-modal based on the given parameter. This only takes effect on desktop or tablet.
 	 * Please see the documentation {@link sap.m.ResponsivePopover#modal}.
 	 * @param {boolean} modal New value for property modal of the internally used popover.
-	 * @returns {sap.m.SelectionDetails} To ensure method chaining, return the SelectionDetails.
+	 * @returns {this} To ensure method chaining, return the SelectionDetails.
 	 * @protected
 	 */
 	SelectionDetails.prototype.setPopoverModal = function(modal) {
@@ -257,7 +295,7 @@ function(
 	 * @private
 	 */
 	SelectionDetails.prototype._handleNavLazy = function(pageTitle, content, Page, Toolbar, ToolbarSpacer, Title, Button) {
-		var sPageId = this.getId() + "-page-for-" + content.getId() + "-uid-" + jQuery.sap.uid();
+		var sPageId = this.getId() + "-page-for-" + content.getId() + "-uid-" + uid();
 
 		this._setPopoverHeight(SelectionDetails._POPOVER_MAX_HEIGHT);
 		var oPage = new Page(sPageId, {
@@ -405,7 +443,8 @@ function(
 		"attachActionPress", "detachActionPress",
 		"addAction", "removeAction", "removeAllActions",
 		"addActionGroup", "removeActionGroup", "removeAllActionGroups",
-		"navTo"
+		"navTo",
+		"getWrapLabels", "setWrapLabels"
 	];
 
 	/**
@@ -417,7 +456,9 @@ function(
 		var oFacade = new Interface(this, SelectionDetails.prototype._aFacadeMethods, true);
 		oFacade.getItems = this._getItemFacades.bind(this);
 
-		this.getFacade = jQuery.sap.getter(oFacade);
+		this.getFacade = function() {
+			return oFacade;
+		};
 		return oFacade;
 	};
 
@@ -457,10 +498,12 @@ function(
 			sText = this._oRb.getText("SELECTIONDETAILS_BUTTON_TEXT_WITH_NUMBER", [ iCount ]);
 			oButton.setProperty("text", sText, true);
 			oButton.setProperty("enabled", true, true);
+			oButton.setAggregation("tooltip", sText, true);
 		} else {
 			sText = this._oRb.getText("SELECTIONDETAILS_BUTTON_TEXT");
 			oButton.setProperty("text", sText, true);
 			oButton.setProperty("enabled", false, true);
+			oButton.setAggregation("tooltip", sText, true);
 		}
 	};
 
@@ -632,6 +675,12 @@ function(
 					onAfterRendering: this._updatePopoverContentHeight.bind(this)
 				});
 			}
+
+			oPopover.addEventDelegate({
+				onBeforeRendering: function () {
+					this.getWrapLabels() ? oPopover.addStyleClass("sapMSDWrapLabels") : oPopover.removeStyleClass("sapMSDWrapLabels");
+				}.bind(this)
+			});
 
 			this.setAggregation("_popover", oPopover, true);
 		}
@@ -861,7 +910,7 @@ function(
 	 */
 	SelectionDetails.prototype._handleSelectionChange = function(oEvent) {
 		var oEventParams = oEvent.getParameter("data");
-		if (jQuery.type(oEventParams) === "array") {
+		if (Array.isArray(oEventParams)) {
 			this._oSelectionData = oEventParams;
 			this._updateButton();
 			this.getAggregation("_button").rerender();
@@ -881,7 +930,7 @@ function(
 	 * @protected
 	 * @param {any} data Data to be passed to the factory function
 	 * @param {function} factory The item factory function that returns SelectionDetailsItems
-	 * @returns {sap.m.SelectionDetails} this to allow method chaining
+	 * @returns {this} this to allow method chaining
 	 */
 	SelectionDetails.prototype.registerSelectionDetailsItemFactory = function(data, factory) {
 		if (typeof (data) === "function") {
@@ -902,25 +951,25 @@ function(
 	 * @protected
 	 * @param {string} eventId The identifier of the event to listen for
 	 * @param {object} listener The object which triggers the event to register on
-	 * @returns {sap.m.SelectionDetails} this to allow method chaining
+	 * @returns {this} this to allow method chaining
 	 */
 	SelectionDetails.prototype.attachSelectionHandler = function(eventId, listener) {
-		if (this._oChangeHandler || jQuery.type(eventId) !== "String" && (jQuery.type(listener) !== "object" || jQuery.type(listener.attachEvent) !== "function")) {
-			return this;
-		} else {
+		// only create change handler once + check for argument validity
+		if (!this._oChangeHandler && typeof eventId === "string" && listener && typeof listener.attachEvent === "function") {
 			this._oChangeHandler = {
 				eventId: eventId,
 				listener: listener
 			};
 			listener.attachEvent(eventId, this._handleSelectionChange, this);
 		}
+
 		return this;
 	};
 
 	/**
 	 * Detaches the event which was attached by <code>attachSelectionHandler</code>.
 	 * @protected
-	 * @returns {sap.m.SelectionDetails} this to allow method chaining
+	 * @returns {this} this to allow method chaining
 	 */
 	SelectionDetails.prototype.detachSelectionHandler = function() {
 		if (this._oChangeHandler) {

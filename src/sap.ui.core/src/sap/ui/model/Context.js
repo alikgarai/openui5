@@ -3,8 +3,8 @@
  */
 
 // Provides an abstraction for model bindings
-sap.ui.define(['sap/ui/base/Object'],
-	function(BaseObject) {
+sap.ui.define(['sap/ui/base/Object', "sap/base/util/isPlainObject"],
+	function(BaseObject, isPlainObject) {
 	"use strict";
 
 
@@ -12,11 +12,18 @@ sap.ui.define(['sap/ui/base/Object'],
 	 * Constructor for Context class.
 	 *
 	 * @class
-	 * The Context is a pointer to an object in the model data, which is used to
-	 * allow definition of relative bindings, which are resolved relative to the
-	 * defined object.
-	 * Context elements are created either by the ListBinding for each list entry
-	 * or by using createBindingContext.
+	 * The Context is a pointer to an object in the model data. A relative binding needs a context
+	 * as a reference point in order to resolve its path; without a context, a relative binding is
+	 * unresolved and does not point to model data. Context instances can, for example, be created
+	 * in the following ways:
+	 * <ul>
+	 * <li>by a {@link sap.ui.model.ListBinding} for each list entry,</li>
+	 * <li>as the single context associated with a {@link sap.ui.model.ContextBinding},</li>
+	 * <li>by calling {@link sap.ui.model.Model#createBindingContext}.</li>
+	 * </ul>
+	 *
+	 * For more information on the concept of data binding and binding contexts, see
+	 * {@link topic:e2e6f4127fe4450ab3cf1339c42ee832 documentation on binding syntax}.
 	 *
 	 * @param {sap.ui.model.Model} oModel the model
 	 * @param {string} sPath the binding path
@@ -34,7 +41,7 @@ sap.ui.define(['sap/ui/base/Object'],
 			this.oModel = oModel;
 			this.sPath = sPath;
 			this.bForceRefresh = false;
-
+			this.sDeepPath = "";
 		},
 
 		metadata : {
@@ -84,7 +91,7 @@ sap.ui.define(['sap/ui/base/Object'],
 	 * @return {object} the context object
 	 */
 	Context.prototype.getObject = function(sPath, mParameters) {
-		if (jQuery.isPlainObject(sPath)) {
+		if (isPlainObject(sPath)) {
 			mParameters = sPath;
 			sPath = undefined;
 		}
@@ -124,7 +131,7 @@ sap.ui.define(['sap/ui/base/Object'],
 	/**
 	 * This method returns, whether the context is preliminary.
 	 * @private
-	 * @sap-restricted sap.suite.ui.generic
+	 * @ui5-restricted sap.suite.ui.generic
 	 * @return {boolean} the preliminary flag
 	 */
 	Context.prototype.isPreliminary = function() {
@@ -178,6 +185,27 @@ sap.ui.define(['sap/ui/base/Object'],
 	 */
 	Context.prototype.toString = function() {
 		return this.sPath;
+	};
+
+	/**
+	 * Returns messages associated with this context, that is messages belonging to the object
+	 * referred to by this context or a child object of that object. The messages are sorted by
+	 * their {@link sap.ui.core.message.Message#getType type} according to the type's severity in a
+	 * way that messages with highest severity come first.
+	 *
+	 * @returns {sap.ui.core.message.Message[]}
+	 *   The messages associated with this context sorted by severity; empty array in case no
+	 *   messages exist
+	 * @throws {Error}
+	 *   In case the context's model does not implement the method
+	 *   {@link sap.ui.model.Model#getMessages}
+	 *
+	 * @public
+	 * @see sap.ui.model.Model#getMessages
+	 * @since 1.76.0
+	 */
+	Context.prototype.getMessages = function () {
+		return this.oModel.getMessages(this);
 	};
 
 	return Context;

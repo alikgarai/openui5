@@ -4,17 +4,15 @@
 
 sap.ui.define([
 	"sap/ui/core/EventBus",
-	"sap/base/util/equal",
 	"sap/base/util/includes",
 	"sap/base/util/isPlainObject",
-	"sap/base/util/isWindow"
+	"sap/base/Log"
 ],
 function (
 	EventBus,
-	equal,
 	includes,
 	isPlainObject,
-	isWindow
+	Log
 ) {
 	"use strict";
 
@@ -23,14 +21,16 @@ function (
 
 	/**
 	 * @class
-	 * <h3>Overview</h3>
-	 * This class is responsible for the communication between different window objects.
+	 * Responsible for the communication between different window objects.
 	 *
+	 * <h3>Overview</h3>
 	 * This class is a singleton. The class instance can be retrieved as follows:
 	 * <ul>
 	 *   <li>via the constructor <code>new sap.ui.core.postmessage.Bus()</code></li>
 	 *   <li>via the static method <code>sap.ui.core.postmessage.Bus.getInstance()</code></li>
 	 * </ul>
+	 *
+	 * For supported data types for payload messages, see {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm}.
 	 *
 	 * @extends sap.ui.core.EventBus
 	 * @alias sap.ui.core.postmessage.Bus
@@ -79,8 +79,8 @@ function (
 	};
 
 	/**
-	 * Returns an instance of the class
-	 * @return {sap.ui.core.postmessage.Bus}
+	 * Returns an instance of the class.
+	 * @returns {sap.ui.core.postmessage.Bus} An instance of the class.
 	 * @static
 	 * @public
 	 */
@@ -98,7 +98,7 @@ function (
 	 * @param {string} mParameters.origin - Origin of the receiving window, e.g. http://example.com
 	 * @param {string} mParameters.channelId - Channel identifier
 	 * @param {string} mParameters.eventId - Event identifier
-	 * @param {*} [mParameters.data] - Custom serializable payload (JSON compatible)
+	 * @param {*} [mParameters.data] - Payload data. For supported data types see - {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm}
 	 * @throws {TypeError} when invalid data is specified
 	 * @public
 	 */
@@ -112,7 +112,9 @@ function (
 		// Defaults for READY event
 		if (sEventId === PostMessageBus.event.READY) {
 			if (!oTarget) {
-				if (window.parent !== window) {
+				if (window.opener && window.opener !== window) {
+					oTarget = window.opener;
+				} else if (window.parent !== window) {
 					oTarget = window.parent;
 				} else {
 					return; // Ignore ready event when there is no valid target
@@ -125,7 +127,7 @@ function (
 
 		// Validation
 		if (
-			!isWindow(oTarget)
+			(typeof window === "undefined") || !(oTarget != null && oTarget === oTarget.window)
 			|| oTarget === window // avoid self-messaging
 		) {
 			throw TypeError("Target must be a window object and has to differ from current window");
@@ -192,12 +194,12 @@ function (
 	 *     - {string} eventId - Event ID
 	 *     - {Window} source - Sender window
 	 *     - {string} origin - Sender origin, e.g. https://example.com
-	 *     - {object} [data] - Payload (JSON like object)
+	 *     - {*} [data] - Payload data
 	 * </pre>
 	 * @param {object}
 	 *            [oListener] Object that wants to be notified when the event occurs (<code>this</code> context within the
 	 *                        handler function). If it is not specified, the handler function is called in the context of the event bus.
-	 * @return {sap.ui.core.postmessage.Bus} Returns <code>this</code> to allow method chaining
+	 * @return {this} Returns <code>this</code> to allow method chaining
 	 * @public
 	 */
 
@@ -213,7 +215,8 @@ function (
 	 * @private
 	 */
 	PostMessageBus.prototype._getText = function (sKey, aParameters) {
-		return sap.ui.getCore().getLibraryResourceBundle().getText(sKey, aParameters);
+		return sap.ui.getCore().getLibraryResourceBundle(true)
+		.then(function(oLibraryResourceBundle) { return oLibraryResourceBundle.getText(sKey, aParameters); });
 	};
 
 	/**
@@ -246,7 +249,7 @@ function (
 	 * @private
 	 */
 	PostMessageBus.prototype._processEvent = function (oEvent) {
-		return new Promise(function (fnResolve) {
+		return new Promise(function (fnResolve, fnReject) {
 			var mData = oEvent.data;
 			var sOrigin = oEvent.origin;
 
@@ -277,9 +280,10 @@ function (
 					} else {
 						// Show dialog
 						sap.ui.require(["sap/ui/core/postmessage/confirmationDialog"], function (confirmationDialog) {
-							confirmationDialog(
-								this._getText('PostMessage.Message', [mData.data, sOrigin])
-							)
+							this._getText('PostMessage.Message', [mData.data, sOrigin])
+							.then(function(sText) {
+								return confirmationDialog(sText);
+							})
 							.then(
 								function () {
 									this.addAcceptedOrigin(sOrigin);
@@ -301,7 +305,7 @@ function (
 								}.bind(this)
 							)
 							.then(fnResolve);
-						}.bind(this));
+						}.bind(this), fnReject);
 					}
 					break;
 				}
@@ -321,6 +325,21 @@ function (
 				}
 			}
 		}.bind(this))
+		.catch(function (vError) {
+			var sMessage;
+			var sDetail;
+
+			if (typeof vError === 'string') {
+				sMessage = vError;
+			} else if (vError instanceof Error) {
+				sMessage = vError.message;
+				sDetail = vError.stack;
+			} else {
+				sMessage = 'Some unexpected error happened during post message processing';
+			}
+
+			Log.error(sMessage, sDetail, 'sap.ui.core.postmessage.Bus');
+		})
 		.then(function () {
 			this._oPendingProcess = (
 				this._aEventQueue.length > 0

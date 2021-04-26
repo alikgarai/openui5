@@ -1,20 +1,28 @@
 sap.ui.define([
-	'sap/ui/core/mvc/Controller', 'sap/ui/fl/variants/VariantModel', 'sap/ui/fl/variants/VariantManagement', 'sap/m/MessageToast'
-], function(Controller, VariantModel, VariantManagement, MessageToast) {
+	"sap/ui/core/mvc/Controller",
+	"sap/ui/fl/variants/VariantModel",
+	"sap/ui/fl/variants/VariantManagement",
+	"sap/m/MessageToast",
+	"sap/base/Log"
+], function(
+	Controller,
+	VariantModel,
+	VariantManagement,
+	MessageToast,
+	Log
+) {
 	"use strict";
 
 	return Controller.extend("sap.ui.fl.sample.variantmanagement.VariantManagement", {
-
 		onInit: function() {
-
 			var oModelData = {
-				popoverTitle: "{i18n>POP_OVER_TITLE}",
-				currentVariant: "2",
-				defaultVariant: "2",
+				popoverTitle: "Collective Search",
+				currentVariant: "1",
+				defaultVariant: "1",
 				originalDefaultVariant: "2",
 				modified: false,
-				variantsEditable: true,
-				showFavorites: true,
+				variantsEditable: false,
+				showFavorites: false,
 				variants: [
 					{
 						key: "Standard",
@@ -154,35 +162,29 @@ sap.ui.define([
 			});
 			this.getView().setModel(oResourceModel, "i18n");
 
-			this.oModel = new VariantModel({
-
-				M1: {
-					defaultVariant: "3",
-					currentVariant: "3",
-					modified: false,
-					variantsEditable: false,
-					showFavorites: false,
-					variants: []
-				}
-			});
-
-			this._sModelName = "Sample";
 
 			this.oVM = this.getView().byId("idVariantManagementCtrl");
 
+			var oModel = this.oVM.getModel(this.oVM._sModelName);
+
+			this._sModelName = "Sample";
 			this.oVM.setModelName(this._sModelName);
 
-			this.oModel.oData[this.oVM.getId()] = oModelData;
-			this.oVM.setModel(this.oModel, this._sModelName);
+			oModel.oData[this.oVM.getId()] = oModelData;
+			this.oVM.setModel(oModel, this._sModelName);
+
+			this.oVM.oContext = null;
+			this.oVM._setBindingContext();
+
+			this.oModel = oModel;
 
 			var oCurrentVariantChangeBinding = this.oModel.bindProperty("currentVariant", this.oVM.getBindingContext(this._sModelName));
 			oCurrentVariantChangeBinding.attachChange(function(oEvent) {
 				MessageToast.show("currentVariant: " + oEvent.oSource.oValue);
 			});
-
 		},
 
-		onDestroyVMBtn: function(oEvent) {
+		onDestroyVMBtn: function() {
 			var oParent = this.oVM.getParent();
 
 			oParent.removeContent(this.oVM);
@@ -206,19 +208,18 @@ sap.ui.define([
 // oCurrentVariantChangeBinding.attachChange(function(oEvent) {
 // MessageToast.show("currentVariant: " + oEvent.oSource.oValue);
 // });
-
 		},
 
-		onToggleErrorState: function(oEvent) {
+		onToggleErrorState: function() {
 			this.oVM.setInErrorState(!this.oVM.getInErrorState());
 		},
-		onToggleShowExeOnSeltBtn: function(oEvent) {
+		onToggleShowExeOnSeltBtn: function() {
 			this.oVM.setShowExecuteOnSelection(!this.oVM.getShowExecuteOnSelection());
 		},
-		onToggleShowAsDefaultBtn: function(oEvent) {
+		onToggleShowAsDefaultBtn: function() {
 			this.oVM.setShowSetAsDefault(!this.oVM.getShowSetAsDefault());
 		},
-		onToggleFavoritesBtn: function(oEvent) {
+		onToggleFavoritesBtn: function() {
 			var oModel = this.oVM.getModel(this._sModelName);
 			var oData = this.oVM.getBindingContext(this._sModelName).getObject();
 
@@ -227,12 +228,11 @@ sap.ui.define([
 			oModel.checkUpdate(true);
 		},
 
-		onOpenMamageDialogBtn: function(oEvent) {
+		onOpenMamageDialogBtn: function() {
 			this.oVM.openManagementDialog(true);
 		},
 
-		onToggleEditableVariantsBtn: function(oEvent) {
-
+		onToggleEditableVariantsBtn: function() {
 			var oModel = this.oVM.getModel(this._sModelName);
 			var oData = this.oVM.getBindingContext(this._sModelName).getObject();
 
@@ -241,17 +241,16 @@ sap.ui.define([
 			oModel.checkUpdate(true);
 		},
 
-		onToggleEditableBtn: function(oEvent) {
-
+		onToggleEditableBtn: function() {
 			this.oVM.setEditable(!this.oVM.getEditable());
 		},
 
-		onMarkAsChanged: function(oEvent) {
-			this.oVM.setModified(true);
+		onMarkAsChanged: function() {
+			this.oVM.setModified(!this.oVM.getModified());
 		},
 
 		onSelect: function(oEvent) {
-			MessageToast.show("currentVariant: " + oEvent.getParameter("key"));
+			MessageToast.show("onSelect currentVariant: " + oEvent.getParameter("key"));
 		},
 
 		onSave: function(oEvent) {
@@ -261,10 +260,9 @@ sap.ui.define([
 
 			var sMessage = sMode + "Name: " + params.name + "\nDefault: " + params.def + "\nOverwrite:" + params.overwrite + "\nSelected Item Key: " + params.key + "\nExecute:" + params.execute;
 			MessageToast.show(sMessage);
-			jQuery.sap.log.error("\n" + sMessage);
+			Log.error("\n" + sMessage);
 		},
-		onManage: function(oEvent) {
-
+		onManage: function() {
 			var oModel = this.oVM.getModel(this._sModelName);
 			var oData = this.oVM.getBindingContext(this._sModelName).getObject();
 
@@ -293,7 +291,6 @@ sap.ui.define([
 			});
 
 			oModel.checkUpdate(true);
-
 		}
 	});
 });

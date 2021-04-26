@@ -3,7 +3,17 @@
  */
 
 // Provides control sap.uxap.ObjectPageSectionBase.
-sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library", "./library", "jquery.sap.keycodes"], function (jQuery, Control, coreLibrary, library) {
+sap.ui.define([
+    "sap/ui/core/InvisibleText",
+	"sap/ui/thirdparty/jquery",
+	"sap/ui/core/Control",
+	"sap/ui/core/library",
+	"./library",
+	"sap/base/Log",
+	"sap/ui/events/KeyCodes",
+	// jQuery Plugin "firstFocusableDomRef"
+	"sap/ui/dom/jquery/Focusable"
+], function(InvisibleText, jQuery, Control, coreLibrary, library, Log, KeyCodes) {
 	"use strict";
 
 	// shortcut for sap.ui.core.TitleLevel
@@ -34,7 +44,11 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 			properties: {
 
 				/**
-				 * Section Title
+				 * Defines the title of the respective section/subsection.
+				 *
+				 * <b>Note:</b> If a subsection is the only one (or the only one visible) within a section, its title is
+				 * displayed instead of the section title. This behavior is true even if the <code>showTitle</code>
+				 * propeprty of {@link sap.uxap.ObjectPageSubSection} is set to <code>false</code>.
 				 */
 				title: {type: "string", group: "Appearance", defaultValue: null},
 
@@ -66,7 +80,10 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 				}
 			},
 			aggregations: {
-
+				/**
+				 * Screen Reader ariaLabelledBy
+				 */
+				ariaLabelledBy: {type: "sap.ui.core.InvisibleText", multiple: false, visibility: "hidden"},
 				/**
 				 * The custom button that will provide a link to the section in the ObjectPageLayout anchor bar.
 				 * This button will be used as a custom template to be into the ObjectPageLayout anchorBar area, therefore property changes happening on this button template after the first rendering won't affect the actual button copy used in the anchorBar.
@@ -75,7 +92,8 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 				 */
 				customAnchorBarButton: {type: "sap.m.Button", multiple: false}
 			}
-		}
+		},
+		renderer: null // control has no renderer (it is an abstract class)
 	});
 
 	/**
@@ -104,9 +122,19 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 	ObjectPageSectionBase.prototype.onAfterRendering = function () {
 		if (this._getObjectPageLayout()) {
 			this._getObjectPageLayout()._requestAdjustLayout().catch(function () {
-				jQuery.sap.log.debug("ObjectPageSectionBase :: cannot adjustLayout", this);
+				Log.debug("ObjectPageSectionBase :: cannot adjustLayout", this);
 			});
 			this._getObjectPageLayout()._setSectionsFocusValues();
+		}
+	};
+
+	ObjectPageSectionBase.prototype.onBeforeRendering = function () {
+		var sAriaLabeledBy = "ariaLabelledBy";
+
+		this.setInvisibleTextLabelValue(this._getTitle());
+
+		if (!this.getAggregation(sAriaLabeledBy)) {
+			this.setAggregation(sAriaLabeledBy, this._getAriaLabelledBy(), true); // this is called onBeforeRendering, so suppress invalidate
 		}
 	};
 
@@ -118,6 +146,66 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 		}
 
 		return vResult;
+	};
+
+	/**
+	 * Returns the control name text.
+	 *
+	 * To be overwritten by the specific control method.
+	 *
+	 * @return {string} control name text
+	 * @protected
+	 */
+	ObjectPageSectionBase.prototype.getSectionText = function () {
+		return "";
+	};
+
+	/**
+	 * Returns the DOM Element that should get the focus.
+	 *
+	 * To be overwritten by the specific control method.
+	 *
+	 * @return {this} this for chaining
+	 * @protected
+	 */
+	ObjectPageSectionBase.prototype.setInvisibleTextLabelValue = function (sValue) {
+		var oAriaLabelledBy = this.getAggregation("ariaLabelledBy"),
+			sSectionText = this.getSectionText(),
+			sLabel = "";
+
+		if (sValue) {
+			sLabel = sValue + " ";
+		}
+
+		if (oAriaLabelledBy) {
+			sap.ui.getCore().byId(oAriaLabelledBy.getId()).setText(sLabel + sSectionText);
+		}
+
+		return this;
+	};
+
+	/**
+	 * provide a default aria-labeled by text
+	 * @private
+	 * @returns {*} sap.ui.core.InvisibleText
+	 */
+	ObjectPageSectionBase.prototype._getAriaLabelledBy = function () {
+		// Each section should be labelled as:
+		// 'titleName Section' - if the section has a title
+		// 'Section' - if it does not have a title
+
+		var sLabel = "",
+			sTitle = this._getTitle();
+
+		if (sTitle) {
+			sLabel += sTitle + " ";
+		}
+
+		sLabel += this.getSectionText();
+
+		return new InvisibleText({
+			text: sLabel
+		}).toStatic();
 	};
 
 	/**
@@ -194,12 +282,23 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 	 * If the <code>titleLevel</code> is <code>TitleLevel.Auto</code>,
 	 * the result would be "3" for <code>ObjectPageSection</code> and "4" for <code>ObjectPageSubSection</code>.
 	 * The method is used by <code>ObjectPageSectionRenderer</code> and <code>ObjectPageSubSectionRenderer</code>.
+	 *
+	 * If there is a case where a TitleLevel.Auto is returned from _getTitleLevel in order to prevent a wrong
+	 * value to be se to the aria-level attribute title level fallbacks to TitleLevel.H2 as this is the default
+	 * aria-level according to aria specification
+	 *
 	 * @returns {String} the <code>aria-level</code>
 	 * @since 1.44
 	 * @private
 	 */
 	ObjectPageSectionBase.prototype._getARIALevel = function () {
-		return this._getTitleLevel().slice(-1);
+		var sTitleLevel = this._getTitleLevel();
+
+		if (sTitleLevel === TitleLevel.Auto) {
+			sTitleLevel = TitleLevel.H2;
+		}
+
+		return sTitleLevel.slice(-1);
 	};
 
 	/**
@@ -222,8 +321,13 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 	 * @since 1.44
 	 * @private
 	 */
-	ObjectPageSectionBase.prototype._setInternalTitleLevel = function (sTitleLevel) {
-		this._sInternalTitleLevel = sTitleLevel;
+	ObjectPageSectionBase.prototype._setInternalTitleLevel = function (sTitleLevel, bInvalidate) {
+		if (sTitleLevel !== this._sInternalTitleLevel) {
+			this._sInternalTitleLevel = sTitleLevel;
+			if (bInvalidate) {
+				this.invalidate();
+			}
+		}
 	};
 
 	/**
@@ -276,6 +380,10 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 	});
 
 	ObjectPageSectionBase.prototype.setVisible = function (bValue, bSuppressInvalidate) {
+		if (this.getVisible() === bValue) {
+			return this;
+		}
+
 		if (!this._getObjectPageLayout()) {
 			return this.setProperty("visible", bValue, bSuppressInvalidate);
 		}
@@ -292,6 +400,8 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 
 		this.setProperty("title", sValue, bSuppressInvalidate);
 		this._notifyObjectPageLayout();
+
+		this.setInvisibleTextLabelValue(sValue);
 
 		return this;
 	};
@@ -317,6 +427,16 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 		return this;
 	};
 
+	/**
+	 * Determines if the <code>ObjectPageSection</code> content is visible.
+	 *
+	 * The content is not visible if the <code>ObjectPageSection</code> is
+	 * given a lower <code>importance</code> than allowed to be rendered
+	 * for the current screen size.
+	 *
+	 * @private
+	 * @returns {Boolean}
+	 */
 	ObjectPageSectionBase.prototype._getIsHidden = function () {
 		return this._isHidden;
 	};
@@ -357,8 +477,13 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 	 */
 
 	ObjectPageSectionBase.prototype.onkeydown = function (oEvent) {
+		// Prevent browser scrolling in case of SPACE key
+		if (oEvent.keyCode === KeyCodes.SPACE && oEvent.srcControl.isA("sap.uxap.ObjectPageSection")) {
+			oEvent.preventDefault();
+		}
+
 		// Filter F7 key down
-		if (oEvent.keyCode === jQuery.sap.KeyCodes.F7) {
+		if (oEvent.keyCode === KeyCodes.F7) {
 			var aSubSections = this.getSubSections(),
 				oFirstSubSection = aSubSections[0],
 				oLastFocusedEl;
@@ -366,13 +491,13 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 			if (aSubSections.length === 1) {
 				oLastFocusedEl = oFirstSubSection._oLastFocusedControlF7;
 				if (oLastFocusedEl) {
-					oLastFocusedEl.$().focus();
+					oLastFocusedEl.$().trigger("focus");
 				} else {
 					oFirstSubSection.$().firstFocusableDomRef().focus();
 				}
 			} else {
 				if (oFirstSubSection.getActions().length) {
-					oFirstSubSection.getActions()[0].$().focus();
+					oFirstSubSection.getActions()[0].$().trigger("focus");
 				}
 			}
 		}
@@ -387,10 +512,15 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 	};
 
 	ObjectPageSectionBase.prototype._handleFocusing = function (oEvent, oElementToReceiveFocus) {
+		var aSections;
+
 		if (this._targetIsCorrect(oEvent) && oElementToReceiveFocus) {
+			aSections = jQuery(oEvent.currentTarget).parent().children();
 			oEvent.preventDefault();
 			oElementToReceiveFocus.focus();
-			this._scrollParent(jQuery(oElementToReceiveFocus).attr("id"));
+			if (aSections.length > 1) {
+				this._scrollParent(jQuery(oElementToReceiveFocus).attr("id"));
+			}
 		}
 	};
 
@@ -471,7 +601,9 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 			focusedSectionId = jQuery(aSections[0]).attr("id");
 		}
 
-		this._scrollParent(focusedSectionId);
+		if (aSections.length > 1) {
+			this._scrollParent(focusedSectionId);
+		}
 	};
 
 	/**
@@ -506,7 +638,9 @@ sap.ui.define(["jquery.sap.global", "sap/ui/core/Control", "sap/ui/core/library"
 			focusedSectionId = jQuery(aSections[aSections.length - 1]).attr("id");
 		}
 
-		this._scrollParent(focusedSectionId);
+		if (aSections.length > 1) {
+			this._scrollParent(focusedSectionId);
+		}
 	};
 
 	/**

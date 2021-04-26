@@ -3,8 +3,15 @@
  */
 
 // Provides control sap.m.Column.
-sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/core/Renderer', 'sap/ui/core/library', 'sap/ui/Device'],
-	function(jQuery, library, Element, Renderer, coreLibrary, Device) {
+sap.ui.define([
+	'./library',
+	'sap/ui/core/Element',
+	'sap/ui/core/Renderer',
+	'sap/ui/core/library',
+	'sap/ui/Device',
+	"sap/ui/thirdparty/jquery"
+],
+	function(library, Element, Renderer, coreLibrary, Device, jQuery) {
 	"use strict";
 
 
@@ -17,6 +24,9 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 
 	// shortcut for sap.ui.core.TextAlign
 	var TextAlign = coreLibrary.TextAlign;
+
+	// shortcut for sap.ui.core.SortOrder
+	var SortOrder = coreLibrary.SortOrder;
 
 
 
@@ -49,6 +59,12 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 
 			/**
 			 * Defines the width of the column. If you leave it empty then this column covers the remaining space.
+			 * <b>Note:</b> When setting <code>autoPopinMode=true</code> on the table, the columns with a fixed width must
+			 * either be in px, rem, or em as the table internally calculates the <code>minScreenWidth</code> property for the column.
+			 * If a column has a fixed width, then this width is used to calculate the <code>minScreenWidth</code> for the
+			 * <code>autoPopinMode</code>.
+			 * If a column has a flexible width, such as % or auto, the <code>autoPopinWidth</code> property is used
+			 * to calculate the <code>minScreenWidth</code>.
 			 */
 			width : {type : "sap.ui.core.CSSSize", group : "Dimension", defaultValue : null},
 
@@ -80,12 +96,18 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 			 * The responsive behavior of the <code>sap.m.Table</code> is determined by this property. As an example by setting <code>minScreenWidth</code> property to "40em" (or "640px" or "Tablet") shows this column on tablet (and desktop) but hides on mobile.
 			 * As you can give specific CSS sizes (e.g: "480px" or "40em"), you can also use the {@link sap.m.ScreenSize} enumeration (e.g: "Phone", "Tablet", "Desktop", "Small", "Medium", "Large", ....).
 			 * Please also see <code>demandPopin</code> property for further responsive design options.
+			 * <b>Note:</b> This property gets overwritten if the <code>sap.m.Table</code> control
+			 * is configured with <code>autoPopinMode=true</code>.
+			 * See {@link sap.m.Table#getAutoPopinMode}
 			 */
 			minScreenWidth : {type : "string", group : "Behavior", defaultValue : null},
 
 			/**
 			 * According to your minScreenWidth settings, the column can be hidden in different screen sizes.
 			 * Setting this property to true, shows this column as pop-in instead of hiding it.
+			 * <b>Note:</b> This property gets overwritten if the <code>sap.m.Table</code> control
+			 * is configured with <code>autoPopinMode=true</code>.
+			 * See {@link sap.m.Table#getAutoPopinMode}
 			 */
 			demandPopin : {type : "boolean", group : "Behavior", defaultValue : false},
 
@@ -106,19 +128,59 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 
 			/**
 			 * Set <code>true</code> to merge repeating/duplicate cells into one cell block. See <code>mergeFunctionName</code> property to customize.
-			 * <b>Note:</b> Merging only happens at the rendering of the <code>sap.m.Table</code> control, subsequent changes on the cell or item do not have any effect on the merged state of the cells, therefore this feature should not be used together with two-way binding.
+			 *
+			 * <b>Note:</b>
+			 * Merging only happens when rendering the <code>sap.m.Table</code> control, subsequent changes on the cell or item do not have any
+			 * effect on the merged state of the cells, therefore this feature should not be used together with two-way binding.
 			 * This property is ignored if any column is configured to be shown as a pop-in.
+			 * Merging is not supported if the <code>items</code> aggregation of the <code>sap.m.Table</code> control is
+			 * bound to an {@link sap.ui.model.odata.v4.ODataModel OData V4 model}.
+			 *
 			 * @since 1.16
 			 */
 			mergeDuplicates : {type : "boolean", group : "Behavior", defaultValue : false},
 
 			/**
-			 * Defines the control serialization function if <code>mergeDuplicates<code> property is set to <code>true</code>. The control itself uses this function to compare values of two repeating cells.
+			 * Defines the control serialization function if <code>mergeDuplicates</code> property is set to <code>true</code>. The control itself uses this function to compare values of two repeating cells.
 			 * Default value "getText" is suitable for <code>sap.m.Label</code> and <code>sap.m.Text</code> controls but for the <code>sap.ui.core.Icon</code> control "getSrc" function should be used to merge icons.
 			 * <b>Note:</b> You can pass one string parameter to given function after "#" sign. e.g. "data#myparameter"
 			 * @since 1.16
 			 */
-			mergeFunctionName : {type : "string", group : "Misc", defaultValue : 'getText'}
+			mergeFunctionName : {type : "string", group : "Misc", defaultValue : 'getText'},
+
+			/**
+			 * Defines if a column is sorted by setting the sort indicator for this column.
+			 *
+			 * <b>Note:</b> Defining this property does not trigger the sorting.
+			 * @since 1.61
+			 */
+			sortIndicator : {type : "sap.ui.core.SortOrder", group : "Appearance", defaultValue : SortOrder.None},
+
+			/**
+			 * Defines the column importance.
+			 *
+			 * If the <code>sap.m.Table</code> control is configured with <code>autoPopinMode=true</code>,
+			 * then the column importance is taken into consideration for calculating the <code>minScreenWidth</code>
+			 * property and for setting the <code>demandPopin</code> property of the column.
+			 * See {@link sap.m.Table#getAutoPopinMode}
+			 *
+			 * @since 1.76
+			 */
+			importance : {type : "sap.ui.core.Priority", group : "Behavior", defaultValue : "None"},
+
+			/**
+			 * Defines the auto pop-in width for the column.
+			 *
+			 * If the <code>sap.m.Table</code> control is configured with <code>autoPopinMode=true</code>,
+			 * then the <code>autoPopinWidth</code> property is used to calculate the <code>minScreenWidth</code>
+			 * property of the column in case a fixed width is not set for the column.
+			 * See {@link sap.m.Column#getWidth} and {@link sap.m.Table#getAutoPopinMode}.
+			 * <b>Note:</b> A float value is set for the <code>autoPopinWidth</code> property
+			 * which is internally treated as a rem value.
+			 *
+			 * @since 1.76
+			 */
+			autoPopinWidth : {type : "float", group : "Behavior", defaultValue : 8}
 		},
 		defaultAggregation : "header",
 		aggregations : {
@@ -145,6 +207,9 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 
 	// default media value
 	Column.prototype._media = null;
+
+	// default forced column value
+	Column.prototype._bForcedColumn = false;
 
 	Column.prototype.exit = function() {
 		this._clearMedia();
@@ -186,6 +251,15 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 
 	Column.prototype.onsapenter = Column.prototype.onsapspace;
 
+	Column.prototype.invalidate = function() {
+		var oParent = this.getParent();
+		if (!oParent || !oParent.bOutput) {
+			return;
+		}
+
+		Element.prototype.invalidate.apply(this, arguments);
+	};
+
 	Column.prototype._clearMedia = function() {
 		if (this._media && this._minWidth) {
 			this._detachMediaContainerWidthChange(this._notifyResize, this, this.getId());
@@ -223,10 +297,10 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 		this._media.matches = !!oMedia.from;
 
 		// inform parent delayed
-		jQuery.sap.delayedCall(0, this, function() {
+		setTimeout(function() {
 			this.fireEvent("media", this);
 			this.informTable("Resize");
-		});
+		}.bind(this), 0);
 	};
 
 	Column.prototype._validateMinWidth = function(sWidth) {
@@ -272,38 +346,6 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 			this._minWidth = parseFloat(sWidth) * baseFontSize + "px";
 		}
 	};
-
-	/**
-	 * Apply text alignment of the Column to the Text controls
-	 *
-	 * @param {sap.ui.core.Control} oControl List control
-	 * @param {String} [sAlign] TextAlign enumeration
-	 * @return {sap.ui.core.Control} oControl
-	 * @protected
-	 */
-	Column.prototype.applyAlignTo = function(oControl, sAlign) {
-		// TODO: This is so ugly to check content functions
-		// instead we should document how to use our controls
-		// to inherit text-alignment and we should add a new
-		// sap.ui.core.TextAlign type called "Inherit"
-		sAlign = sAlign || this.getHAlign();
-		if (sAlign === TextAlign.Initial ||
-			!oControl.getMetadata().getProperties().textAlign ||
-			oControl.getTextAlign() === sAlign) {
-			return oControl;
-		}
-
-		oControl.setProperty("textAlign", sAlign, true);
-		var oDomRef = oControl.getDomRef();
-		sAlign = this.getCssAlign(sAlign);
-
-		if (oDomRef && sAlign) {
-			oDomRef.style.textAlign = sAlign;
-		}
-
-		return oControl;
-	};
-
 
 	/**
 	 * Returns CSS alignment according to column hAlign setting or given parameter
@@ -417,7 +459,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 		// go with native we need speed
 		var i = this._index + 1,
 			parent =  this.getParent(),
-			display = bDisplay ? "table-cell" : "none",
+			display = bDisplay && !this.isHidden() ? "table-cell" : "none",
 			header = oTableDomRef.querySelector("tr > th:nth-child(" + i + ")"),
 			cells = oTableDomRef.querySelectorAll("tr > td:nth-child(" + i + ")"),
 			length = cells.length;
@@ -439,28 +481,6 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 		}
 	};
 
-	/**
-	 * Display or hide the column from given table via checking media query changes
-	 *
-	 * @param {Object} oTableDomRef Table DOM reference
-	 * @protected
-	 */
-	Column.prototype.setDisplayViaMedia = function(oTableDomRef) {
-		var oParent = this.getParent(),
-			bDisplay = this._media && this._media.matches;
-
-		if (!this.getDemandPopin() && this._screen && oParent && oParent.setTableHeaderVisibility) {
-			// this means CSS media queries already change the column visibility
-			// let the parent know the visibility change
-			// make it sure rendering phase is done with timeout
-			setTimeout(function() {
-				oParent.setTableHeaderVisibility(bDisplay);
-			}, 0);
-		} else {
-			this.setDisplay(oTableDomRef, bDisplay);
-		}
-	};
-
 	Column.prototype.setVisible = function(bVisible) {
 		if (bVisible == this.getVisible()) {
 			return this;
@@ -468,31 +488,20 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 
 		var oParent = this.getParent(),
 			oTableDomRef = oParent && oParent.getTableDomRef && oParent.getTableDomRef(),
-			bSupressInvalidate = oTableDomRef && this._index >= 0;
+			bSupressInvalidate = oTableDomRef && this._index >= 0 && !oParent.getAutoPopinMode();
 
-		this.setProperty("visible", bVisible, bSupressInvalidate);
 		if (bSupressInvalidate) {
+			this.setProperty("visible", bVisible, bSupressInvalidate);
 			this.setDisplay(oTableDomRef, bVisible);
+		} else {
+			this.setProperty("visible", bVisible);
 		}
 
 		return this;
 	};
 
-	/*
-	 * Decides if we need media query or not according to given settings
-	 * Checks the given width is known screen size
-	 */
-	Column.prototype.setMinScreenWidth = function(sWidth) {
-		var parent = this.getParent();
-
-		// check if setting the old value
-		if (sWidth == this.getMinScreenWidth()) {
-			return this;
-		}
-
-		// first validate the value
-		this._validateMinWidth(sWidth);
-
+	// sets the internals for the minScreenWidth property
+	Column.prototype._setMinScreenWidth = function(sWidth) {
 		// initialize
 		this._clearMedia();
 		this._minWidth = 0;
@@ -509,12 +518,32 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 				this._isWidthPredefined(sWidth);
 			}
 
+			var parent = this.getTable();
 			if (parent && parent.isActive()) {
 				this._addMedia();
 			} else {
 				this._bShouldAddMedia = true;
 			}
 		}
+	};
+
+	/*
+	 * Decides if we need media query or not according to given settings
+	 * Checks the given width is known screen size
+	 */
+	Column.prototype.setMinScreenWidth = function(sWidth) {
+		sWidth = sWidth || "";
+
+		// check if setting the old value
+		if (sWidth == this.getMinScreenWidth()) {
+			return this;
+		}
+
+		// first validate the value
+		this._validateMinWidth(sWidth);
+
+		// set internal values
+		this._setMinScreenWidth(sWidth);
 
 		return this.setProperty("minScreenWidth", sWidth);
 	};
@@ -538,6 +567,11 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 		return this.setProperty("demandPopin", bValue);
 	};
 
+	Column.prototype.setSortIndicator = function(sSortIndicator) {
+		this.setProperty("sortIndicator", sSortIndicator, true);
+		this.$().attr("aria-sort", this.getSortIndicator().toLowerCase());
+		return this;
+	};
 
 	/**
 	 * Determines whether the column will be shown as pop-in or not
@@ -548,6 +582,19 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 		if (!this.getDemandPopin()) {
 			return false;
 		}
+
+		var oTable = this.getTable();
+		if (oTable) {
+			var aHiddenInPopin = oTable.getHiddenInPopin() || [];
+			var bHideColumn = aHiddenInPopin.some(function(sImportance) {
+				return this.getImportance() === sImportance;
+			}, this);
+
+			if (bHideColumn) {
+				return false;
+			}
+		}
+
 		if (this._media) {
 			return !this._media.matches;
 		}
@@ -574,7 +621,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 	 * Sets the last value of the column if mergeDuplicates property is true
 	 *
 	 * @param {any} value Any Value
-	 * @returns {sap.m.Column}
+	 * @returns {this}
 	 * @since 1.16
 	 * @protected
 	 */
@@ -588,7 +635,7 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 	/**
 	 * Clears the last value of the column if mergeDuplicates property is true
 	 *
-	 * @returns {sap.m.Column}
+	 * @returns {this}
 	 * @since 1.20.4
 	 * @protected
 	 */
@@ -614,6 +661,34 @@ sap.ui.define(['jquery.sap.global', './library', 'sap/ui/core/Element', 'sap/ui/
 	 */
 	Column.prototype.onItemsRemoved = function() {
 		this.clearLastValue();
+	};
+
+	// when the popover opens and later closed, the focus is lost
+	// hence overwriting the getFocusDomRef to restore the focus on the active column header
+	Column.prototype.getFocusDomRef = function() {
+		var oParent = this.getParent();
+		if (oParent && (oParent.bActiveHeaders || oParent.bFocusableHeaders)) {
+			var oColumnDomRef = this.getDomRef();
+			if (oColumnDomRef) {
+				return oColumnDomRef.firstChild;
+			}
+		}
+		return Element.prototype.getFocusDomRef.apply(this, arguments);
+	};
+
+	// returns the minScreenWidth property in pixel as integer
+	Column.prototype.getCalculatedMinScreenWidth = function() {
+		return parseInt(this._minWidth) || 0;
+	};
+
+	// forces the column not to be shown as a popin
+	Column.prototype.setForcedColumn = function(bForcedColumn) {
+		if (this._bForcedColumn == bForcedColumn) {
+			return;
+		}
+
+		this._bForcedColumn = bForcedColumn;
+		this._setMinScreenWidth(bForcedColumn ? "" : this.getMinScreenWidth());
 	};
 
 	return Column;

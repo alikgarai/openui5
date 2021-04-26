@@ -1,14 +1,20 @@
 /*!
  * ${copyright}
  */
-sap.ui.require([
+sap.ui.define([
 	"jquery.sap.global",
+	"sap/base/Log",
+	"sap/base/util/JSTokenizer",
 	"sap/ui/base/BindingParser",
 	"sap/ui/base/ExpressionParser",
+	"sap/ui/base/ManagedObject",
 	"sap/ui/core/Icon",
+	"sap/ui/core/InvisibleText",
 	"sap/ui/model/json/JSONModel",
-	"sap/ui/model/odata/ODataUtils"
-], function (jQuery, BindingParser, ExpressionParser, Icon, JSONModel, ODataUtils) {
+	"sap/ui/model/odata/ODataUtils",
+	"sap/ui/performance/Measurement"
+], function (jQuery, Log, JSTokenizer, BindingParser, ExpressionParser, ManagedObject, Icon,
+		InvisibleText, JSONModel, ODataUtils, Measurement) {
 	/*global QUnit, sinon */
 	/*eslint no-warning-comments: 0 */
 	"use strict";
@@ -46,13 +52,16 @@ sap.ui.require([
 	 * @param {object} [oScope] - the object to resolve formatter functions in the control
 	 */
 	function check(assert, sExpression, vResult, oScope) {
-		var oIcon = new Icon({
-				color: sExpression[0] === "{" ? sExpression : "{=" + sExpression + "}",
+		var oInvisibleText = new InvisibleText({
+				text: sExpression[0] === "{" ? sExpression : "{=" + sExpression + "}",
 				models: oModel
 			}, oScope);
 
-		oIcon.bindObject("/");
-		assert.strictEqual(oIcon.getColor(), oIcon.validateProperty("color", vResult));
+		oInvisibleText.bindObject("/");
+		assert.strictEqual(oInvisibleText.getText(),
+			oInvisibleText.validateProperty("text", vResult));
+
+		oInvisibleText.destroy();
 	}
 
 	/**
@@ -80,7 +89,7 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.module("sap.ui.base.ExpressionParser", {
 		beforeEach : function () {
-			this.oLogMock = this.mock(jQuery.sap.log);
+			this.oLogMock = this.mock(Log);
 			this.oLogMock.expects("warning").never();
 			this.oLogMock.expects("error").never();
 		},
@@ -315,6 +324,59 @@ sap.ui.require([
 	);
 
 	//*********************************************************************************************
+	QUnit.test("Locals: function call, undefined, shadowing", function (assert) {
+		var sInput = "{= MODEL.someFunction(undefined, ${A}) + Infinity }",
+			mLocals = {
+				Infinity : 42, // local shadows global
+				MODEL : {
+					someFunction : function (a, b) {
+						return a + "," + b;
+					}
+				}
+			},
+			oBindingInfo;
+
+		// code under test
+		oBindingInfo = BindingParser.complexParser(sInput, mLocals, false, false, true);
+
+		assert.deepEqual(oBindingInfo.formatter("foo"), "undefined,foo42");
+	});
+
+	//*********************************************************************************************
+	QUnit.test("Locals: constant", function (assert) {
+		var sInput = "{= MODEL.someFunction() }",
+			mLocals = {
+				MODEL : {
+					someFunction : function () {
+						return "foo";
+					}
+				}
+			};
+
+		this.mock(ManagedObject).expects("bindingParser")
+			.withExactArgs(sInput, sinon.match.same(mLocals), true)
+			.callsFake(function (sString, oContext, bUnescape) {
+				// bStaticContext = true, just like XMLPreprocessor would do it
+				return BindingParser.complexParser(sString, oContext, bUnescape, false, true);
+			});
+
+		// "code under test"
+		check(assert, sInput, "foo", mLocals);
+	});
+
+	//*********************************************************************************************
+	QUnit.test("parse: no globals - no undefined!", function (assert) {
+		this.oLogMock.expects("warning").withExactArgs(
+			"Unsupported global identifier 'undefined' in expression parser input 'undefined'",
+			undefined, "sap.ui.base.ExpressionParser");
+
+		this.mock(Object).expects("assign").never(); // no copy needed!
+
+		// code under test
+		ExpressionParser.parse(null, "undefined", 0, {});
+	});
+
+	//*********************************************************************************************
 	[
 		{ binding: "{=odata.fillUriTemplate(.}", message: "Unexpected .", token: "." },
 		{ binding: "{=odata.fillUriTemplate('foo', )}", message: "Unexpected )", token: ")" },
@@ -398,6 +460,9 @@ sap.ui.require([
 	}, {
 		expression: "{=odata.fillUriTemplate('http://foo.com/p1,p2')}",
 		result: "http://foo.com/p1,p2"
+	}, { // BCP: 1870419342
+		expression: "{=odata.fillUriTemplate('\n http://foo.com/\n\t\t\t\t\t\t\t\t\t',{})}",
+		result: "http://foo.com/"
 	}]);
 
 	//*********************************************************************************************
@@ -518,6 +583,18 @@ sap.ui.require([
 	]);
 
 	//*********************************************************************************************
+	checkFixtures("odata.collection", [{
+		expression: "{= odata.collection([0, 1, 2]) }",
+		result: "0,1,2"
+	}, {
+		expression: "{= odata.collection([0, 1, undefined, 3, undefined, 5, undefined]) }",
+		result: "0,1,3,5"
+	}, {
+		expression: "{= odata.collection([0, '', NaN, undefined, ' ', [], false]) }",
+		result: "0,,NaN, ,,false"
+	}]);
+
+	//*********************************************************************************************
 	QUnit.test("odata.compare", function (assert) {
 		this.mock(sap.ui).expects("requireSync")
 			.withExactArgs("sap/ui/model/odata/v4/ODataUtils").returns(ODataUtils);
@@ -544,8 +621,8 @@ sap.ui.require([
 		// w/o try/catch, a formatter's exception is thrown out of the control's c'tor...
 		// --> expression binding provides the comfort of an "automatic try/catch"
 		assert.throws(function () {
-			return new Icon({
-				color : {
+			return new InvisibleText({
+				text : {
 					path : '/',
 					formatter : function () { return null.toString(); }
 				},
@@ -574,12 +651,14 @@ sap.ui.require([
 			models : oModel
 		});
 		assert.strictEqual(oIcon.getDecorative(), true);
+		oIcon.destroy();
 
 		oIcon = new Icon({
 			decorative : "{= !!${/IsActiveEntity} }",
 			models : oModel
 		});
 		assert.strictEqual(oIcon.getDecorative(), false);
+		oIcon.destroy();
 
 		oIcon = new Icon({
 			decorative : "{= ${/IsActiveEntity} }",
@@ -588,6 +667,7 @@ sap.ui.require([
 		assert.strictEqual(oIcon.getDecorative(), true, "default value used!");
 		assert.strictEqual(oIcon.validateProperty("decorative", undefined), true,
 			"default value used!");
+		oIcon.destroy();
 	});
 
 	//*********************************************************************************************
@@ -608,10 +688,10 @@ sap.ui.require([
 				+ "${path: '/five', formatter: '.myFormatter'} : '7'", "~5~", 1);
 
 		// if we do not ensure that both ${mail} become the same part, evaluation is performed on
-		// partly resolved parts when calling oIcon.bindObject() after oIcon.bindProperty() in
-		// check(). Then the first ${mail} is already resolved (-> truthy) while the second still
-		// is null, the expression runs into an exception (" Cannot read property 'indexOf' of
-		// null") and raises a warning.
+		// partly resolved parts when calling oInvisibleText.bindObject() after
+		// oInvisibleText.bindProperty() in check(). Then the first ${mail} is already resolved
+		// (-> truthy) while the second still is null, the expression runs into an exception
+		// ("Cannot read property 'indexOf' of null") and raises a warning.
 		check(assert, "${mail} && ${mail}.indexOf('mail')", "0");
 	});
 
@@ -621,7 +701,7 @@ sap.ui.require([
 		QUnit.test("saveBindingAsPart: primitive value " + vPrimitiveValue, function (assert) {
 			var sBinding = "{:= ${foo : '~primitive~'} }";
 
-			this.mock(jQuery.sap).expects("parseJS")
+			this.mock(JSTokenizer).expects("parseJS")
 				.once() // this would be violated by bad code
 				.withExactArgs(sBinding, 5)
 				.returns({
@@ -637,10 +717,10 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("parse: Performance measurement points", function (assert) {
-		var oAverageSpy = this.spy(jQuery.sap.measure, "average")
+		var oAverageSpy = this.spy(Measurement, "average")
 				.withArgs("sap.ui.base.ExpressionParser#parse", "",
 					["sap.ui.base.ExpressionParser"]),
-			oEndSpy = this.spy(jQuery.sap.measure, "end")
+			oEndSpy = this.spy(Measurement, "end")
 				.withArgs("sap.ui.base.ExpressionParser#parse");
 
 		ExpressionParser.parse(function () { assert.ok(false, "unexpected call"); }, "{='foo'}", 2);
@@ -740,12 +820,9 @@ sap.ui.require([
 				message: sMessage,
 				at: iAt,
 				text: sInput
-			},
-			oTokenizer = jQuery.sap._createJSTokenizer();
+			};
 
-		this.mock(jQuery.sap).expects("_createJSTokenizer").withExactArgs()
-			.returns(oTokenizer);
-		this.mock(oTokenizer).expects("white").withExactArgs()
+		this.mock(JSTokenizer.prototype).expects("white").withExactArgs()
 			.throws(oError);
 
 		this.checkError(assert, sInput, sMessage, iAt);
@@ -754,12 +831,9 @@ sap.ui.require([
 	//*********************************************************************************************
 	QUnit.test("JSTokenizer throws Error", function (assert) {
 		var sExpression = "{= 'foo' }",
-			oError = new Error("Must not set index 0 before previous index 1"),
-			oTokenizer = jQuery.sap._createJSTokenizer();
+			oError = new Error("Must not set index 0 before previous index 1");
 
-		this.mock(jQuery.sap).expects("_createJSTokenizer").withExactArgs()
-			.returns(oTokenizer);
-		this.mock(oTokenizer).expects("setIndex")
+		this.mock(JSTokenizer.prototype).expects("setIndex")
 			.throws(oError);
 
 		assert.throws(function () {
@@ -769,16 +843,19 @@ sap.ui.require([
 
 	//*********************************************************************************************
 	QUnit.test("Internal incident 1680322832", function (assert) {
-		var oIcon,
+		var oInvisibleText,
 			oModel = new JSONModel({ID : "T 1000"});
 
 		// code under test (used to fail with "Bad string")
-		oIcon = new Icon({
-			color : "'{= encodeURIComponent(${/ID}) }'",
+		oInvisibleText = new InvisibleText({
+			text : "'{= encodeURIComponent(${/ID}) }'",
 			models : oModel
 		});
 
-		assert.strictEqual(oIcon.getColor(), oIcon.validateProperty("color", "'T%201000'"));
+		assert.strictEqual(oInvisibleText.getText(),
+			oInvisibleText.validateProperty("text", "'T%201000'"));
+
+		oInvisibleText.destroy();
 	});
 
 	//*********************************************************************************************

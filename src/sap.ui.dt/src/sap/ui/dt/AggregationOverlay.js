@@ -4,18 +4,20 @@
 
 // Provides class sap.ui.dt.AggregationOverlay.
 sap.ui.define([
-	'jquery.sap.global',
-	'sap/ui/dt/Overlay',
-	'sap/ui/dt/OverlayRegistry',
-	'sap/ui/dt/ElementUtil',
-	'sap/ui/dt/Util'
+	"sap/ui/thirdparty/jquery",
+	"sap/ui/dt/Overlay",
+	"sap/ui/dt/ElementUtil",
+	"sap/ui/dt/OverlayUtil",
+	"sap/ui/dt/Util",
+	"sap/base/util/merge"
 ],
 function(
 	jQuery,
 	Overlay,
-	OverlayRegistry,
 	ElementUtil,
-	Util
+	OverlayUtil,
+	Util,
+	merge
 ) {
 	"use strict";
 
@@ -40,33 +42,33 @@ function(
 	 * @experimental Since 1.30. This class is experimental and provides only limited functionality. Also the API might be changed in future.
 	 */
 	var AggregationOverlay = Overlay.extend("sap.ui.dt.AggregationOverlay", /** @lends sap.ui.dt.AggregationOverlay.prototype */ {
-		metadata : {
-			library : "sap.ui.dt",
-			properties : {
+		metadata: {
+			library: "sap.ui.dt",
+			properties: {
 				/**
 				 * Name of aggregation to create the AggregationOverlay for
 				 */
-				aggregationName : {
-					type : "string"
+				aggregationName: {
+					type: "string"
 				},
 				/**
 				 * Whether the AggregationOverlay is e.g. a drop target
 				 */
-				targetZone : {
-					type : "boolean",
-					defaultValue : false
+				targetZone: {
+					type: "boolean",
+					defaultValue: false
 				},
 				scrollContainerId: {
 					type: "int"
 				}
 			},
-			events : {
+			events: {
 				/**
 				 * Event fired when the property "targetZone" was changed
 				 */
-				targetZoneChange : {
-					parameters : {
-						targetZone : { type : "boolean" }
+				targetZoneChange: {
+					parameters: {
+						targetZone: { type: "boolean" }
 					}
 				}
 			}
@@ -77,8 +79,7 @@ function(
 	 * @override
 	 */
 	AggregationOverlay.prototype._getAttributes = function () {
-		return jQuery.extend(
-			true,
+		return merge(
 			{},
 			Overlay.prototype._getAttributes.apply(this, arguments),
 			{
@@ -123,7 +124,7 @@ function(
 		 * iCurrentPosition - previous position in DOM
 		 */
 		if (!(Util.isInteger(iPosition))) {
-			iPosition = ElementUtil[this.isAssociation() ? 'getIndexInAssociation' : 'getIndexInAggregation'](
+			iPosition = this.isAssociation() ? ElementUtil.getIndexInAssociation : OverlayUtil.getIndexInAggregation(
 				oChild.getElement(),
 				this.getElement(),
 				this.getAggregationName()
@@ -141,7 +142,8 @@ function(
 
 			if (this.isRendered()) {
 				var iPositionInDom = this._getChildIndex(oChild);
-				var $Child = oChild.isRendered() ? oChild.$() : oChild.render(true);
+				var bChildRendered = oChild.isRendered();
+				var $Child = bChildRendered ? oChild.$() : oChild.render(true);
 				var $Children = jQuery(this.getChildrenDomRef());
 				var iCurrentPosition = $Children.find('>').index($Child);
 				var iInsertIndex;
@@ -156,13 +158,17 @@ function(
 					}
 				}
 
-				oChild.fireAfterRendering({
-					domRef: $Child.get(0)
-				});
+				if (!bChildRendered) {
+					oChild.fireAfterRendering({
+						domRef: $Child.get(0)
+					});
+				}
 			}
 
 			this.fireChildAdded();
+			return true;
 		}
+		return false;
 	};
 
 	/**
@@ -192,8 +198,19 @@ function(
 	AggregationOverlay.prototype._getRenderingParent = function () {
 		if (Util.isInteger(this.getScrollContainerId())) {
 			return this.getParent().getScrollContainerById(this.getScrollContainerId());
-		} else {
-			return Overlay.prototype._getRenderingParent.apply(this, arguments);
+		}
+		return Overlay.prototype._getRenderingParent.apply(this, arguments);
+	};
+
+	/**
+	 * @override
+	 */
+	AggregationOverlay.prototype._setPosition = function ($Target, oGeometry, $Parent, bForceScrollbarSync) {
+		// Apply Overlay position first, then extra logic based on this new position
+		Overlay.prototype._setPosition.apply(this, arguments);
+
+		if (oGeometry.domRef && !Util.isInteger(this.getScrollContainerId())) {
+			this._handleOverflowScroll(oGeometry, this.$(), this.getParent(), bForceScrollbarSync);
 		}
 	};
 
@@ -226,7 +243,7 @@ function(
 			this.setProperty("targetZone", bTargetZone);
 			this.toggleStyleClass("sapUiDtOverlayTargetZone", bTargetZone);
 
-			this.fireTargetZoneChange({targetZone : bTargetZone});
+			this.fireTargetZoneChange({targetZone: bTargetZone});
 		}
 
 		return this;
@@ -251,4 +268,4 @@ function(
 	};
 
 	return AggregationOverlay;
-}, /* bExport= */ true);
+});

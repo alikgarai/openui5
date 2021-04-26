@@ -17,22 +17,19 @@
 
 	function loadAndExecSync(url) {
 		var xhr = new XMLHttpRequest();
-		var code = '';;
+		var code = '';
 		xhr.addEventListener('load', function(e) {
 			if ( xhr.status === 200 ) {
 				code = xhr.responseText;
-				code = code +  "\n//# sourceURL=" + url + "?fancyboot"
+				code = code +  "\n//# sourceURL=" + url + "?fancyboot";
 			}
 		});
 		xhr.open('GET', url, false);
 		xhr.send();
 
-		window.eval(code);
+		window.eval(code); // eslint-disable-line no-eval
 	}
 
-	loadAndExecSync("../../../../../../resources/sap/ui/thirdparty/baseuri.js");
-	loadAndExecSync("../../../../../../resources/sap/ui/thirdparty/es6-promise.js");
-	loadAndExecSync("../../../../../../resources/sap/ui/thirdparty/es6-string-methods.js");
 	loadAndExecSync('../../../../../../resources/ui5loader.js');
 	loadAndExecSync('../../../../../../resources/ui5loader-autoconfig.js');
 

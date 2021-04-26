@@ -4,23 +4,25 @@
 /**
  * Defines support rules related to the model.
  */
-sap.ui.define(["jquery.sap.global",
-		"sap/ui/support/library",
-		"sap/ui/support/supportRules/util/StringAnalyzer",
-		"sap/ui/model/ListBinding",
-		"sap/ui/model/json/JSONModel",
-		"sap/ui/model/odata/ODataMetadata",
-		"sap/ui/model/CompositeBinding",
-		"sap/ui/model/PropertyBinding"],
+sap.ui.define([
+	"sap/ui/support/library",
+	"sap/ui/support/supportRules/util/StringAnalyzer",
+	"sap/ui/model/ListBinding",
+	"sap/ui/model/json/JSONModel",
+	"sap/ui/model/odata/ODataMetadata",
+	"sap/ui/model/CompositeBinding",
+	"sap/ui/model/PropertyBinding"
+],
 	function(
-		jQuery,
 		SupportLib,
 		StringAnalyzer,
 		ListBinding,
 		JSONModel,
 		ODataMetadata,
-		CompositeBinding) {
+		CompositeBinding
+	) {
 	"use strict";
+	/*eslint max-nested-callbacks: 0 */
 
 	// shortcuts
 	var Categories = SupportLib.Categories; // Accessibility, Performance, Memory, ...
@@ -44,8 +46,8 @@ sap.ui.define(["jquery.sap.global",
 	// Rule Definitions
 	//**********************************************************
 	/**
-	 * Checks whether there are bindings for models where the model is available but a binding has no result
-	 * It checks the path structure and checks for typos
+	 * Checks whether there are bindings for models where the model is available but a binding has no result.
+	 * It checks the path structure and checks for typos.
 	 */
 	var oBindingPathSyntaxValidation = {
 		id: "bindingPathSyntaxValidation",
@@ -58,20 +60,20 @@ sap.ui.define(["jquery.sap.global",
 		resolution: "Check the binding path for typos",
 		resolutionurls: [
 			{
-				href: "https://sapui5.hana.ondemand.com/#docs/api/symbols/sap.ui.model.Context.html",
+				href: "https://sapui5.hana.ondemand.com/#/api/sap.ui.model.Context",
 				text: "API Reference: Context"
 			},
 			{
-				href: "https://sapui5.hana.ondemand.com/#docs/guide/e5310932a71f42daa41f3a6143efca9c.html",
-				text: "Documentation: Data Binding"
+				href: "https://sapui5.hana.ondemand.com/#/topic/e5310932a71f42daa41f3a6143efca9c",
+				text: "Documentation: Data Binding Tutorial"
 			},
 			{
-				href: "https://sapui5.hana.ondemand.com/#docs/guide/97830de2d7314e93b5c1ee3878a17be9.html",
-				text: "Data Binding Tutorial - Step 12: Aggregation Binding Using Templates"
+				href: "https://sapui5.hana.ondemand.com/#/topic/97830de2d7314e93b5c1ee3878a17be9",
+				text: "Documentation: Data Binding Tutorial - Step 12: Aggregation Binding Using Templates"
 			},
 			{
-				href: "https://sapui5.hana.ondemand.com/#docs/guide/6c7c5c266b534e7ea9a28f861dc515f5.html",
-				text: "Data Binding Tutorial - Step 13: Element Binding"
+				href: "https://sapui5.hana.ondemand.com/#/topic/6c7c5c266b534e7ea9a28f861dc515f5",
+				text: "Documentation: Data Binding Tutorial - Step 13: Element Binding"
 			}
 		],
 		check: function(oIssueManager, oCoreFacade, oScope) {

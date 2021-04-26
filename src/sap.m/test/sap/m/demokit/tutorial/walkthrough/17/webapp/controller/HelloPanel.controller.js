@@ -1,7 +1,8 @@
 sap.ui.define([
 	"sap/ui/core/mvc/Controller",
-	"sap/m/MessageToast"
-], function (Controller, MessageToast) {
+	"sap/m/MessageToast",
+	"sap/ui/core/Fragment"
+], function (Controller, MessageToast, Fragment) {
 	"use strict";
 
 	return Controller.extend("sap.ui.demo.walkthrough.controller.HelloPanel", {
@@ -18,19 +19,28 @@ sap.ui.define([
 
 		onOpenDialog : function () {
 			var oView = this.getView();
-			var oDialog = oView.byId("helloDialog");
+
 			// create dialog lazily
-			if (!oDialog) {
-				// create dialog via fragment factory
-				oDialog = sap.ui.xmlfragment(oView.getId(), "sap.ui.demo.walkthrough.view.HelloDialog", this);
-				// connect dialog to view (models, lifecycle)
-				oView.addDependent(oDialog);
+			if (!this.pDialog) {
+				this.pDialog = Fragment.load({
+					id: oView.getId(),
+					name: "sap.ui.demo.walkthrough.view.HelloDialog",
+					controller: this
+				}).then(function (oDialog) {
+					// connect dialog to the root view of this component (models, lifecycle)
+					oView.addDependent(oDialog);
+					return oDialog;
+				});
 			}
 
-			oDialog.open();
+			this.pDialog.then(function(oDialog) {
+				oDialog.open();
+			});
 		},
 
 		onCloseDialog : function () {
+			// note: We don't need to chain to the pDialog promise, since this event-handler
+			// is only called from within the loaded dialog itself.
 			this.byId("helloDialog").close();
 		}
 	});

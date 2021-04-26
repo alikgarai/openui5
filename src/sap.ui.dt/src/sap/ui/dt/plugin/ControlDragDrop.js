@@ -4,15 +4,13 @@
 
 // Provides class sap.ui.dt.plugin.ControlDragDrop.
 sap.ui.define([
-	'sap/ui/dt/plugin/DragDrop',
-	'sap/ui/dt/plugin/ElementMover',
-	'sap/ui/dt/ElementUtil',
-	'sap/ui/dt/OverlayUtil'
+	"sap/ui/dt/plugin/DragDrop",
+	"sap/ui/dt/plugin/ElementMover",
+	"sap/ui/dt/ElementUtil"
 ], function(
 	DragDrop,
 	ElementMover,
-	ElementUtil,
-	OverlayUtil
+	ElementUtil
 ) {
 	"use strict";
 
@@ -34,23 +32,24 @@ sap.ui.define([
 	 * @experimental Since 1.30. This class is experimental and provides only limited functionality. Also the API might be
 	 *               changed in future.
 	 */
-	var ControlDragDrop = DragDrop.extend("sap.ui.dt.plugin.ControlDragDrop", /** @lends sap.ui.dt.plugin.ControlDragDrop.prototype */
-	{
-		metadata : {
-			// ---- object ----
-
+	var ControlDragDrop = DragDrop.extend("sap.ui.dt.plugin.ControlDragDrop", /** @lends sap.ui.dt.plugin.ControlDragDrop.prototype */ {
+		metadata: {
 			// ---- control specific ----
-			library : "sap.ui.dt",
-			properties : {
-				draggableTypes : {
-					type : "string[]",
-					defaultValue : ["sap.ui.core.Element"]
+			library: "sap.ui.dt",
+			properties: {
+				draggableTypes: {
+					type: "string[]",
+					defaultValue: ["sap.ui.core.Element"]
 				},
-				elementMover : {
-					type : "any" // "sap.ui.dt.plugin.ElementMover"
+				elementMover: {
+					type: "any" // "sap.ui.dt.plugin.ElementMover"
+				},
+				insertAfterElement: {
+					type: "boolean",
+					defaultValue: false
 				}
 			},
-			associations : {}
+			associations: {}
 		}
 	});
 
@@ -86,19 +85,20 @@ sap.ui.define([
 	 * @override
 	 */
 	ControlDragDrop.prototype.registerElementOverlay = function(oOverlay) {
-		DragDrop.prototype.registerElementOverlay.apply(this, arguments);
 		var oElement = oOverlay.getElement();
-		if (
-			this.getElementMover().isMovableType(oElement)
-			&& this.getElementMover().checkMovable(oOverlay)
-			&& !OverlayUtil.isInAggregationBinding(oOverlay, oElement.sParentAggregationName)
-		) {
-			oOverlay.setMovable(true);
-		}
-
-		if (this.oDraggedElement) {
-			this.getElementMover().activateTargetZonesFor(oOverlay, sDROP_ZONE_STYLE);
-		}
+		this.getElementMover().checkMovable(oOverlay)
+			.then(function(bMovable) {
+				if (
+					this.getElementMover().isMovableType(oElement)
+					&& bMovable
+				) {
+					oOverlay.setMovable(true);
+				}
+				if (this.oDraggedElement) {
+					this.getElementMover().activateTargetZonesFor(oOverlay, sDROP_ZONE_STYLE);
+				}
+				DragDrop.prototype.registerElementOverlay.call(this, oOverlay);
+			}.bind(this));
 	};
 
 	/**
@@ -136,7 +136,7 @@ sap.ui.define([
 	/**
 	 * @override
 	 */
-	ControlDragDrop.prototype.onDragEnd = function(oOverlay) {
+	ControlDragDrop.prototype.onDragEnd = function() {
 		delete this._oPreviousTarget;
 		this.getElementMover().deactivateAllTargetZones(this.getDesignTime(), sDROP_ZONE_STYLE);
 		delete this._oDraggedOverlay;
@@ -159,11 +159,15 @@ sap.ui.define([
 	 * @override
 	 */
 	ControlDragDrop.prototype.onAggregationDragEnter = function(oAggregationOverlay) {
-		delete this._oPreviousTarget;
+		var sAggregationName = oAggregationOverlay.getAggregationName();
+		var oElement = oAggregationOverlay.getElement();
+		if (ElementUtil.getAggregation(oElement, sAggregationName).length === 0) {
+			delete this._oPreviousTarget;
 
-		var oDraggedOverlay = this.getDraggedOverlay();
-		this.getElementMover().insertInto(oDraggedOverlay, oAggregationOverlay);
+			var oDraggedOverlay = this.getDraggedOverlay();
+			this.getElementMover().insertInto(oDraggedOverlay, oAggregationOverlay, this.getInsertAfterElement());
+		}
 	};
 
 	return ControlDragDrop;
-}, /* bExport= */true);
+});

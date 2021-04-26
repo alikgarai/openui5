@@ -2,8 +2,14 @@
  * ${copyright}
  */
 
-sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Item", "sap/ui/core/library"],
-	function(jQuery, library, Item, coreLibrary) {
+sap.ui.define([
+	"./library",
+	"sap/ui/core/Item",
+	"sap/ui/core/library",
+	"sap/base/Log",
+	"sap/base/security/sanitizeHTML"
+],
+	function(library, Item, coreLibrary, Log, sanitizeHTML) {
 		"use strict";
 
 		// shortcut for sap.ui.core.MessageType
@@ -81,7 +87,13 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Item", "sap/ui/cor
 					/**
 					 * Name of a message group the current item belongs to.
 					 */
-					groupName: { type: "string", group: "Misc", defaultValue: "" }
+					groupName: { type: "string", group: "Misc", defaultValue: "" },
+
+					/**
+					 * Defines whether the title of the item will be interactive.
+					 * @since 1.58
+					 */
+					activeTitle: { type: "boolean", group: "Misc", defaultValue: false }
 				},
 				defaultAggregation: "link",
 				aggregations: {
@@ -99,7 +111,7 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Item", "sap/ui/cor
 			// So, we should ensure if something is changed in MessageItem, it would be propagated to the StandardListItem
 			var oParent = this.getParent(),
 				sType = this.getType().toLowerCase(),
-				// Blacklist properties. Some properties have already been set and shouldn't be changed in the StandardListItem
+				// Exclude list properties. Some properties have already been set and shouldn't be changed in the StandardListItem
 				aPropertiesNotToUpdateInList = ["description", "type", "groupName"],
 				// TODO: the '_oMessagePopoverItem' needs to be updated to proper name in the eventual sap.m.MessageView control
 				fnUpdateProperty = function (sName, oItem) {
@@ -139,7 +151,7 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Item", "sap/ui/cor
 			}
 
 			if (this.getMarkupDescription()) {
-				sDescription = jQuery.sap._sanitizeHTML(sDescription);
+				sDescription = sanitizeHTML(sDescription);
 			}
 
 			this.setProperty("description", sDescription, true);
@@ -152,13 +164,13 @@ sap.ui.define(["jquery.sap.global", "./library", "sap/ui/core/Item", "sap/ui/cor
 		 * <b>Note:</b> if you set the type to None it will be handled and rendered as Information.
 		 *
 		 * @param {sap.ui.core.MessageType} sType Type of Message
-		 * @returns {sap.m.MessageItem} The MessageItem
+		 * @returns {this} The MessageItem
 		 * @public
 		 */
 		MessageItem.prototype.setType = function (sType) {
 			if (sType === MessageType.None) {
 				sType = MessageType.Information;
-				jQuery.sap.log.warning("The provided None type is handled and rendered as Information type");
+				Log.warning("The provided None type is handled and rendered as Information type");
 			}
 
 			return this.setProperty("type", sType, true);

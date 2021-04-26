@@ -5,6 +5,9 @@
 		<title>BusyDialog - sap.m</title>
 		<script src="../shared-config.js"></script>
 		<script src='../../../../resources/sap-ui-core.js'
+				data-sap-ui-resourceroots='{
+					"qunit.internal.acc": "../../../../test-resources/sap/ui/core/qunit/internal/acc"
+				}'
 				id='sap-ui-bootstrap'
 				data-sap-ui-libs='sap.m'
 				data-sap-ui-compatVersion='1.16'>
@@ -14,10 +17,10 @@
 			var app = new sap.m.App('myApp', {initialPage: 'initialPage'});
 			var _buttonWidth = '300px';
 
-			var invText = new sap.ui.core.InvisibleText("hiddenTxt", {text: "Additional descriptive text added"}).placeAt("content");
+			var invText = new sap.ui.core.InvisibleText("hiddenTxt", {text: "Additional descriptive text added"}).toStatic();
 			var defaultLightBusyDialog = new sap.m.BusyDialog('defaultLightBusyDialog');
 			var defaultLightBusyDialogARIA = new sap.m.BusyDialog('defaultLightBusyDialogARIA', {
-				ariaLabelledBy: "hiddenTxt"
+				ariaLabelledBy: invText
 			});
 
 			var standartBusyDialog = new sap.m.BusyDialog('standaratBusyDialog', {
@@ -45,7 +48,7 @@
 			var initialPage = new sap.m.Page('initialPage', {
 				title: 'Busy Dialog Control',
 				content: [
-					new sap.m.Button({
+					new sap.m.Button('defaultBusyDialogButton', {
 						text: 'Default (light)',
 						width: _buttonWidth,
 						press: function () {
@@ -55,7 +58,7 @@
 							});
 						}
 					}),
-					new sap.m.Button({
+					new sap.m.Button('defaultARIABusyDialogButton', {
 						text: 'Default (light) - ARIA',
 						width: _buttonWidth,
 						press: function () {
@@ -65,23 +68,23 @@
 							});
 						}
 					}),
-					new sap.m.Button({
-						text: 'Standart (static)',
+					new sap.m.Button('standardBusyDialogButton', {
+						text: 'Standard (static)',
 						width: _buttonWidth,
 						press: function () {
 							standartBusyDialog.open();
 						}
 					}),
 					new sap.ui.core.HTML({content: "<br>"}),
-					new sap.m.Button({
-						text: 'Standart - no header',
+					new sap.m.Button('standardNoNeaderBusyDialogButton', {
+						text: 'Standard - no header',
 						width: _buttonWidth,
 						press: function () {
 							standartNoHeaderBusyDialog.open();
 						}
 					}),
-					new sap.m.Button({
-						text: 'Standart without footer and header',
+					new sap.m.Button('standardNoNeaderAndFooterBusyDialogButton', {
+						text: 'Standard without footer and header',
 						width: _buttonWidth,
 						press: function () {
 							standartNoHeaderAndFooterBusyDialog.open();
@@ -98,7 +101,7 @@
 		</script>
 
 	</head>
-	<body id='body' class='sapUiBody' role='application'>
+	<body id='body' class='sapUiBody'>
 		<div id='content'>
 		</div>
 	</body>

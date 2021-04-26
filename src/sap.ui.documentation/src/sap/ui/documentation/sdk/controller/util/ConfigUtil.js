@@ -4,12 +4,20 @@
 
 /* Utility class that facilitates route configuration handling */
 sap.ui.define([
-	"jquery.sap.global",
-	"sap/ui/base/Object"
-], function (jQuery, BaseObject) {
+	"sap/ui/base/Object",
+	"sap/base/strings/capitalize",
+	"sap/base/util/merge"
+], function (BaseObject, capitalize, merge) {
 	"use strict";
 
 	return BaseObject.extend("sap.ui.documentation.sdk.controller.util.ConfigUtil", {
+
+		"COOKIE_NAMES": {
+			"APPROVAL_REQUESTED": "dk_approval_requested",
+			"ALLOW_REQUIRED_COOKIES": "dk_allow_required_cookies",
+			"ALLOW_USAGE_TRACKING": "dk_allow_usage_tracking",
+			"DEMOKIT_IMPORTANT_MESSAGES_READ": "IMR"
+		},
 
 		constructor : function (oComponent) {
 			this._oComponent = oComponent;
@@ -26,9 +34,36 @@ sap.ui.define([
 				sTargetConfig = this._getTargetConfig(sMasterTargetName),
 				sViewName = sTargetConfig.viewName;
 
-				sViewName = "sap.ui.documentation.sdk.view." + jQuery.sap.charToUpperCase(sViewName, 0);
+				sViewName = "sap.ui.documentation.sdk.view." + capitalize(sViewName, 0);
 
-				return this._oComponent.getRouter().getView(sViewName);
+				return this._oComponent.getRouter().getView(sViewName, "XML");
+		},
+
+		setCookie: function (sCookieName, sValue) {
+			var sExpiresDate,
+				oDate = new Date();
+
+			oDate.setTime(oDate.getTime() + (356 * 24 * 60 * 60 * 1000)); // one year
+			sExpiresDate = "expires=" + oDate.toUTCString();
+
+			document.cookie = sCookieName + "=" + sValue + ";" + sExpiresDate + ";path=/";
+		},
+
+		getCookieValue: function (sCookieName) {
+			var aCookies = document.cookie.split(';'),
+				sCookie;
+
+			sCookieName = sCookieName + "=";
+
+			for (var i = 0; i < aCookies.length; i++) {
+				sCookie = aCookies[i].trim();
+
+				if (sCookie.indexOf(sCookieName) === 0) {
+					return sCookie.substring(sCookieName.length, sCookie.length);
+				}
+			}
+
+			return "";
 		},
 
 		_getMasterTargetName: function(sRouteName) {

@@ -1,15 +1,13 @@
 /* global QUnit */
 
-QUnit.config.autostart = false;
-
-sap.ui.require([
+sap.ui.define([
 	"sap/ui/dt/ElementOverlay",
 	"sap/ui/dt/DesignTime",
 	"sap/ui/dt/OverlayRegistry",
 	"sap/m/Button",
 	"sap/m/Panel",
 	"sap/ui/Device"
-], function(
+], function (
 	ElementOverlay,
 	DesignTime,
 	OverlayRegistry,
@@ -17,52 +15,57 @@ sap.ui.require([
 	Panel,
 	Device
 ) {
-	'use strict';
+	"use strict";
 
 	QUnit.module("Given that an Overlay is created on RTL mode", {
-		beforeEach : function(assert) {
+		beforeEach: function(assert) {
 			var fnDone = assert.async();
 			this.oButton = new Button({
-				text : "Button"
+				text: "Button"
 			});
 			this.oButton.placeAt("qunit-fixture");
 			sap.ui.getCore().applyChanges();
 
 			this.oOverlay = new ElementOverlay({
-				element : this.oButton,
+				element: this.oButton,
 				isRoot: true,
-				designTimeMetadata : {}
+				designTimeMetadata: {}
 			});
 			this.oOverlay.attachEventOnce("init", function() {
 				this.oOverlay.placeInOverlayContainer();
-				this.oOverlay.applyStyles();
 				fnDone();
 			}.bind(this));
 		},
-		afterEach : function() {
+		afterEach: function() {
 			this.oButton.destroy();
 		}
-	});
+	}, function () {
+		QUnit.test("then ", function(assert) {
+			var done = assert.async();
+			this.oOverlay.attachEventOnce("geometryChanged", function() {
+				// Math.round is required for IE and Edge
+				assert.equal(
+					Math.ceil(this.oOverlay.$().offset().left),
+					Math.ceil(this.oButton.$().offset().left),
+					"overlay has same left position as the control"
+				);
+				assert.equal(
+					Math.round(this.oOverlay.$().offset().top),
+					Math.round(this.oButton.$().offset().top),
+					"overlay has same top position as the control"
+				);
+				done();
+			}.bind(this));
 
-	QUnit.test("then ", function(assert) {
-		// Math.round is required for IE and Edge
-		assert.equal(
-			Math.round(this.oOverlay.$().offset().left),
-			Math.round(this.oButton.$().offset().left),
-			"overlay has same left position as the control"
-		);
-		assert.equal(
-			Math.round(this.oOverlay.$().offset().top),
-			Math.round(this.oButton.$().offset().top),
-			"overlay has same top position as the control"
-		);
+			this.oOverlay.applyStyles();
+		});
 	});
 
 	QUnit.module("Given that an Overlay is created on RTL mode and scrolling is present", {
-		beforeEach : function(assert) {
-			var fnDone = assert.async();
+		beforeEach: function(assert) {
+			var done = assert.async();
 			this.oButton = new Button({
-				text : "Button"
+				text: "Button"
 			});
 
 			this.oInnerPanel = new Panel({
@@ -86,7 +89,7 @@ sap.ui.require([
 			if (Device.browser.msie || Device.browser.edge || Device.browser.blink) {
 				iScrollLeftValue = -iScrollLeftValue;
 			}
-			this.oOuterPanel.$().find('>.sapMPanelContent').scrollLeft(iScrollLeftValue);
+			jQuery(this.oOuterPanel.$().find('>.sapMPanelContent')).scrollLeftRTL(iScrollLeftValue);
 			this.oOuterPanel.$().find('>.sapMPanelContent').scrollTop(20);
 
 			this.oDesignTime = new DesignTime({
@@ -95,36 +98,35 @@ sap.ui.require([
 
 			this.oDesignTime.attachEventOnce("synced", function() {
 				this.oButtonOverlay = OverlayRegistry.getOverlay(this.oButton);
-				fnDone();
+				// FIXME: when synced event is resolved including scrollbar synchronization
+				if (this.oButtonOverlay.$().css("transform") === "none") {
+					this.oButtonOverlay.attachEventOnce("geometryChanged", done);
+				} else {
+					done();
+				}
 			}.bind(this));
-
 		},
-		afterEach : function() {
+		afterEach: function() {
 			this.oDesignTime.destroy();
 			this.oOuterPanel.destroy();
 		}
-	});
-
-	QUnit.test("then", function(assert) {
-		//Math.round is required for IE and Edge
-		assert.equal(
-			Math.round(this.oButtonOverlay.$().offset().top),
-			Math.round(this.oButton.$().offset().top),
-			"overlay has same top position as the control"
-		);
-		//Phantomjs calculates RTL scrolling differently from other browsers
-		if (!Device.browser.phantomJS){
+	}, function () {
+		QUnit.test("then", function(assert) {
+			//Math.round is required for IE and Edge
 			assert.equal(
-				Math.round(this.oButtonOverlay.$().offset().left),
-				Math.round(this.oButton.$().offset().left),
+				Math.ceil(this.oButtonOverlay.$().offset().top),
+				Math.ceil(this.oButton.$().offset().top),
+				"overlay has same top position as the control"
+			);
+			assert.equal(
+				Math.ceil(this.oButtonOverlay.$().offset().left),
+				Math.ceil(this.oButton.$().offset().left),
 				"overlay has same left position as the control"
 			);
-		}
+		});
 	});
 
 	QUnit.done(function() {
 		jQuery("#qunit-fixture").hide();
 	});
-
-	QUnit.start();
 });

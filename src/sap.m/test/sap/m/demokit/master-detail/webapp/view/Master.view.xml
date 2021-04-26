@@ -1,67 +1,20 @@
 <mvc:View
 	controllerName="sap.ui.demo.masterdetail.controller.Master"
-	xmlns:mvc="sap.ui.core.mvc"
 	xmlns="sap.m"
-	xmlns:f="sap.f">
+	xmlns:semantic="sap.f.semantic"
+	xmlns:mvc="sap.ui.core.mvc">
 
-	<f:DynamicPage
+	<semantic:SemanticPage
 		id="masterPage"
 		preserveHeaderStateOnScroll="true"
 		toggleHeaderOnTitleClick="false">
-		<!-- DynamicPage Title -->
-		<f:title>
-			<f:DynamicPageTitle>
-				<f:heading>
-					<Title
-						id="masterPageTitle"
-						text="{masterView>/title}"/>
-				</f:heading>
-			</f:DynamicPageTitle>
-		</f:title>
-		<f:content>
-			<VBox fitContainer="true">
-				<OverflowToolbar class="sapFDynamicPageAlignContent">
-					<ToolbarSpacer/>
-					<SearchField
-						id="searchField"
-						showRefreshButton="{= !${device>/support/touch} }"
-						tooltip="{i18n>masterSearchTooltip}"
-						search="onSearch"
-						width="auto">
-						<layoutData>
-							<OverflowToolbarLayoutData
-								minWidth="150px"
-								maxWidth="300px"
-								shrinkable="true"
-								priority="NeverOverflow"/>
-						</layoutData>
-					</SearchField>
-					<Button
-						id="sortButton"
-						press="onOpenViewSettings"
-						icon="sap-icon://sort"
-						type="Transparent">
-						<layoutData>
-							<OverflowToolbarLayoutData priority="NeverOverflow"/>
-						</layoutData>
-					</Button>
-					<Button
-						id="filterButton"
-						press="onOpenViewSettings"
-						icon="sap-icon://filter"
-						type="Transparent"/>
-					<Button
-						id="groupButton"
-						press="onOpenViewSettings"
-						icon="sap-icon://group-2"
-						type="Transparent"/>
-				</OverflowToolbar>
-				<PullToRefresh
-					id="pullToRefresh"
-					visible="{device>/support/touch}"
-					class="sapFDynamicPageAlignContent"
-					refresh="onRefresh" />
-
+		<semantic:titleHeading>
+			<Title
+				id="masterPageTitle"
+				text="{masterView>/title}"
+				level="H2"/>
+		</semantic:titleHeading>
+		<semantic:content>
 			<!-- For client side filtering add this to the items attribute: parameters: {operationMode: 'Client'}}" -->
 			<List
 				id="list"
@@ -72,7 +25,7 @@
 					sorter: {
 						path: 'Name',
 						descending: false
-						},
+					},
 					groupHeaderFactory: '.createGroupHeader'
 				}"
 				busyIndicatorDelay="{masterView>/delay}"
@@ -80,23 +33,58 @@
 				mode="{= ${device>/system/phone} ? 'None' : 'SingleSelectMaster'}"
 				growing="true"
 				growingScrollToLoad="true"
-				updateFinished="onUpdateFinished"
-				selectionChange="onSelectionChange">
+				updateFinished=".onUpdateFinished"
+				selectionChange=".onSelectionChange">
 				<infoToolbar>
 					<Toolbar
 						active="true"
 						id="filterBar"
 						visible="{masterView>/isFilterBarVisible}"
-						press="onOpenViewSettings">
+						press=".onOpenViewSettings">
 						<Title
 							id="filterBarLabel"
-							text="{masterView>/filterBarLabel}" />
+							text="{masterView>/filterBarLabel}"
+							level="H3"/>
 					</Toolbar>
 				</infoToolbar>
+				<headerToolbar>
+					<OverflowToolbar>
+						<SearchField
+							id="searchField"
+							showRefreshButton="true"
+							tooltip="{i18n>masterSearchTooltip}"
+							search=".onSearch"
+							width="auto">
+							<layoutData>
+								<OverflowToolbarLayoutData
+									minWidth="150px"
+									maxWidth="240px"
+									shrinkable="true"
+									priority="NeverOverflow"/>
+							</layoutData>
+						</SearchField>
+						<ToolbarSpacer/>
+						<Button
+							id="sortButton"
+							press=".onOpenViewSettings"
+							icon="sap-icon://sort"
+							type="Transparent"/>
+						<Button
+							id="filterButton"
+							press=".onOpenViewSettings"
+							icon="sap-icon://filter"
+							type="Transparent"/>
+						<Button
+							id="groupButton"
+							press=".onOpenViewSettings"
+							icon="sap-icon://group-2"
+							type="Transparent"/>
+					</OverflowToolbar>
+				</headerToolbar>
 				<items>
 					<ObjectListItem
 						type="Navigation"
-						press="onSelectionChange"
+						press=".onSelectionChange"
 						title="{Name}"
 						number="{
 							path: 'UnitNumber',
@@ -106,7 +94,6 @@
 					</ObjectListItem>
 				</items>
 			</List>
-			</VBox>
-		</f:content>
-	</f:DynamicPage>
+		</semantic:content>
+	</semantic:SemanticPage>
 </mvc:View>

@@ -3,9 +3,9 @@
  */
 
 sap.ui.define([
-	"jquery.sap.global"
+	"sap/base/Log"
 ], function(
-	jQuery
+	Log
 ) {
 	"use strict";
 
@@ -21,6 +21,12 @@ sap.ui.define([
 	 */
 	var PropertyBindingChange = {};
 
+	// var sNoBindingError = "Please use 'PropertyChange' to set properties without binding";
+
+	// function isBinding(vPropertyValue) {
+	// 	return FlexUtils.isBinding(vPropertyValue) || jQuery.isPlainObject(vPropertyValue);
+	// }
+
 	/**
 	 * @param {object} oChange - change object with instructions to be applied on the control
 	 * @param {object} oControl - the control which has been determined by the selector id
@@ -35,8 +41,14 @@ sap.ui.define([
 		var vPropertyValue = oDef.content.newBinding;
 		var oModifier = mPropertyBag.modifier;
 
+		// TODO: enable again when apps have adapted
+		// if (!isBinding(vPropertyValue)) {
+		// 	throw new Error(sNoBindingError);
+		// }
+
+		var vOriginalValue = oModifier.getPropertyBindingOrProperty(oControl, sPropertyName);
 		oChange.setRevertData({
-			originalValue: oModifier.getPropertyBinding(oControl, sPropertyName)
+			originalValue: vOriginalValue
 		});
 
 		oModifier.setPropertyBinding(oControl, sPropertyName, vPropertyValue);
@@ -59,10 +71,10 @@ sap.ui.define([
 			var vPropertyValue = mRevertData.originalValue;
 			var oModifier = mPropertyBag.modifier;
 
-			oModifier.setPropertyBinding(oControl, sPropertyName, vPropertyValue);
+			oModifier.setPropertyBindingOrProperty(oControl, sPropertyName, vPropertyValue);
 			oChange.resetRevertData();
 		} else {
-			jQuery.sap.log.error("Attempt to revert an unapplied change.");
+			Log.error("Attempt to revert an unapplied change.");
 			return false;
 		}
 
@@ -80,11 +92,31 @@ sap.ui.define([
 	 */
 	PropertyBindingChange.completeChangeContent = function(oChange, oSpecificChangeInfo) {
 		var oChangeJson = oChange.getDefinition();
-		if (oSpecificChangeInfo.content) {
-			oChangeJson.content = oSpecificChangeInfo.content;
-		} else {
+
+		if (!oSpecificChangeInfo.content) {
 			throw new Error("oSpecificChangeInfo attribute required");
 		}
+		// TODO: enable again when apps have adapted
+		// if (!isBinding(oSpecificChangeInfo.content.newBinding)) {
+		// 	throw new Error(sNoBindingError);
+		// }
+
+		oChangeJson.content = oSpecificChangeInfo.content;
+	};
+
+	/**
+	 * Retrieves the condenser-specific information.
+	 *
+	 * @param {sap.ui.fl.Change} oChange - Change object with instructions to be applied on the control map
+	 * @returns {object} - Condenser-specific information
+	 * @public
+	 */
+	PropertyBindingChange.getCondenserInfo = function(oChange) {
+		return {
+			affectedControl: oChange.getSelector(),
+			classification: sap.ui.fl.condenser.Classification.LastOneWins,
+			uniqueKey: oChange.getContent().property
+		};
 	};
 
 	return PropertyBindingChange;

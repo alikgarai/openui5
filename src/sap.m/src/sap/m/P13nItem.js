@@ -66,7 +66,7 @@ sap.ui.define([
 				/**
 				 * data type instance of the column. Can be used instead of the type, precision, scale and formatSettings properties
 				 */
-				oType: {
+				typeInstance: {
 					type: "object",
 					group: "Misc",
 					defaultValue: null,
@@ -205,6 +205,15 @@ sap.ui.define([
 				description: {
 					type: "string",
 					defaultValue: null
+				},
+
+				/**
+				 * Defines if the item is nullable
+				 */
+				nullable: {
+					type: "boolean",
+					group: "Misc",
+					defaultValue: false
 				}
 			}
 		}

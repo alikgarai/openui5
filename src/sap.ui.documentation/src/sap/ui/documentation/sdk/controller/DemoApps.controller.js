@@ -4,20 +4,21 @@
 
 /*global history */
 sap.ui.define([
-		"jquery.sap.global",
+		"sap/ui/thirdparty/jquery",
 		"sap/ui/documentation/sdk/controller/BaseController",
 		"sap/ui/model/resource/ResourceModel",
 		"sap/ui/Device",
 		"sap/ui/model/json/JSONModel",
-		"jquery.sap.global",
-		"sap/ui/documentation/sdk/model/sourceFileDownloader",
+		"sap/ui/documentation/sdk/controller/util/ResourceDownloadUtil",
 		"sap/ui/documentation/sdk/model/formatter",
 		"sap/m/MessageBox",
 		"sap/m/MessageToast",
 		"sap/ui/model/Filter",
 		"sap/ui/model/FilterOperator",
-		'sap/ui/documentation/sdk/model/libraryData'
-	], function(jQuery, BaseController, ResourceModel, Device, JSONModel, $, sourceFileDownloader, formatter, MessageBox, MessageToast, Filter, FilterOperator, libraryData) {
+		'sap/ui/documentation/sdk/model/libraryData',
+		"sap/base/Log"
+	], function(jQuery, BaseController, ResourceModel, Device, JSONModel, ResourceDownloadUtil, formatter, MessageBox,
+			MessageToast, Filter, FilterOperator, libraryData, Log) {
 		"use strict";
 
 		return BaseController.extend("sap.ui.documentation.sdk.controller.DemoApps", {
@@ -29,17 +30,21 @@ sap.ui.define([
 			 * @public
 			 */
 			onInit: function () {
-				// set i18n model on view
 				var oModel = new JSONModel(),
-					i18nModel = new ResourceModel({
-						bundleName: "sap.ui.documentation.sdk.i18n.i18n"
+					oMessageBundle = new ResourceModel({
+						bundleName: "sap.ui.documentation.messagebundle"
 					});
 
-				this.getView().setModel(i18nModel, "i18n");
 
 				// load demo app metadata from docuindex of all available libraries
 				libraryData.fillJSONModel(oModel);
 				this.setModel(oModel);
+				this.getView().setModel(oMessageBundle, "i18n");
+
+				this.setModel(new JSONModel({
+					demoAppsHomeLink: "topic/a3ab54ecf7ac493b91904beb2095d208"
+					// etc
+				}), "newWindowLinks");
 
 				this.getRouter().getRoute("demoapps").attachPatternMatched(this._onMatched, this);
 
@@ -98,7 +103,7 @@ sap.ui.define([
 			 * @private
 			 */
 			_deregisterOrientationChange: function () {
-				Device.media.detachHandler(this._onOrientationChange, this);
+				Device.orientation.detachHandler(this._onOrientationChange, this);
 			},
 
 			/**
@@ -114,7 +119,7 @@ sap.ui.define([
 			 * @private
 			 */
 			_deregisterResize: function () {
-				Device.orientation.detachHandler(this._onResize, this);
+				Device.media.detachHandler(this._onResize, this);
 			},
 
 			/**
@@ -147,7 +152,7 @@ sap.ui.define([
 					this.hideMasterSide();
 				} catch (e) {
 					// try-catch due to a bug in UI5 SplitApp, CL 1898264 should fix it
-					jQuery.sap.log.error(e);
+					Log.error(e);
 				}
 			},
 
@@ -157,13 +162,12 @@ sap.ui.define([
 			 * @public
 			 */
 			onDownloadButtonPress: function (oEvent) {
-				var oDownloadDialog = this.byId("downloadDialog");
+				var oDownloadDialog = this.byId("downloadDialog"),
+					oDownloadDialogList = this.byId("downloadDialogList");
 				this._oDownloadButton = oEvent.getSource();
 
-				oDownloadDialog.getBinding("items").filter([]);
+				oDownloadDialogList.getBinding("items").filter([]);
 				oDownloadDialog.open();
-				// hack: override of the SelectDialog's internal dialog height
-				oDownloadDialog._oDialog.setContentHeight("");
 			},
 
 			/**
@@ -171,7 +175,8 @@ sap.ui.define([
 			 * @public
 			 */
 			onReadMoreButtonPress: function () {
-				window.open("#/topic/a3ab54ecf7ac493b91904beb2095d208", "_blank");
+				var sLink = formatter.formatHttpHrefForNewWindow(this.getModel("newWindowLinks").getProperty("/demoAppsHomeLink"));
+				window.open(sLink, "_blank");
 			},
 
 			/**
@@ -180,9 +185,20 @@ sap.ui.define([
 			 * @public
 			 */
 			onSearch: function (oEvent) {
-				oEvent.getParameters().itemsBinding.filter([
-					new Filter("name", FilterOperator.Contains, oEvent.getParameters().value)
+				var oDownloadDialogList = this.byId("downloadDialogList"),
+					sQuery = oEvent.getParameter("newValue");
+
+				oDownloadDialogList.getBinding("items").filter([
+					new Filter("name", FilterOperator.Contains, sQuery)
 				]);
+			},
+
+			onCloseDialog: function() {
+				var oDownloadDialog = this.byId("downloadDialog"),
+					oDownloadDialogSearch = this.byId("downloadDialogSearch");
+
+				oDownloadDialog.close();
+				oDownloadDialogSearch.setValue("");
 			},
 
 			/**
@@ -202,21 +218,21 @@ sap.ui.define([
 					var oZipFile = new JSZip();
 
 					// load the config file from the custom data attached to the list item
-					$.getJSON(oListItem.data("config"), function (oConfig) {
+					jQuery.getJSON(oListItem.data("config"), function (oConfig) {
 						var aFiles = oConfig.files,
 							aPromises = [],
 							aFails = [];
 
 						// add extra download files
 						aFiles.forEach(function(sFilePath) {
-							var oPromise = sourceFileDownloader(oConfig.cwd + sFilePath);
+							var oPromise = ResourceDownloadUtil.fetch(oConfig.cwd + sFilePath);
 
 							oPromise.then(function (oContent) {
 								if (oContent.errorMessage) {
 									// promise gets resolved in error case since Promise.all will not wait for all fails
 									aFails.push(oContent.errorMessage);
 								} else {
-									// exclude relative paths outside of the app root (e.g. commong helpers, images, ...)
+									// exclude relative paths outside of the app root (e.g. common helpers, images, ...)
 									if (!sFilePath.startsWith("../")) {
 										oZipFile.file(sFilePath, oContent, { base64: false, binary: true });
 									}
@@ -224,6 +240,21 @@ sap.ui.define([
 							});
 							aPromises.push(oPromise);
 						});
+
+						// add generic license file
+						var sUrl = sap.ui.require.toUrl("LICENSE.txt").replace("resources/", "");
+						var oLicensePromise = ResourceDownloadUtil.fetch(sUrl);
+						var oLicensePromiseWrapper = new Promise(function(resolve, reject) {
+							oLicensePromise.then(function (oContent) {
+								oZipFile.file("LICENSE.txt", oContent);
+								resolve();
+							}).catch(function() {
+								// LICENSE.txt not available in SAPUI5, continue without it
+								resolve();
+							});
+						});
+
+						aPromises.push(oLicensePromiseWrapper);
 
 						Promise.all(aPromises).then(function () {
 							// collect errors and show them
@@ -255,29 +286,29 @@ sap.ui.define([
 			 *
 			 * @param {string} sId the id for the current cell
 			 * @param {sap.ui.model.Context} oBindingContext the context for the current cell
-			 * @return {sap.ui.layout.BlockLayoutCell} either a header cell or a demo app cell based on the metadata in the model
+			 * @return {sap.ui.layout.BlockLayoutCell} either a teaser cell or a demo app cell based on the metadata in the model
 			 * @public
 			 */
-			createDemoAppRow: function (sId, oBindingContext) {
+			createDemoAppCell: function (sId, oBindingContext) {
 				var oBlockLayoutCell;
-				if (!oBindingContext.getObject().categoryId) { // demo app tile
-					if (oBindingContext.getObject().teaser) { // teaser cell (loads fragment from demo app)
-						try {
-							$.sap.registerResourcePath("test-resources","test-resources");
-							var sRelativePath = $.sap.getResourcePath(oBindingContext.getObject().teaser);
-							var oTeaser = sap.ui.xmlfragment(sId, sRelativePath);
-							oBlockLayoutCell = sap.ui.xmlfragment(sId, "sap.ui.documentation.sdk.view.BlockLayoutTeaserCell", this);
-							oBlockLayoutCell.getContent()[0].addContent(oTeaser);
-							$.sap.registerResourcePath("test-resources",null);
-						} catch (oException) {
-							$.sap.log.warning("Teaser for demo app \"" + oBindingContext.getObject().name + "\" could not be loaded: " + oException);
-							oBlockLayoutCell = sap.ui.xmlfragment(sId, "sap.ui.documentation.sdk.view.BlockLayoutCell", this);
-						}
-					} else { // normal cell
+				if (oBindingContext.getObject().teaser) { // teaser cell (loads fragment from demo app)
+					try {
+						sap.ui.loader.config({paths:{"test-resources":"test-resources"}});
+						var sRelativePath = sap.ui.require.toUrl(oBindingContext.getObject().teaser);
+						var oTeaser = sap.ui.xmlfragment(sId, sRelativePath);
+						oBlockLayoutCell = sap.ui.xmlfragment(sId, "sap.ui.documentation.sdk.view.BlockLayoutTeaserCell", this);
+						oBlockLayoutCell.getContent()[0].addContent(oTeaser);
+						sap.ui.loader.config({paths:{"test-resources":null}});
+						//sets the teaser to aria-hidden => gets ignored by screen reader
+						oTeaser.addEventDelegate({"onAfterRendering": function() {
+							this.getParent().getDomRef().childNodes[1].setAttribute("aria-hidden", "true");
+							}.bind(oTeaser)});
+					} catch (oException) {
+						Log.warning("Teaser for demo app \"" + oBindingContext.getObject().name + "\" could not be loaded: " + oException);
 						oBlockLayoutCell = sap.ui.xmlfragment(sId, "sap.ui.documentation.sdk.view.BlockLayoutCell", this);
 					}
-				} else { // headline tile
-					oBlockLayoutCell = sap.ui.xmlfragment(sId, "sap.ui.documentation.sdk.view.BlockLayoutHeadlineCell", this);
+				} else { // normal cell
+					oBlockLayoutCell = sap.ui.xmlfragment(sId, "sap.ui.documentation.sdk.view.BlockLayoutCell", this);
 				}
 				oBlockLayoutCell.setBindingContext(oBindingContext);
 

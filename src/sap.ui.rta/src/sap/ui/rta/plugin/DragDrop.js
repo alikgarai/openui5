@@ -2,22 +2,19 @@
  * ${copyright}
  */
 
-// Provides class sap.ui.rta.plugin.DragDrop.
 sap.ui.define([
-	'jquery.sap.global',
-	'sap/ui/dt/plugin/ControlDragDrop',
-	'sap/ui/rta/plugin/RTAElementMover',
-	'sap/ui/rta/plugin/Plugin',
-	'sap/ui/rta/Utils',
-	'sap/ui/dt/OverlayRegistry'
+	"sap/ui/dt/plugin/ControlDragDrop",
+	"sap/ui/dt/Util",
+	"sap/ui/rta/plugin/RTAElementMover",
+	"sap/ui/rta/plugin/Plugin",
+	"sap/ui/rta/Utils"
 ],
 function(
-	jQuery,
 	ControlDragDrop,
+	DtUtil,
 	RTAElementMover,
 	Plugin,
-	Utils,
-    OverlayRegistry
+	Utils
 ) {
 	"use strict";
 
@@ -41,23 +38,20 @@ function(
 	 * @experimental Since 1.30. This class is experimental and provides only limited functionality. Also the API might be changed in future.
 	 */
 	var DragDrop = ControlDragDrop.extend("sap.ui.rta.plugin.DragDrop", /** @lends sap.ui.rta.plugin.DragDrop.prototype */ {
-		metadata : {
-			// ---- object ----
-
-			// ---- control specific ----
-			library : "sap.ui.rta",
-			properties : {
-				commandFactory : {
-					type : "object",
-					multiple : false
+		metadata: {
+			library: "sap.ui.rta",
+			properties: {
+				commandFactory: {
+					type: "object",
+					multiple: false
 				}
 			},
-			events : {
-				dragStarted : {},
+			events: {
+				dragStarted: {},
 
-				elementModified : {
-					command : {
-						type : "sap.ui.rta.command.BaseCommand"
+				elementModified: {
+					command: {
+						type: "sap.ui.rta.command.BaseCommand"
 					}
 				}
 			}
@@ -65,7 +59,7 @@ function(
 	});
 
 	// Extends the DragDrop Plugin with all the functions from our rta base plugin
-	Utils.extendWith(DragDrop.prototype, Plugin.prototype, function(vDestinationValue, vSourceValue, sProperty, mDestination, mSource) {
+	Utils.extendWith(DragDrop.prototype, Plugin.prototype, function(vDestinationValue, vSourceValue, sProperty) {
 		return sProperty !== "getMetadata";
 	});
 
@@ -94,7 +88,7 @@ function(
 	 * @param  {sap.ui.dt.Overlay} oOverlay overlay object
 	 * @override
 	 */
-	DragDrop.prototype.registerElementOverlay = function(oOverlay) {
+	DragDrop.prototype.registerElementOverlay = function() {
 		ControlDragDrop.prototype.registerElementOverlay.apply(this, arguments);
 		Plugin.prototype.registerElementOverlay.apply(this, arguments);
 	};
@@ -104,7 +98,7 @@ function(
 	 * @param  {sap.ui.dt.Overlay} oOverlay overlay object
 	 * @override
 	 */
-	DragDrop.prototype.deregisterElementOverlay = function(oOverlay) {
+	DragDrop.prototype.deregisterElementOverlay = function() {
 		ControlDragDrop.prototype.deregisterElementOverlay.apply(this, arguments);
 		Plugin.prototype.removeFromPluginsList.apply(this, arguments);
 	};
@@ -132,15 +126,27 @@ function(
 	 * @override
 	 */
 	DragDrop.prototype.onDragEnd = function(oOverlay) {
-		this.fireElementModified({
-			"command" : this.getElementMover().buildMoveCommand()
+		this.getElementMover().buildMoveCommand()
+
+		.then(function(oCommand) {
+			this.fireElementModified({
+				command: oCommand
+			});
+
+			oOverlay.$().removeClass("sapUiRtaOverlayPlaceholder");
+			oOverlay.setSelected(true);
+			oOverlay.focus();
+
+			ControlDragDrop.prototype.onDragEnd.apply(this, arguments);
+		}.bind(this))
+
+		.catch(function(vError) {
+			throw DtUtil.propagateError(
+				vError,
+				"DragDrop#onDragEnd",
+				"Error accured during onDragEnd execution",
+				"sap.ui.rta.plugin");
 		});
-
-		oOverlay.$().removeClass("sapUiRtaOverlayPlaceholder");
-		oOverlay.setSelected(true);
-		oOverlay.focus();
-
-		ControlDragDrop.prototype.onDragEnd.apply(this, arguments);
 	};
 
 	/**
@@ -148,9 +154,9 @@ function(
 	 * @param  {sap.ui.dt.Overlay} oOverlay overlay object
 	 * @override
 	 */
-	DragDrop.prototype.onMovableChange = function(oOverlay) {
+	DragDrop.prototype.onMovableChange = function() {
 		ControlDragDrop.prototype.onMovableChange.apply(this, arguments);
 	};
 
 	return DragDrop;
-}, /* bExport= */ true);
+});

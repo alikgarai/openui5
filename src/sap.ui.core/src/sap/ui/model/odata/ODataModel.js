@@ -11,8 +11,54 @@
  */
 
 // Provides class sap.ui.model.odata.ODataModel
-sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Context', 'sap/ui/model/Model', './ODataUtils', './CountMode', './ODataContextBinding', './ODataListBinding', './ODataMetadata', './ODataPropertyBinding', './ODataTreeBinding', 'sap/ui/model/odata/ODataMetaModel', 'sap/ui/thirdparty/URI', 'sap/ui/thirdparty/datajs'],
-	function(jQuery, BindingMode, Context, Model, ODataUtils, CountMode, ODataContextBinding, ODataListBinding, ODataMetadata, ODataPropertyBinding, ODataTreeBinding, ODataMetaModel, URI, OData) {
+sap.ui.define([
+	'sap/ui/model/BindingMode',
+	'sap/ui/model/Context',
+	'sap/ui/model/Model',
+	'./ODataUtils',
+	'./CountMode',
+	'./ODataContextBinding',
+	'./ODataListBinding',
+	'./ODataMetadata',
+	'./ODataPropertyBinding',
+	'./ODataTreeBinding',
+	'sap/ui/model/FilterProcessor',
+	'sap/ui/model/odata/ODataMetaModel',
+	'sap/ui/thirdparty/URI',
+	'sap/ui/thirdparty/datajs',
+	"sap/base/util/isEmptyObject",
+	"sap/base/util/uid",
+	"sap/base/util/merge",
+	"sap/base/Log",
+	"sap/base/assert",
+	"sap/base/security/encodeURL",
+	"sap/ui/thirdparty/jquery",
+	"sap/base/util/isPlainObject"
+],
+	function(
+		BindingMode,
+		Context,
+		Model,
+		ODataUtils,
+		CountMode,
+		ODataContextBinding,
+		ODataListBinding,
+		ODataMetadata,
+		ODataPropertyBinding,
+		ODataTreeBinding,
+		FilterProcessor,
+		ODataMetaModel,
+		URI,
+		OData,
+		isEmptyObject,
+		uid,
+		merge,
+		Log,
+		assert,
+		encodeURL,
+		jQuery,
+		isPlainObject
+	) {
 	"use strict";
 
 
@@ -23,9 +69,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * 								can be passed with the mParameters object as well: [mParameters.serviceUrl] A serviceURl is required!
 	 * @param {object} [mParameters] (optional) a map which contains the following parameter properties:
 	 * @param {boolean} [mParameters.json] if set true request payloads will be JSON, XML for false (default = false),
-	 * @param {string} [mParameters.user] user for the service,
-	 * @param {string} [mParameters.password] password for service,
-	 * @param {map} [mParameters.headers] a map of custom headers like {"myHeader":"myHeaderValue",...},
+	 * @param {string} [mParameters.user] <b>Deprecated</b> for security reasons. Use strong server
+	 *   side authentication instead. UserID for the service.
+	 * @param {string} [mParameters.password] <b>Deprecated</b> for security reasons. Use strong
+	 *   server side authentication instead. Password for the service.
+	 * @param {Object<string,string>} [mParameters.headers] a map of custom headers like {"myHeader":"myHeaderValue",...},
 	 * @param {boolean} [mParameters.tokenHandling] enable/disable XCSRF-Token handling (default = true),
 	 * @param {boolean} [mParameters.withCredentials] experimental - true when user credentials are to be included in a cross-origin request. Please note that this works only if all requests are asynchronous.
 	 * @param {object} [mParameters.loadMetadataAsync] (optional) determined if the service metadata request is sent synchronous or asynchronous. Default is false.
@@ -35,14 +83,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * @param {boolean} [mParameters.refreshAfterChange] enable/disable automatic refresh after change operations: default = true,
 	 * @param  {string|string[]} [mParameters.annotationURI] The URL (or an array of URLs) from which the annotation metadata should be loaded,
 	 * @param {boolean} [mParameters.loadAnnotationsJoined] Whether or not to fire the metadataLoaded-event only after annotations have been loaded as well,
-	 * @param {map} [mParameters.serviceUrlParams] map of URL parameters - these parameters will be attached to all requests,
-	 * @param {map} [mParameters.metadataUrlParams] map of URL parameters for metadata requests - only attached to $metadata request.
+	 * @param {Object<string,string>} [mParameters.serviceUrlParams] map of URL parameters - these parameters will be attached to all requests,
+	 * @param {Object<string,string>} [mParameters.metadataUrlParams] map of URL parameters for metadata requests - only attached to $metadata request.
 	 * @param {string} [mParameters.defaultCountMode] sets the default count mode for the model. If not set, sap.ui.model.odata.CountMode.Both is used.
-	 * @param {map} [mParameters.metadataNamespaces] a map of namespaces (name => URI) used for parsing the service metadata.
+	 * @param {Object<string,string>} [mParameters.metadataNamespaces] a map of namespaces (name => URI) used for parsing the service metadata.
 	 * @param {boolean} [mParameters.skipMetadataAnnotationParsing] Whether to skip the automated loading of annotations from the metadata document. Loading annotations from metadata does not have any effects (except the lost performance by invoking the parser) if there are not annotations inside the metadata document
 	 *
 	 * @class
-	 * Model implementation for oData format
+	 * Model implementation for OData format
 	 *
 	 *
 	 * @author SAP SE
@@ -304,8 +352,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	ODataModel.mServiceData = {
 	};
 
-	ODataModel.prototype.fireRejectChange = function(mArguments) {
-		this.fireEvent("rejectChange", mArguments);
+	ODataModel.prototype.fireRejectChange = function(mParameters) {
+		this.fireEvent("rejectChange", mParameters);
 		return this;
 	};
 
@@ -327,11 +375,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		this.bUseBatch = this.bUseBatch || this.oMetadata.getUseBatch();
 		var doFire = function(bDelay){
 			if (!!bDelay) {
-				that.metadataLoadEvent = jQuery.sap.delayedCall(0, that, doFire);
+				that.metadataLoadEvent = setTimeout(doFire.bind(that), 0);
 			} else {
 				if (that.oMetadata) {
 					that.fireMetadataLoaded({metadata: that.oMetadata});
-					jQuery.sap.log.debug("ODataModel fired metadataloaded");
+					Log.debug("ODataModel fired metadataloaded");
 				}
 			}
 		};
@@ -355,35 +403,46 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Fire event annotationsLoaded to attached listeners.
+	 * The <code>annotationsLoaded</code> event is fired after the annotations document was successfully loaded.
 	 *
-	 * @param {object} [mArguments] the arguments to pass along with the event.
-	 * @param {sap.ui.model.odata.ODataAnnotations} [mArguments.annotations]  the annotations object.
+	 * @name sap.ui.model.odata.ODataModel#annotationsLoaded
+	 * @event
+	 * @param {sap.ui.base.Event} oEvent
+	 * @public
+	 */
+
+	/**
+	 * Fires event {@link #event:annotationsLoaded annotationsLoaded} to attached listeners.
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @param {object} [oParameters] Parameters to pass along with the event
+	 * @param {sap.ui.model.odata.ODataAnnotations} [oParameters.annotations]  the annotations object.
+	 *
+	 * @return {this} <code>this</code> to allow method chaining
 	 * @protected
 	 */
-	ODataModel.prototype.fireAnnotationsLoaded = function(mArguments) {
+	ODataModel.prototype.fireAnnotationsLoaded = function(oParameters) {
 		if (!this.bLoadMetadataAsync) {
-			setTimeout(this.fireEvent.bind(this, "annotationsLoaded", mArguments), 0);
+			setTimeout(this.fireEvent.bind(this, "annotationsLoaded", oParameters), 0);
 		} else {
-			this.fireEvent("annotationsLoaded", mArguments);
+			this.fireEvent("annotationsLoaded", oParameters);
 		}
 		return this;
 	};
 
 	/**
-	 * Attach event-handler <code>fnFunction</code> to the 'annotationsLoaded' event of this <code>sap.ui.model.odata.ODataModel</code>.
+	 * Attaches event handler <code>fnFunction</code> to the {@link #event:annotationsLoaded annotationsLoaded} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
 	 * @param {object}
-	 *            [oData] The object, that should be passed along with the event-object when firing the event.
+	 *            [oData] An application-specific payload object that will be passed to the event handler
+	 *            along with the event object when firing the event
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs. This function will be called on the
-	 *            oListener-instance (if present) or in a 'static way'.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            [oListener] Object on which to call the given function. If empty, the global context (window) is used.
+	 *            [oListener] Context object to call the event handler with. Defaults to this
+	 *            <code>sap.ui.model.odata.ODataModel</code> itself
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.attachAnnotationsLoaded = function(oData, fnFunction, oListener) {
@@ -392,13 +451,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Detach event-handler <code>fnFunction</code> from the 'annotationsLoaded' event of this <code>sap.ui.model.odata.ODataModel</code>.
+	 * Detaches event handler <code>fnFunction</code> from the {@link #event:annotationsLoaded annotationsLoaded} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            oListener Object on which the given function had to be called.
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 *            [oListener] Context object on which the given function had to be called
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.detachAnnotationsLoaded = function(fnFunction, oListener) {
@@ -407,40 +467,50 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Fire event annotationsFailed to attached listeners.
+	 * The <code>annotationsFailed</code> event is fired when loading the annotations document failed.
 	 *
-	 * @param {object} [mArguments] the arguments to pass along with the event.
-	 * @param {string} [mArguments.message]  A text that describes the failure.
-	 * @param {string} [mArguments.statusCode]  HTTP status code returned by the request (if available)
-	 * @param {string} [mArguments.statusText] The status as a text, details not specified, intended only for diagnosis output
-	 * @param {string} [mArguments.responseText] Response that has been received for the request ,as a text string
+	 * @name sap.ui.model.odata.ODataModel#annotationsFailed
+	 * @event
+	 * @param {sap.ui.base.Event} oEvent
+	 * @public
+	 */
+
+	/**
+	 * Fires event {@link #event:annotationsFailed annotationsFailed} to attached listeners.
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @param {object} [oParameters] Parameters to pass along with the event
+	 * @param {string} [oParameters.message]  A text that describes the failure.
+	 * @param {string} [oParameters.statusCode]  HTTP status code returned by the request (if available)
+	 * @param {string} [oParameters.statusText] The status as a text, details not specified, intended only for diagnosis output
+	 * @param {string} [oParameters.responseText] Response that has been received for the request ,as a text string
+	 *
+	 * @return {this} <code>this</code> to allow method chaining
 	 * @protected
 	 */
-	ODataModel.prototype.fireAnnotationsFailed = function(mArguments) {
+	ODataModel.prototype.fireAnnotationsFailed = function(oParameters) {
 		if (!this.bLoadMetadataAsync) {
-			setTimeout(this.fireEvent.bind(this, "annotationsFailed", mArguments), 0);
+			setTimeout(this.fireEvent.bind(this, "annotationsFailed", oParameters), 0);
 		} else {
-			this.fireEvent("annotationsFailed", mArguments);
+			this.fireEvent("annotationsFailed", oParameters);
 		}
-		jQuery.sap.log.debug("ODataModel fired annotationsfailed");
+		Log.debug("ODataModel fired annotationsFailed");
 		return this;
 	};
 
 	/**
-	 * Attach event-handler <code>fnFunction</code> to the 'annotationsFailed' event of this <code>sap.ui.model.odata.ODataModel</code>.
-	 *
+	 * Attaches event handler <code>fnFunction</code> to the {@link #event:annotationsFailed annotationsFailed} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
 	 * @param {object}
-	 *            [oData] The object, that should be passed along with the event-object when firing the event.
+	 *            [oData] An application-specific payload object that will be passed to the event handler
+	 *            along with the event object when firing the event
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs. This function will be called on the
-	 *            oListener-instance (if present) or in a 'static way'.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            [oListener] Object on which to call the given function. If empty, the global context (window) is used.
+	 *            [oListener] Context object to call the event handler with. Defaults to this
+	 *            <code>sap.ui.model.odata.ODataModel</code> itself
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.attachAnnotationsFailed = function(oData, fnFunction, oListener) {
@@ -449,15 +519,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Detach event-handler <code>fnFunction</code> from the 'annotationsFailed' event of this <code>sap.ui.model.odata.ODataModel</code>.
+	 * Detaches event handler <code>fnFunction</code> from the {@link #event:annotationsFailed annotationsFailed} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
-	 * The passed function and listener object must match the ones previously used for event registration.
+	 * The passed function and listener object must match the ones used for event registration.
 	 *
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            oListener Object on which the given function had to be called.
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 *            [oListener] Context object on which the given function had to be called
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.detachAnnotationsFailed = function(fnFunction, oListener) {
@@ -466,32 +537,42 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Fire event metadataLoaded to attached listeners.
+	 * The <code>metadataLoaded</code> event is fired after the metadata document was successfully loaded.
 	 *
-	 * @param {object} [mArguments] the arguments to pass along with the event.
-	 * @param {sap.ui.model.odata.ODataMetadata} [mArguments.metadata]  the metadata object.
+	 * @name sap.ui.model.odata.ODataModel#metadataLoaded
+	 * @event
+	 * @param {sap.ui.base.Event} oEvent
+	 * @public
+	 */
+
+	/**
+	 * Fires event {@link #event:metadataLoaded metadataLoaded} to attached listeners.
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @param {object} [oParameters] Parameters to pass along with the event
+	 * @param {sap.ui.model.odata.ODataMetadata} [oParameters.metadata] The metadata object.
+	 *
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @protected
 	 */
-	ODataModel.prototype.fireMetadataLoaded = function(mArguments) {
-		this.fireEvent("metadataLoaded", mArguments);
+	ODataModel.prototype.fireMetadataLoaded = function(oParameters) {
+		this.fireEvent("metadataLoaded", oParameters);
 		return this;
 	};
 
 	/**
-	 * Attach event-handler <code>fnFunction</code> to the 'metadataLoaded' event of this <code>sap.ui.model.odata.ODataModel</code>.
-	 *
+	 * Attaches event handler <code>fnFunction</code> to the {@link #event:metadataLoaded metadataLoaded} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
 	 * @param {object}
-	 *            [oData] The object, that should be passed along with the event-object when firing the event.
+	 *            [oData] An application-specific payload object that will be passed to the event handler
+	 *            along with the event object when firing the event
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs. This function will be called on the
-	 *            oListener-instance (if present) or in a 'static way'.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            [oListener] Object on which to call the given function. If empty, the global context (window) is used.
+	 *            [oListener] Context object to call the event handler with. Defaults to this
+	 *            <code>sap.ui.model.odata.ODataModel</code> itself
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.attachMetadataLoaded = function(oData, fnFunction, oListener) {
@@ -500,15 +581,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Detach event-handler <code>fnFunction</code> from the 'metadataLoaded' event of this <code>sap.ui.model.odata.ODataModel</code>.
+	 * Detaches event handler <code>fnFunction</code> from the {@link #event:metadataLoaded metadataLoaded} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
-	 * The passed function and listener object must match the ones previously used for event registration.
+	 * The passed function and listener object must match the ones used for event registration.
 	 *
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            oListener Object on which the given function had to be called.
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 *            [oListener] Context object on which the given function had to be called
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.detachMetadataLoaded = function(fnFunction, oListener) {
@@ -517,35 +599,45 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Fire event metadataFailed to attached listeners.
+	 * The <code>metadataFailed</code> event is fired when loading the metadata document failed.
 	 *
-	 * @param {object} [mArguments] the arguments to pass along with the event.
-	 * @param {string} [mArguments.message]  A text that describes the failure.
-	 * @param {string} [mArguments.statusCode]  HTTP status code returned by the request (if available)
-	 * @param {string} [mArguments.statusText] The status as a text, details not specified, intended only for diagnosis output
-	 * @param {string} [mArguments.responseText] Response that has been received for the request ,as a text string
+	 * @name sap.ui.model.odata.ODataModel#metadataFailed
+	 * @event
+	 * @param {sap.ui.base.Event} oEvent
+	 * @public
+	 */
+
+	/**
+	 * Fires event {@link #event:metadataFailed metadataFailed} to attached listeners.
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @param {object} [oParameters] Parameters to pass along with the event
+	 * @param {string} [oParameters.message] A text that describes the failure.
+	 * @param {string} [oParameters.statusCode] HTTP status code returned by the request (if available)
+	 * @param {string} [oParameters.statusText] The status as a text, details not specified, intended only for diagnosis output
+	 * @param {string} [oParameters.responseText] Response that has been received for the request ,as a text string
+	 *
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @protected
 	 */
-	ODataModel.prototype.fireMetadataFailed = function(mArguments) {
-		this.fireEvent("metadataFailed", mArguments);
+	ODataModel.prototype.fireMetadataFailed = function(oParameters) {
+		this.fireEvent("metadataFailed", oParameters);
 		return this;
 	};
 
 	/**
-	 * Attach event-handler <code>fnFunction</code> to the 'metadataFailed' event of this <code>sap.ui.model.odata.ODataModel</code>.
-	 *
+	 * Attaches event handler <code>fnFunction</code> to the {@link #event:metadataFailed metadataFailed} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
 	 * @param {object}
-	 *            [oData] The object, that should be passed along with the event-object when firing the event.
+	 *            [oData] An application-specific payload object that will be passed to the event handler
+	 *            along with the event object when firing the event
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs. This function will be called on the
-	 *            oListener-instance (if present) or in a 'static way'.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            [oListener] Object on which to call the given function. If empty, the global context (window) is used.
+	 *            [oListener] Context object to call the event handler with. Defaults to this
+	 *            <code>sap.ui.model.odata.ODataModel</code> itself
 	 *
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.attachMetadataFailed = function(oData, fnFunction, oListener) {
@@ -554,15 +646,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Detach event-handler <code>fnFunction</code> from the 'metadataFailed' event of this <code>sap.ui.model.odata.ODataModel</code>.
+	 * Detaches event handler <code>fnFunction</code> from the {@link #event:metadataFailed metadataFailed} event of this
+	 * <code>sap.ui.model.odata.ODataModel</code>.
 	 *
-	 * The passed function and listener object must match the ones previously used for event registration.
+	 * The passed function and listener object must match the ones used for event registration.
 	 *
 	 * @param {function}
-	 *            fnFunction The function to call, when the event occurs.
+	 *            fnFunction The function to be called, when the event occurs
 	 * @param {object}
-	 *            oListener Object on which the given function had to be called.
-	 * @return {sap.ui.model.odata.ODataModel} <code>this</code> to allow method chaining
+	 *            [oListener] Context object on which the given function had to be called
+	 * @returns {this} Reference to <code>this</code> in order to allow method chaining
 	 * @public
 	 */
 	ODataModel.prototype.detachMetadataFailed = function(fnFunction, oListener) {
@@ -571,7 +664,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * refreshes the metadata for model, e.g. in case the first request for metadata has failed
+	 * Refreshes the metadata for model, e.g. in case the first request for metadata has failed.
 	 *
 	 * @public
 	 */
@@ -639,14 +732,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * model. This request is performed asynchronously.
 	 *
 	 * @param {string}
-	 *            sPath Path A string containing the path to the data which should
-	 *            be retrieved. The path is concatenated to the <code>sServiceUrl</code>
+	 *            sPath A string containing the path to the data which should
+	 *            be retrieved. The path is appended to the <code>sServiceUrl</code>
 	 *            which was specified in the model constructor.
 	 * @param {function}
-	 *            [fnSuccess] a callback function which is called when the data has
+	 *            [fnSuccess] Callback function which is called when the data has
 	 *            been successfully retrieved and stored in the model
 	 * @param {function}
-	 *            [fnError] a callback function which is called when the request failed
+	 *            [fnError] Callback function which is called when the request failed
 	 *
 	 * @param {boolean} [bCache=true] Force no caching if false
 	 *
@@ -679,7 +772,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 
 			// no data available
 			if (!oResultData) {
-				jQuery.sap.log.fatal("The following problem occurred: No data was retrieved by service: " + oResponse.requestUri);
+				Log.fatal("The following problem occurred: No data was retrieved by service: " + oResponse.requestUri);
 				that.fireRequestCompleted({url : oRequest.requestUri, type : "GET", async : oRequest.async,
 					info: "Accept headers:" + that.oHeaders["Accept"], infoObject : {acceptHeaders: that.oHeaders["Accept"]},  success: false});
 				return false;
@@ -697,7 +790,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 				if (oResultData.__batchResponses && oResultData.__batchResponses.length > 0) {
 					oResultData = oResultData.__batchResponses[0].data;
 				} else {
-					jQuery.sap.log.fatal("The following problem occurred: No data was retrieved by service: " + oResponse.requestUri);
+					Log.fatal("The following problem occurred: No data was retrieved by service: " + oResponse.requestUri);
 				}
 			}
 
@@ -710,7 +803,20 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 				_submit(oRequest);
 			} else {
 				// all data is read so merge all data
-				jQuery.sap.extend(oResultData.results, aResults);
+				if (oResultData.results) {
+					var vValue, vKey;
+					for (vKey in aResults) {
+						vValue = aResults[vKey];
+
+						// Prevent never-ending loop
+						if (aResults === vValue) {
+							continue;
+						}
+
+						oResultData.results[vKey] = vValue;
+					}
+				}
+
 				// broken implementations need this
 				if (oResultData.results && !Array.isArray(oResultData.results)) {
 					oResultData = oResultData.results;
@@ -769,7 +875,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 
 		/**
 		 * this method is used to retrieve all desired data. It triggers additional read requests if the server paging size
-		 * permits to return all the requested data. This could only happen for servers with support for oData > 2.0.
+		 * permits to return all the requested data. This could only happen for servers with support for OData > 2.0.
 		 */
 		function _submit(){
 			// execute the request and use the metadata if available
@@ -783,6 +889,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 				//sRequestUrl += sUriQuery ? "?" + sUriQuery : "";
 				var sRequestUrl = that._createRequestUrl(sPath, null, sUriQuery, that.bUseBatch);
 				oRequest = that._createRequest(sRequestUrl, "GET", true);
+				// Make sure requests not requiring a CSRF token don't send one.
+				if (that.bTokenHandling) {
+					delete oRequest.headers["x-csrf-token"];
+				}
 				var oBatchRequest = that._createBatchRequest([oRequest],true);
 				oRequestHandle = that._request(oBatchRequest, _handleSuccess, _handleError, OData.batchHandler, undefined, that.getServiceMetadata());
 			} else {
@@ -806,6 +916,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		var aResults = [];
 		var sUrl = this._createRequestUrl(sPath, null, aParams, null, bCache || this.bCache);
 		oRequest = this._createRequest(sUrl, "GET", true);
+		// Make sure requests not requiring a CSRF token don't send one.
+		if (that.bTokenHandling) {
+			delete oRequest.headers["x-csrf-token"];
+		}
 		this.fireRequestSent({url : oRequest.requestUri, type : "GET", async : oRequest.async,
 			info: "Accept headers:" + this.oHeaders["Accept"], infoObject : {acceptHeaders: this.oHeaders["Accept"]}});
 		_submit();
@@ -889,7 +1003,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			jQuery.each(oData, function(sPropName, oCurrentEntry) {
 				if (oCurrentEntry && oCurrentEntry["__ref"]) {
 					var oChildEntry = that._getObject("/" + oCurrentEntry["__ref"]);
-					jQuery.sap.assert(oChildEntry, "ODataModel inconsistent: " + oCurrentEntry["__ref"] + " not found!");
+					assert(oChildEntry, "ODataModel inconsistent: " + oCurrentEntry["__ref"] + " not found!");
 					if (oChildEntry) {
 						delete oCurrentEntry["__ref"];
 						oData[sPropName] = oChildEntry;
@@ -899,7 +1013,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 				} else if (oCurrentEntry && oCurrentEntry["__list"]) {
 					jQuery.each(oCurrentEntry["__list"], function(j, sEntry) {
 						var oChildEntry = that._getObject("/" + oCurrentEntry["__list"][j]);
-						jQuery.sap.assert(oChildEntry, "ODataModel inconsistent: " +  oCurrentEntry["__list"][j] + " not found!");
+						assert(oChildEntry, "ODataModel inconsistent: " +  oCurrentEntry["__list"][j] + " not found!");
 						if (oChildEntry) {
 							aResults.push(oChildEntry);
 							// check recursively for found child entries
@@ -930,7 +1044,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 */
 	ODataModel.prototype.initialize = function() {
 		// Call initialize on all bindings in case metadata was not available when they were created
-		var aBindings = this.aBindings.slice(0);
+		var aBindings = this.getBindings();
 		jQuery.each(aBindings, function(iIndex, oBinding) {
 			oBinding.initialize();
 		});
@@ -938,6 +1052,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 
 	/**
 	 * Refresh the model.
+	 *
 	 * This will check all bindings for updated data and update the controls if data has been changed.
 	 *
 	 * @param {boolean} [bForceUpdate=false] Force update of controls
@@ -956,7 +1071,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 
 	ODataModel.prototype._refresh = function(bForceUpdate, mChangedEntities, mEntityTypes) {
 		// Call refresh on all bindings instead of checkUpdate to properly reset cached data in bindings
-		var aBindings = this.aBindings.slice(0);
+		var aBindings = this.getBindings();
 		jQuery.each(aBindings, function(iIndex, oBinding) {
 			oBinding.refresh(bForceUpdate, mChangedEntities, mEntityTypes);
 		});
@@ -976,17 +1091,17 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	ODataModel.prototype.checkUpdate = function(bForceUpdate, bAsync, mChangedEntities, bMetaModelOnly) {
 		if (bAsync) {
 			if (!this.sUpdateTimer) {
-				this.sUpdateTimer = jQuery.sap.delayedCall(0, this, function() {
+				this.sUpdateTimer = setTimeout(function() {
 					this.checkUpdate(bForceUpdate, false, mChangedEntities);
-				});
+				}.bind(this), 0);
 			}
 			return;
 		}
 		if (this.sUpdateTimer) {
-			jQuery.sap.clearDelayedCall(this.sUpdateTimer);
+			clearTimeout(this.sUpdateTimer);
 			this.sUpdateTimer = null;
 		}
-		var aBindings = this.aBindings.slice(0);
+		var aBindings = this.getBindings();
 		jQuery.each(aBindings, function(iIndex, oBinding) {
 			if (!bMetaModelOnly || this.isMetaModelPath(oBinding.getPath())) {
 				oBinding.checkUpdate(bForceUpdate, mChangedEntities);
@@ -1009,10 +1124,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * @param {sap.ui.model.Context} [oContext=null] Binding context referring to this model
 	 * @param {sap.ui.model.Sorter|sap.ui.model.Sorter[]} [aSorters=null] Initial sort order, can be either a sorter or an array of sorters
 	 * @param {sap.ui.model.Filter|sap.ui.model.Filter[]} [aFilters=null] Predefined filter/s, can be either a filter or an array of filters
-	 * @param {map} [mParameters] Map which contains additional parameters for the binding
+	 * @param {object} [mParameters] Map which contains additional parameters for the binding
 	 * @param {string} [mParameters.expand] Value for the OData <code>$expand</code> query parameter which should be included in the request
 	 * @param {string} [mParameters.select] Value for the OData <code>$select</code> query parameter which should be included in the request
-	 * @param {map} [mParameters.custom] Optional map of custom query parameters (name/value pairs); names of custom parameters must not start with <code>$</code>
+	 * @param {Object<string,string>} [mParameters.custom] Optional map of custom query parameters (name/value pairs); names of custom parameters must not start with <code>$</code>
 	 * @param {sap.ui.model.odata.CountMode} [mParameters.countMode] Defines the count mode of the new binding;
 	 *           if not specified, the default count mode of this model will be applied
 	 * @returns {sap.ui.model.ListBinding} oBinding new list binding object
@@ -1082,7 +1197,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		}
 
 		if (fnCallBack) {
-			var bIsRelative = !jQuery.sap.startsWith(sPath, "/");
+			var bIsRelative = !sPath.startsWith("/");
 			if (sFullPath) {
 				var aParams = [],
 					sCustomParams = this.createCustomParams(mParameters);
@@ -1249,15 +1364,15 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			};
 		for (var sName in mParameters) {
 			if (sName in mSupportedParams) {
-				aCustomParams.push("$" + sName + "=" + jQuery.sap.encodeURL(mParameters[sName]));
+				aCustomParams.push("$" + sName + "=" + encodeURL(mParameters[sName]));
 			}
 			if (sName == "custom") {
 				mCustomQueryOptions = mParameters[sName];
 				for (var sName in mCustomQueryOptions) {
 					if (sName.indexOf("$") == 0) {
-						jQuery.sap.log.warning("Trying to set OData parameter " + sName + " as custom query option!");
+						Log.warning("Trying to set OData parameter " + sName + " as custom query option!");
 					} else {
-						aCustomParams.push(sName + "=" + jQuery.sap.encodeURL(mCustomQueryOptions[sName]));
+						aCustomParams.push(sName + "=" + encodeURL(mCustomQueryOptions[sName]));
 					}
 				}
 			}
@@ -1380,11 +1495,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			sName,
 			sValue,
 			oProperty;
-		jQuery.sap.assert(oEntityType, "Could not find entity type of collection \"" + sCollection + "\" in service metadata!");
+		assert(oEntityType, "Could not find entity type of collection \"" + sCollection + "\" in service metadata!");
 		sKey += "(";
 		if (oEntityType.key.propertyRef.length == 1) {
 			sName = oEntityType.key.propertyRef[0].name;
-			jQuery.sap.assert(sName in oKeyProperties, "Key property \"" + sName + "\" is missing in object!");
+			assert(sName in oKeyProperties, "Key property \"" + sName + "\" is missing in object!");
 			oProperty = this.oMetadata._getPropertyMetadata(oEntityType, sName);
 			sValue = ODataUtils.formatValue(oKeyProperties[sName], oProperty.type);
 			sKey += bDecode ? sValue : encodeURIComponent(sValue);
@@ -1394,7 +1509,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 					sKey += ",";
 				}
 				sName = oPropertyRef.name;
-				jQuery.sap.assert(sName in oKeyProperties, "Key property \"" + sName + "\" is missing in object!");
+				assert(sName in oKeyProperties, "Key property \"" + sName + "\" is missing in object!");
 				oProperty = that.oMetadata._getPropertyMetadata(oEntityType, sName);
 				sValue = ODataUtils.formatValue(oKeyProperties[sName], oProperty.type);
 				sKey += sName;
@@ -1433,12 +1548,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		}
 
 		// if value is a plain value and not an object we return directly
-		if (!jQuery.isPlainObject(oValue)) {
+		if (!isPlainObject(oValue)) {
 			return oValue;
 		}
 
 		// do a value copy or the changes to that value will be modified in the model as well (reference)
-		oValue = jQuery.sap.extend(true, {}, oValue);
+		oValue = merge({}, oValue);
 
 		if (bIncludeExpandEntries == true) {
 			// include expand entries
@@ -1684,6 +1799,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		}
 
 		function _submit() {
+			// Make sure requests not requiring a CSRF token don't send one.
+			if (that.bTokenHandling) {
+				delete oRequest.headers["x-csrf-token"];
+			}
 			// request token only if we have change operations or batch requests
 			// token needs to be set directly on request headers, as request is already created
 			if (that.bTokenHandling && oRequest.method !== "GET") {
@@ -1790,7 +1909,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 								if (aChangeRequests[j].method == "MERGE" || aChangeRequests[j].method == "PUT") {
 									//try to get the object to the uri from the model
 									sUrl = aChangeRequests[j].requestUri.replace(this.sServiceUrl + '/','');
-									if (!jQuery.sap.startsWith(sUrl , "/")) {
+									if (!sUrl.startsWith("/")) {
 										sUrl = "/" + sUrl;
 									}
 									oEntry = this._getObject(sUrl);
@@ -1802,16 +1921,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 							}
 						}
 					} else {
-						jQuery.sap.log.warning("could not update ETags for batch request: corresponding response for request missing");
+						Log.warning("could not update ETags for batch request: corresponding response for request missing");
 					}
 				}
 			} else {
-				jQuery.sap.log.warning("could not update ETags for batch request: no batch responses/requests available");
+				Log.warning("could not update ETags for batch request: no batch responses/requests available");
 			}
 		} else {
 			// refresh ETag from response directly. We can not wait for the refresh.
 			sUrl = oRequest.requestUri.replace(this.sServiceUrl + '/','');
-			if (!jQuery.sap.startsWith(sUrl , "/")) {
+			if (!sUrl.startsWith("/")) {
 				sUrl = "/" + sUrl;
 			}
 			oEntry = this._getObject(sUrl);
@@ -1846,7 +1965,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 					oOperationResponse.response.body;
 				}
 				aErrorResponses.push(oOperationResponse);
-				jQuery.sap.log.fatal(sErrorMsg);
+				Log.fatal(sErrorMsg);
 			}
 			if (oOperationResponse.__changeResponses) {
 				jQuery.each(oOperationResponse.__changeResponses, function(iIndex, oChangeOperationResponse) {
@@ -1858,7 +1977,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 							oChangeOperationResponse.response.body;
 						}
 						aErrorResponses.push(oChangeOperationResponse);
-						jQuery.sap.log.fatal(sErrorMsg);
+						Log.fatal(sErrorMsg);
 					}
 				});
 			}
@@ -1891,7 +2010,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			mParameters.statusText = oError.response.statusText;
 			mParameters.responseText = oError.response.body;
 		}
-		jQuery.sap.log.fatal(sErrorMsg);
+		Log.fatal(sErrorMsg);
 
 		return mParameters;
 	};
@@ -2050,7 +2169,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * 		The path is concatenated to the sServiceUrl which was specified
 	 * 		in the model constructor.
 	 * @param {object} oData data of the entry that should be updated.
-	 * @param {map} [mParameters] Optional, can contain the following attributes:
+	 * @param {object} [mParameters] Optional, can contain the following attributes:
 	 * @param {object} [mParameters.context] If specified the sPath has to be is relative to the path given with the context.
 	 * @param {function} [mParameters.success] a callback function which is called when the data has been successfully updated.
 	 * @param {function} [mParameters.error] a callback function which is called when the request failed.
@@ -2061,7 +2180,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * 		Please be advised that this feature is officially unsupported as using asynchronous
 	 * 		requests can lead to data inconsistencies if the application does not make sure that
 	 * 		the request was completed before continuing to work with the data.
-	 * @param {map} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
+	 * @param {Object<string,string>} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
 	 *
 	 * @return {object} an object which has an <code>abort</code> function to abort the current request.
 	 *
@@ -2128,7 +2247,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 *		should be created. The path is concatenated to the sServiceUrl
 	 *		which was specified in the model constructor.
 	 * @param {object} oData data of the entry that should be created.
-	 * @param {map} [mParameters] Optional parameter map containing any of the following properties:
+	 * @param {object} [mParameters] Optional parameter map containing any of the following properties:
 	 * @param {object} [mParameters.context] If specified the sPath has to be relative to the path given with the context.
 	 * @param {function} [mParameters.success] a callback function which is called when the data has
 	 *		been successfully retrieved. The handler can have the
@@ -2139,7 +2258,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * 		Please be advised that this feature is officially unsupported as using asynchronous
 	 * 		requests can lead to data inconsistencies if the application does not make sure that
 	 * 		the request was completed before continuing to work with the data.
-	 * @param {map} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
+	 * @param {Object<string,string>} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
 	 *
 	 * @return {object} an object which has an <code>abort</code> function to abort the current request.
 	 *
@@ -2200,7 +2319,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * 		Please be advised that this feature is officially unsupported as using asynchronous
 	 * 		requests can lead to data inconsistencies if the application does not make sure that
 	 * 		the request was completed before continuing to work with the data.
-	 * @param {map} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
+	 * @param {Object<string,string>} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
 	 *
 	 * @return {object} an object which has an <code>abort</code> function to abort the current request.
 	 *
@@ -2270,9 +2389,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 *
 	 * @param {string} sFunctionName A string containing the name of the function to call.
 	 *		The name is concatenated to the sServiceUrl which was specified in the model constructor.
-	 * @param {map} [mParameters] Optional parameter map containing any of the following properties:
+	 * @param {object} [mParameters] Optional parameter map containing any of the following properties:
 	 * @param {string} [mParameters.method] A string containing the type of method to call this function with
-	 * @param {map} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
+	 * @param {Object<string,string>} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
 	 * @param {object} [mParameters.context] If specified the sPath has to be relative to the path given with the context.
 	 * @param {function} [mParameters.success] a callback function which is called when the data has been successfully retrieved.
 	 *		The handler can have the following parameters: <code>oData</code> and <code>response</code>.
@@ -2315,7 +2434,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 
 
 		oFunctionMetadata = this.oMetadata._getFunctionImportMetadata(sFunctionName, sMethod);
-		jQuery.sap.assert(oFunctionMetadata, "Function " + sFunctionName + " not found in the metadata !");
+		assert(oFunctionMetadata, "Function " + sFunctionName + " not found in the metadata !");
 
 		if (oFunctionMetadata) {
 			sUrl = this._createRequestUrl(sFunctionName, oContext, null,  this.bUseBatch);
@@ -2329,7 +2448,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 						var matchingParameter = matchingParameters[0];
 						oUrlParams[sParameterName] = ODataUtils.formatValue(oParameterValue, matchingParameter.type);
 					} else {
-						jQuery.sap.log.warning("Parameter " + sParameterName + " is not defined for function call " + sFunctionName + "!");
+						Log.warning("Parameter " + sParameterName + " is not defined for function call " + sFunctionName + "!");
 					}
 				});
 			}
@@ -2361,10 +2480,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 * @param {string} sPath A string containing the path to the data which should
 	 *		be retrieved. The path is concatenated to the sServiceUrl
 	 *		which was specified in the model constructor.
-	 * @param {map} [mParameters] Optional parameter map containing any of the following properties:
+	 * @param {object} [mParameters] Optional parameter map containing any of the following properties:
 	 * @param {object} [mParameters.context] If specified the sPath has to be is relative to the path
 	 * 		given with the context.
-	 * @param {map} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
+	 * @param {Object<string,string>} [mParameters.urlParameters] A map containing the parameters that will be passed as query strings
 	 * @param {boolean} [mParameters.async=true] true for asynchronous requests.
 	 * @param {array} [mParameters.filters] an array of sap.ui.model.Filter to be included in the request URL
 	 * @param {array} [mParameters.sorters] an array of sap.ui.model.Sorter to be included in the request URL
@@ -2383,7 +2502,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		var oRequest, sUrl, oRequestHandle, oBatchRequest,
 			oContext, mUrlParams, bAsync, fnSuccess, fnError,
 			aFilters, aSorters, sFilterParams, sSorterParams,
-			oEntityType, sResolvedPath,
+			oFilter, oEntityType, sResolvedPath,
 			aUrlParams;
 
 		if (mParameters && typeof (mParameters) == "object" && !(mParameters instanceof Context)) {
@@ -2414,11 +2533,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		if (sSorterParams) { aUrlParams.push(sSorterParams); }
 
 		if (aFilters && !this.oMetadata) {
-			jQuery.sap.log.fatal("Tried to use filters in read method before metadata is available.");
+			Log.fatal("Tried to use filters in read method before metadata is available.");
 		} else {
 			sResolvedPath = this._normalizePath(sPath, oContext);
 			oEntityType = this.oMetadata && this.oMetadata._getEntityTypeByPath(sResolvedPath);
-			sFilterParams = ODataUtils.createFilterParams(aFilters, this.oMetadata, oEntityType);
+			oFilter = FilterProcessor.groupFilters(aFilters);
+			sFilterParams = ODataUtils.createFilterParams(oFilter, this.oMetadata, oEntityType);
 			if (sFilterParams) { aUrlParams.push(sFilterParams); }
 		}
 
@@ -2452,7 +2572,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		jQuery.extend(oChangeHeader, this.mCustomHeaders, this.oHeaders);
 
 		// for batch remove starting / if any
-		if (jQuery.sap.startsWith(sPath, "/")) {
+		if (sPath.startsWith("/")) {
 			sPath = sPath.substr(1);
 		}
 
@@ -2522,13 +2642,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	 */
 	ODataModel.prototype.addBatchReadOperations = function(aReadOperations) {
 		if (!Array.isArray(aReadOperations) || aReadOperations.length <= 0) {
-			jQuery.sap.log.warning("No array with batch operations provided!");
+			Log.warning("No array with batch operations provided!");
 			return false;
 		}
 		var that = this;
 		jQuery.each(aReadOperations, function(iIndex, oReadOperation) {
 			if (oReadOperation.method != "GET") {
-				jQuery.sap.log.warning("Batch operation should be a GET operation!");
+				Log.warning("Batch operation should be a GET operation!");
 				return false;
 			}
 			that.aBatchOperations.push(oReadOperation);
@@ -2550,7 +2670,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		}
 		jQuery.each(aChangeOperations, function(iIndex, oChangeOperation) {
 			if (oChangeOperation.method != "POST" && oChangeOperation.method != "PUT" && oChangeOperation.method != "MERGE" && oChangeOperation.method != "DELETE") {
-				jQuery.sap.log.warning("Batch operation should be a POST/PUT/MERGE/DELETE operation!");
+				Log.warning("Batch operation should be a POST/PUT/MERGE/DELETE operation!");
 				return false;
 			}
 		});
@@ -2566,22 +2686,27 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	};
 
 	/**
-	 * Submits the collected changes in the batch which were collected via <code>addBatchReadOperations</code> or <code>addBatchChangeOperations</code>.
-	 * The batch will be cleared afterwards. If the batch is empty no request will be performed and false will be returned.
-	 * Note: No data will be stored in the model.
+	 * Submits the collected changes in the batch which were collected via <code>addBatchReadOperations</code> or
+	 * <code>addBatchChangeOperations</code>. The batch will be cleared afterwards. If the batch is empty, no request
+	 * will be sent and false will be returned.
 	 *
-	 * @param {function} [fnSuccess] a callback function which is called when the batch request has
-	 *            					 been successfully sent. Note: There might have errors occured in the single batch operations. These errors can be accessed in the
-	 *            aErrorResponses parameter in the callback handler.
-	 *            The handler can have the
-	 *            	                 following parameters: oData, oResponse and aErrorResponses.
+	 * <b>Note:</b> No data will be stored in the model as long as <code>bImportData</code> is not set.
 	 *
-	 * @param {function} [fnError] a callback function which is called when the batch request failed. The handler can have the parameter: oError which contains
-	 * additional error information.
-	 * @param {boolean} [bAsync] true for asynchronous request. Default is true.
-	 *
-	 * @param {boolean} bImportData
-	 * @return {object} an object which has an <code>abort</code> function to abort the current request. Returns false if no request will be performed because the batch is empty.
+	 * @param {function} [fnSuccess]
+	 *            A callback function which is called when the batch request has been successfully sent.
+	 *            Note: Errors that may have come up in the single batch operations can be accessed
+	 *            in the <code>aErrorResponses</code> parameter in the callback handler.
+	 *            The handler can have the following parameters: <code>oData</code>, <code>oResponse</code> and
+	 *            <code>aErrorResponses</code>.
+	 * @param {function} [fnError]
+	 *            A callback function which is called when the batch request failed.
+	 *            The handler can have the parameter <code>oError</code> which contains additional error information.
+	 * @param {boolean} [bAsync=true]
+	 *            true for asynchronous request
+	 * @param {boolean} [bImportData=false]
+	 *            Whether response data should be imported into the model
+	 * @return {object} An object which has an <code>abort</code> function to abort the current request.
+	 *            Returns false if no request will be performed because the batch is empty.
 	 *
 	 * @public
 	 */
@@ -2607,7 +2732,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		bAsync = bAsync !== false;
 
 		if (this.aBatchOperations.length <= 0) {
-			jQuery.sap.log.warning("No batch operations in batch. No request will be triggered!");
+			Log.warning("No batch operations in batch. No request will be triggered!");
 			return false;
 		}
 		oRequest = this._createBatchRequest(this.aBatchOperations, bAsync);
@@ -2669,9 +2794,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			oStoredEntry = this._getObject(sPath);
 			oPayload = oStoredEntry;
 
-			if (jQuery.isPlainObject(oStoredEntry)) {
+			if (isPlainObject(oStoredEntry)) {
 				// do a copy of the payload or the changes will be deleted in the model as well (reference)
-				oPayload = jQuery.sap.extend(true, {}, oStoredEntry);
+				oPayload = merge({}, oStoredEntry);
 				// remove metadata, navigation properties to reduce payload
 				if (oPayload.__metadata) {
 					sType = oPayload.__metadata.type;
@@ -2725,7 +2850,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			this.oRequestQueue[this.sChangeKey] = oRequest;
 		}
 
-		if (jQuery.isEmptyObject(this.oRequestQueue)) {
+		if (isEmptyObject(this.oRequestQueue)) {
 			return undefined;
 		}
 
@@ -2733,7 +2858,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			var aChangeRequests = [];
 			jQuery.each(this.oRequestQueue, function(sKey, oCurrentRequest){
 				delete oCurrentRequest._oRef;
-				var oReqClone = jQuery.sap.extend(true, {}, oCurrentRequest);
+				var oReqClone = merge({}, oCurrentRequest);
 				oCurrentRequest._oRef = oReqClone;
 
 				oReqClone.requestUri = oReqClone.requestUri.replace(that.sServiceUrl + '/','');
@@ -2750,7 +2875,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 				// We send the cloned request which will be modified by datajs but we want to keep the original request stored
 				// because it may fail and we need to send the request again.
 				delete oCurrentRequest._oRef;
-				var oReqClone = jQuery.sap.extend(true, {}, oCurrentRequest);
+				var oReqClone = merge({}, oCurrentRequest);
 				oCurrentRequest._oRef = oReqClone;
 				//remove create flag
 				 if (oReqClone.data && oReqClone.data._bCreate) {
@@ -2956,7 +3081,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			jQuery.each(mHeaders, function(sHeaderName, sHeaderValue){
 				// case sensitive check needed to make sure private headers cannot be overridden by difference in the upper/lower case (e.g. accept and Accept).
 				if (that._isHeaderPrivate(sHeaderName)) {
-					jQuery.sap.log.warning("Not allowed to modify private header: " + sHeaderName);
+					Log.warning("Not allowed to modify private header: " + sHeaderName);
 				} else {
 					mCheckedHeaders[sHeaderName] = sHeaderValue;
 				}
@@ -3064,7 +3189,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			var sPath = oContext.getPath();
 			delete this.mContexts[sPath]; // contexts are stored starting with /
 			// remove starting / if any
-			if (jQuery.sap.startsWith(sPath, "/")) {
+			if (sPath.startsWith("/")) {
 				sPath = sPath.substr(1);
 			}
 			delete this.oRequestQueue[sPath];
@@ -3107,12 +3232,12 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			sUrl,
 			oRequest;
 
-		if (!jQuery.sap.startsWith(sPath, "/")) {
+		if (!sPath.startsWith("/")) {
 			sPath = "/" + sPath;
 		}
 		var oEntityMetadata = this.oMetadata._getEntityTypeByPath(sPath);
 		if (!oEntityMetadata) {
-			jQuery.sap.assert(oEntityMetadata, "No Metadata for collection " + sPath + " found");
+			assert(oEntityMetadata, "No Metadata for collection " + sPath + " found");
 			return undefined;
 		}
 		if (typeof vProperties === "object" && !Array.isArray(vProperties)) {
@@ -3121,7 +3246,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			for (var i = 0; i < oEntityMetadata.property.length; i++) {
 				var oPropertyMetadata = oEntityMetadata.property[i];
 
-				var bPropertyInArray = jQuery.inArray(oPropertyMetadata.name,vProperties) > -1;
+				var bPropertyInArray = vProperties && vProperties.indexOf(oPropertyMetadata.name)  > -1;
 				if (!vProperties || bPropertyInArray)  {
 					oEntity[oPropertyMetadata.name] = this._createPropertyValue(oPropertyMetadata.type);
 					if (bPropertyInArray) {
@@ -3130,14 +3255,14 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 				}
 			}
 			if (vProperties) {
-				jQuery.sap.assert(vProperties.length === 0, "No metadata for the following properties found: " + vProperties.join(","));
+				assert(vProperties.length === 0, "No metadata for the following properties found: " + vProperties.join(","));
 			}
 		}
 		//mark as entity for create; we need this for setProperty
 		oEntity._bCreate = true;
 
 		// remove starting / for key only
-		sKey = sPath.substring(1) + "('" + jQuery.sap.uid() + "')";
+		sKey = sPath.substring(1) + "('" + uid() + "')";
 
 		this.oData[sKey] = oEntity;
 
@@ -3168,7 +3293,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		if (sNamespace.toUpperCase() !== 'EDM') {
 			var oComplexType = {};
 			var oComplexTypeMetadata = this.oMetadata._getObjectMetadata("complexType",sTypeName,sNamespace);
-			jQuery.sap.assert(oComplexTypeMetadata, "Complex type " + sType + " not found in the metadata !");
+			assert(oComplexTypeMetadata, "Complex type " + sType + " not found in the metadata !");
 			for (var i = 0; i < oComplexTypeMetadata.property.length; i++) {
 				var oPropertyMetadata = oComplexTypeMetadata.property[i];
 				oComplexType[oPropertyMetadata.name] = this._createPropertyValue(oPropertyMetadata.type);
@@ -3199,10 +3324,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			sPath = sPath.substr(0, sPath.indexOf('?'));
 		}
 
-		if (!oContext && !jQuery.sap.startsWith(sPath,"/")) {
+		if (!oContext && !sPath.startsWith("/")) {
 			// we need to add a / due to compatibility reasons; but only if there is no context
 			sPath = '/' + sPath;
-			jQuery.sap.log.warning(this + " path " + sPath + " should be absolute if no Context is set");
+			Log.warning(this + " path " + sPath + " should be absolute if no Context is set");
 		}
 		return this.resolve(sPath, oContext);
 	};
@@ -3251,9 +3376,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 		function wrapHandler(fn) {
 			return function() {
 				// request finished, remove request handle from pending request array
-				var iIndex = jQuery.inArray(oRequestHandle, that.aPendingRequestHandles);
-				if (iIndex > -1) {
-					that.aPendingRequestHandles.splice(iIndex, 1);
+				if (that.aPendingRequestHandles){
+					var iIndex = that.aPendingRequestHandles.indexOf(oRequestHandle);
+					if (iIndex > -1) {
+						that.aPendingRequestHandles.splice(iIndex, 1);
+					}
 				}
 
 				// call original handler method
@@ -3300,10 +3427,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			delete this.aPendingRequestHandles;
 		}
 		if (!!this.oMetadataLoadEvent) {
-			jQuery.sap.clearDelayedCall(this.oMetadataLoadEvent);
+			clearTimeout(this.oMetadataLoadEvent);
 		}
 		if (!!this.oMetadataFailedEvent) {
-			jQuery.sap.clearDelayedCall(this.oMetadataFailedEvent);
+			clearTimeout(this.oMetadataFailedEvent);
 		}
 
 		if (this.oMetadata) {
@@ -3324,7 +3451,10 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			this.oAnnotations.detachLoaded(this.onAnnotationsLoaded);
 			this.oAnnotations.destroy();
 			delete this.oAnnotations;
+			delete this.pAnnotationsLoaded;
 		}
+
+
 
 		Model.prototype.destroy.apply(this, arguments);
 	};
@@ -3444,13 +3574,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 	ODataModel.prototype.getMetaModel = function() {
 		var that = this;
 		if (!this.oMetaModel) {
-			this.oMetaModel = new ODataMetaModel(this.oMetadata, this.oAnnotations, {
-				addAnnotationUrl : this.addAnnotationUrl.bind(this),
-				annotationsLoadedPromise :
-					this.oMetadata.isLoaded() && (!this.oAnnotations || this.oAnnotations.isLoaded())
-					? null // stay synchronous
-					: this.pAnnotationsLoaded
-			});
+			this.oMetaModel = new ODataMetaModel(this.oMetadata, this.oAnnotations, this);
 			// Call checkUpdate when metamodel has been loaded to update metamodel bindings
 			this.oMetaModel.loaded().then(function() {
 				that.bMetaModelLoaded = true;
@@ -3458,6 +3582,21 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/model/BindingMode', 'sap/ui/model/Co
 			});
 		}
 		return this.oMetaModel;
+	};
+
+	/**
+	 * Returns a promise that resolves when the annotations given in the constructor are loaded.
+	 *
+	 * @returns {Promise}
+	 *   A promise that resolves when the annotations are loaded, or <code>null</code> if the
+	 *   annotations are already loaded.
+	 *
+	 * @private
+	 */
+	ODataModel.prototype.annotationsLoaded = function () {
+		return this.oMetadata.isLoaded() && (!this.oAnnotations || this.oAnnotations.isLoaded())
+			? null // stay synchronous
+			: this.pAnnotationsLoaded;
 	};
 
 	return ODataModel;

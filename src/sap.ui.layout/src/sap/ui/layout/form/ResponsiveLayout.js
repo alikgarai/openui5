@@ -3,11 +3,28 @@
  */
 
 // Provides control sap.ui.layout.form.ResponsiveLayout.
-sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/ui/layout/ResponsiveFlowLayoutData',
-               './Form', './FormContainer', './FormElement', './FormLayout',
-               'sap/ui/layout/library', 'sap/ui/core/Control', './ResponsiveLayoutRenderer'],
-	function(jQuery, ResponsiveFlowLayout, ResponsiveFlowLayoutData,
-	         Form, FormContainer, FormElement, FormLayout, library, Control, ResponsiveLayoutRenderer) {
+sap.ui.define([
+	'sap/ui/core/Control',
+	'sap/ui/layout/library',
+	'sap/ui/layout/ResponsiveFlowLayout',
+	'sap/ui/layout/ResponsiveFlowLayoutData',
+	'./Form',
+	'./FormContainer',
+	'./FormElement',
+	'./FormLayout',
+	'./ResponsiveLayoutRenderer'
+],
+	function(
+		Control,
+		library,
+		ResponsiveFlowLayout,
+		ResponsiveFlowLayoutData,
+		Form,
+		FormContainer,
+		FormElement,
+		FormLayout,
+		ResponsiveLayoutRenderer
+	) {
 	"use strict";
 
 	/**
@@ -84,6 +101,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/u
 	var Panel = Control.extend("sap.ui.layout.form.ResponsiveLayoutPanel", {
 
 		metadata : {
+			library: "sap.ui.layout",
 			aggregations: {
 				"content"   : {type: "sap.ui.layout.ResponsiveFlowLayout", multiple: false}
 			},
@@ -127,59 +145,58 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/u
 			}
 		},
 
-		renderer : function(oRm, oPanel) {
+		renderer : {
+			apiVersion: 2,
+			render: function(oRm, oPanel) {
 
-			var oContainer = sap.ui.getCore().byId(oPanel.getContainer());
-			var oLayout    = sap.ui.getCore().byId(oPanel.getLayout());
-			var oContent   = oPanel.getContent();
+				var oContainer = sap.ui.getCore().byId(oPanel.getContainer());
+				var oLayout    = sap.ui.getCore().byId(oPanel.getLayout());
+				var oContent   = oPanel.getContent();
 
-			if (!oContainer || !oLayout) {
-				// Container might be removed, but ResponsiveFlowLayout still calls a rerendering with old content
-				return;
+				if (!oContainer || !oLayout) {
+					// Container might be removed, but ResponsiveFlowLayout still calls a rerendering with old content
+					return;
+				}
+
+				var bExpandable = oContainer.getExpandable();
+				var sTooltip = oContainer.getTooltip_AsString();
+				var oToolbar = oContainer.getToolbar();
+				var oTitle = oContainer.getTitle();
+
+				oRm.openStart("div", oPanel);
+				oRm.class("sapUiRLContainer");
+				if (bExpandable && !oContainer.getExpanded()) {
+					oRm.class("sapUiRLContainerColl");
+				}
+				if (oToolbar) {
+					oRm.class("sapUiFormContainerToolbar");
+				} else if (oTitle) {
+					oRm.class("sapUiFormContainerTitle");
+				}
+
+				if (sTooltip) {
+					oRm.attr('title', sTooltip);
+				}
+
+				oLayout.getRenderer().writeAccessibilityStateContainer(oRm, oContainer);
+
+				oRm.openEnd();
+
+				// container header
+				oLayout.getRenderer().renderHeader(oRm, oToolbar, oTitle, oContainer._oExpandButton, bExpandable, false, oContainer.getId());
+
+				if (oContent) {
+					oRm.openStart("div");
+					oRm.class("sapUiRLContainerCont");
+					oRm.openEnd();
+					// container is not expandable or is expanded -> render elements
+					oRm.renderControl(oContent);
+					oRm.close("div");
+				}
+
+				oRm.close("div");
 			}
-
-			var bExpandable = oContainer.getExpandable();
-			var sTooltip = oContainer.getTooltip_AsString();
-			var oToolbar = oContainer.getToolbar();
-			var oTitle = oContainer.getTitle();
-
-			oRm.write("<div");
-			oRm.writeControlData(oPanel);
-			oRm.addClass("sapUiRLContainer");
-			if (bExpandable && !oContainer.getExpanded()) {
-				oRm.addClass("sapUiRLContainerColl");
-			}
-			if (oToolbar) {
-				oRm.addClass("sapUiFormContainerToolbar");
-			} else if (oTitle) {
-				oRm.addClass("sapUiFormContainerTitle");
-			}
-
-			if (sTooltip) {
-				oRm.writeAttributeEscaped('title', sTooltip);
-			}
-			oRm.writeClasses();
-
-			oLayout.getRenderer().writeAccessibilityStateContainer(oRm, oContainer);
-
-			oRm.write(">");
-
-			// container header
-			oLayout.getRenderer().renderHeader(oRm, oToolbar, oTitle, oContainer._oExpandButton, bExpandable, false, oContainer.getId());
-
-			if (oContent) {
-				oRm.write("<div");
-				oRm.addClass("sapUiRLContainerCont");
-				oRm.writeClasses();
-				oRm.write(">");
-				// container is not expandable or is expanded -> render elements
-				oRm.renderControl(oContent);
-				oRm.write("</div>");
-			}
-
-			oRm.write("</div>");
 		}
-
 	});
 
 	/* eslint-disable no-lonely-if */
@@ -264,7 +281,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/u
 					this.mContainers[sContainerId][2][sElementId]) {
 					if (this.mContainers[sContainerId][2][sElementId][1]) {
 						// update fields RF-Layout
-						var aFields = oParent.getFields();
+						var aFields = oParent.getFieldsForRendering();
 						_updateLayoutDataOfContentResponsiveFlowLayout.call(this, this.mContainers[sContainerId][2][sElementId][1], aFields);
 					}
 					this.mContainers[sContainerId][2][sElementId][0].onLayoutDataChange(oEvent);
@@ -426,9 +443,9 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/u
 	 */
 	function _deletePanel( oPanel ) {
 
-		oPanel.setContent("");
-		oPanel.setLayout("");
-		oPanel.setContainer("");
+		oPanel.setContent(null);
+		oPanel.setLayout(null);
+		oPanel.setContainer(null);
 		oPanel.destroy();
 
 	}
@@ -475,7 +492,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/u
 			}
 
 			// if more fields after a label put the fields in an additional ResponsiveFlowLayout
-			var aFields = oElement.getFields();
+			var aFields = oElement.getFieldsForRendering();
 			if (oElement.getLabel() && aFields.length > 1) {
 				if (mRFLayouts[sElementId][1]) {
 					oFieldsRFLayout = mRFLayouts[sElementId][1];
@@ -552,7 +569,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/u
 					if (oElement) {
 						var aContent = [];
 						var oLabel = oElement.getLabelControl();
-						var aFields = oElement.getFields();
+						var aFields = oElement.getFieldsForRendering();
 						if (!oLabel || aFields.length <= 1) {
 							aContent = aFields;
 							if (oLabel) {
@@ -599,7 +616,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/layout/ResponsiveFlowLayout', 'sap/u
 				oRFLayout.getContent = function(){
 					var oElement = sap.ui.getCore().byId(this.__myParentElementId);
 					if (oElement) {
-						return oElement.getFields();
+						return oElement.getFieldsForRendering();
 					} else {
 						return false;
 					}

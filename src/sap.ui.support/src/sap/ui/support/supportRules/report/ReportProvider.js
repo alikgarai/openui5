@@ -28,7 +28,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/handlebars', 'sap/ui/supp
 			buffer.push("<tr><td ", right ? "align='right' " : "", "valign='top'>", "<label class='sapUiSupportLabel'>", jQuery.sap.escapeHTML(label || ""), "</label></td><td",
 					border ? " class='sapUiSupportTechInfoBorder'" : "", ">");
 			var ctnt = content;
-			if (jQuery.isFunction(content)) {
+			if (typeof content === "function") {
 				ctnt = content(buffer);
 			}
 			buffer.push(jQuery.sap.escapeHTML(ctnt || ""));
@@ -43,8 +43,8 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/handlebars', 'sap/ui/supp
 					if (v) {
 						if (typeof (v) === "string" || typeof (v) === "string" || typeof (v) === "boolean") {
 							val = v;
-						} else if ((jQuery.isArray(v) || jQuery.isPlainObject(v)) && window.JSON) {
-							val = window.JSON.stringify(v);
+						} else if (Array.isArray(v) || jQuery.isPlainObject(v)) {
+							val = JSON.stringify(v);
 						}
 					}
 					that.line(buffer, false, false, i, "" + val);
@@ -226,7 +226,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/handlebars', 'sap/ui/supp
 		var content = '';
 
 		try {
-			var scopeType = scope.executionScope._getType();
+			var scopeType = scope.executionScope.getType();
 			var scopeDisplaySettings = scope.scopeDisplaySettings.executionScopes[scopeType];
 			var scopeDisplayTitle = scope.scopeDisplaySettings.executionScopeTitle;
 			content += '<div class="sapUiSupportLabel">' + scopeDisplayTitle + ': </div>';
@@ -272,16 +272,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/handlebars', 'sap/ui/supp
 				}
 
 				var groupIssueCountElement = groups[group].selected ? ' (' + groups[group].issueCount + ' issues)' : '';
-				var checkedGroup = '<span class="checked" style="' + (groups[group].selected ? '' : 'visibility: hidden;') + '"> &#10004; </span>';
+				var checkedGroup = '<span class="' + (groups[group].selected ? 'checked' : 'unchecked') + '"></span>';
 				content += '<tbody><tr><td colspan="100" ';
 				content += 'class="expandable-control ' + expandedClass + '" data-expandableElement="section-selected-rules-group' + groupNumber + '">' + checkedGroup;
-				content += '<span class="sapUiSupportLabel expandable-title"> ' + group + groupIssueCountElement + '</span>';
+				content += '<span class="sapUiSupportLabel expandable-title">' + group + groupIssueCountElement + '</span>';
 				content += '</td></tr></tbody>';
 				var rulesTable = '';
 
 				for (var rule in rules) {
 					var issueCountElement = rules[rule].selected ? ' (' + rules[rule].issueCount + ' issues)' : '';
-					var checked = '<span class="checked" style="' + (rules[rule].selected ? '' : 'visibility: hidden;') + '"> &#10004; </span>';
+					var checked = '<span class="' + (rules[rule].selected ? 'checked' : 'unchecked') + '"></span>';
 					rulesTable += '<tr>';
 					rulesTable += '<td>' + checked + rules[rule].title + issueCountElement + '</td>';
 					rulesTable += '<td>' + rules[rule].description + '</td>';
@@ -373,12 +373,13 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/handlebars', 'sap/ui/supp
 				issues: oData.issues,
 				appInfo: oData.application,
 				rules: oData.rules,
+				rulePreset: oData.rulePreset,
 				metadata: {
 					title: oData.name + ' Analysis Results',
 					title_TechnicalInfo: 'Technical Information',
 					title_Issues: 'Issues',
 					title_AppInfo: 'Application Information',
-					title_SelectedRules: 'Available and (<span class="checked">&#10004;</span>) Executed Rules',
+					title_SelectedRules: 'Available and (<span class="checked"></span>) Selected Rules',
 					timestamp: new Date(),
 					scope: oData.scope,
 					analysisDuration: oData.analysisDuration,
@@ -407,6 +408,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/handlebars', 'sap/ui/supp
 			archiver.add('issues.json', issues, 'json');
 			archiver.add('appInfos.json', appInfos, 'json');
 			archiver.add('report.html', report);
+			archiver.add('abap.json', oData.abap, 'json');
 			archiver.download("SupportAssistantReport");
 			archiver.clear();
 		});
@@ -419,9 +421,11 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/thirdparty/handlebars', 'sap/ui/supp
 	function openReport(oData) {
 		// Create a hidden anchor. Open window outside of the promise otherwise browsers blocks the window.open.
 		var content = '';
-		var a = jQuery('<a style="display: none;"/>');
+		var a = jQuery('<a style="display: none;"></a>');
 		a.on('click', function () {
 			var reportWindow = window.open('', '_blank');
+			reportWindow.opener = null;
+
 			jQuery(reportWindow.document).ready(function () {
 				// Sometimes document.write overwrites the document html and sometimes it appends to it so we need a wrapper div.
 				if (reportWindow.document.getElementById('sap-report-content')) {

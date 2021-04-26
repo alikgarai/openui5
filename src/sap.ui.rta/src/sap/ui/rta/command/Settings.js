@@ -1,7 +1,7 @@
 /*!
  * ${copyright}
  */
-sap.ui.define(['sap/ui/rta/command/FlexCommand'], function(FlexCommand) {
+sap.ui.define(["sap/ui/rta/command/FlexCommand"], function(FlexCommand) {
 	"use strict";
 
 	/**
@@ -19,29 +19,18 @@ sap.ui.define(['sap/ui/rta/command/FlexCommand'], function(FlexCommand) {
 	 *               changed in future.
 	 */
 	var Settings = FlexCommand.extend("sap.ui.rta.command.Settings", {
-		metadata : {
-			library : "sap.ui.rta",
-			properties : {
-				content : {
-					type : "any"
+		metadata: {
+			library: "sap.ui.rta",
+			properties: {
+				content: {
+					type: "any",
+					group: "content"
 				}
 			},
-			associations : {},
-			events : {}
+			associations: {},
+			events: {}
 		}
 	});
-
-
-	Settings.prototype._getChangeSpecificData = function(bForward) {
-
-		var mSpecificInfo = {
-				changeType : this.getChangeType(),
-				content : this.getContent()
-		};
-
-		return mSpecificInfo;
-	};
-
 
 	/**
 	 * @override
@@ -49,9 +38,8 @@ sap.ui.define(['sap/ui/rta/command/FlexCommand'], function(FlexCommand) {
 	Settings.prototype.execute = function() {
 		if (this.getElement()) {
 			return FlexCommand.prototype.execute.apply(this, arguments);
-		} else {
-			return Promise.resolve();
 		}
+		return Promise.resolve();
 	};
 
 	/**
@@ -60,11 +48,9 @@ sap.ui.define(['sap/ui/rta/command/FlexCommand'], function(FlexCommand) {
 	Settings.prototype.undo = function() {
 		if (this.getElement()) {
 			return FlexCommand.prototype.undo.apply(this, arguments);
-		} else {
-			return Promise.resolve();
 		}
+		return Promise.resolve();
 	};
 
 	return Settings;
-
-}, /* bExport= */true);
+});

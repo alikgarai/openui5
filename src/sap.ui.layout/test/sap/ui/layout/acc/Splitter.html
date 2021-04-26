@@ -6,7 +6,10 @@
 	<script src="../shared-config.js"></script>
 	<script id="sap-ui-bootstrap"
 			data-sap-ui-libs="sap.ui.layout, sap.m"
-			src="../../../../../resources/sap-ui-core.js">
+			src="../../../../../resources/sap-ui-core.js"
+			data-sap-ui-resourceroots='{
+				"qunit.internal.acc": "../../../../../test-resources/sap/ui/core/qunit/internal/acc"
+			}'>
 	</script>
 
 	<script>
@@ -48,7 +51,7 @@
 	</script>
 
 </head>
-<body class="sapUiBody" role="application">
+<body class="sapUiBody">
 <h1 id="header">ACC Test Page for <code>sap.ui.layout.Splitter</code></h1>
 <div id="content" style="height: 500px"></div>
 </body>

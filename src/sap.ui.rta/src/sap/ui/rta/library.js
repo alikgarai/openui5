@@ -5,8 +5,14 @@
 /**
  * Initialization Code and shared classes of library sap.ui.rta.
  */
-sap.ui.define(['jquery.sap.global', 'sap/ui/core/Core', 'sap/ui/core/library'],
-	function(jQuery, Core, coreLibrary) {
+sap.ui.define([
+	"sap/ui/core/Core",
+	"sap/ui/core/library",
+	"sap/m/library",
+	"sap/ui/fl/library",
+	"sap/ui/dt/library"
+],
+function() {
 	"use strict";
 
 	/**
@@ -23,17 +29,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Core', 'sap/ui/core/library'],
 
 	// delegate further initialization of this library to the Core
 	sap.ui.getCore().initLibrary({
-		name : "sap.ui.rta",
+		name: "sap.ui.rta",
 		version: "${version}",
-		dependencies : ["sap.ui.core","sap.m", "sap.ui.fl", "sap.ui.dt"],
-		types: [
-		],
+		dependencies: ["sap.ui.core", "sap.m", "sap.ui.fl", "sap.ui.dt"],
+		types: [],
 		interfaces: [],
 		controls: [],
-		elements: [
-		]
+		elements: []
 	});
 
-	return sap.ui.rta;
+	sap.ui.rta.GENERATOR_NAME = "sap.ui.rta.command";
 
+	return sap.ui.rta;
 });

@@ -684,7 +684,8 @@
 		"tags": [
 			"dropdown",
 			"list",
-			"arrow"
+			"arrow",
+			"megamenu"
 		]
 	},
 	"target-group": {
@@ -956,7 +957,8 @@
 			"collapse",
 			"expanded tree",
 			"tree arrow",
-			"arrow"
+			"arrow",
+			"megamenu"
 		]
 	},
 	"screen-split-two": {
@@ -1004,7 +1006,8 @@
 			"arrow",
 			"detail",
 			"hierarchy",
-			"level"
+			"level",
+			"megamenu"
 		]
 	},
 	"capital-projects": {
@@ -1255,6 +1258,7 @@
 			"data",
 			"table",
 			"grid",
+			"waffle",
 			"view",
 			"columns",
 			"rows"
@@ -1956,7 +1960,8 @@
 			"dropdown",
 			"menu",
 			"menu button",
-			"arrow"
+			"arrow",
+			"megamenu"
 		]
 	},
 	"decision": {
@@ -2247,7 +2252,7 @@
 			"movie"
 		]
 	},
-	"soccor": {
+	"soccer": {
 		"tags": [
 			"soccer",
 			"ball",
@@ -2360,6 +2365,7 @@
 			"columns",
 			"rows",
 			"grid",
+			"waffle",
 			"view"
 		]
 	},
@@ -2682,6 +2688,7 @@
 			"columns",
 			"rows",
 			"grid",
+			"waffle",
 			"view"
 		]
 	},
@@ -2699,6 +2706,7 @@
 	"grid": {
 		"tags": [
 			"grid",
+			"waffle",
 			"layout",
 			"boxes",
 			"squares",
@@ -2834,6 +2842,7 @@
 			"columns",
 			"rows",
 			"grid",
+			"waffle",
 			"settings",
 			"modify",
 			"customize"
@@ -3664,7 +3673,8 @@
 	"down": {
 		"tags": [
 			"down",
-			"triangle"
+			"triangle",
+			"megamenu"
 		]
 	},
 	"pipeline-analysis": {
@@ -5742,7 +5752,8 @@
 			"variant",
 			"management",
 			"selection",
-			"options"
+			"options",
+			"megamenu"
 		]
 	},
 	"bbyd-dashboard": {
@@ -6290,6 +6301,7 @@
 			"table",
 			"table row",
 			"grid",
+			"waffle",
 			"view",
 			"rows"
 		]
@@ -6301,6 +6313,7 @@
 			"table",
 			"table column",
 			"grid",
+			"waffle",
 			"view",
 			"columns"
 		]
@@ -6366,6 +6379,130 @@
 			"table",
 			"tree",
 			"list"
+		]
+	},
+	"combine": {
+		"tags": [
+			"merge",
+			"arrow",
+			"combine",
+			"glue",
+			"together",
+			"join",
+			"meld",
+			"unite",
+			"aggregate",
+			"interflow",
+			"runtime authoring",
+			"runtime adaptation",
+			"ui adaptation",
+			"arrows-right"
+		]
+	},
+	"split": {
+		"tags": [
+			"split",
+			"arrow",
+			"separate",
+			"break",
+			"cleave",
+			"clove",
+			"cut up",
+			"runtime authoring",
+			"runtime adaptation",
+			"ui adaptation",
+			"arrows-right"
+		]
+	},
+	"megamenu": {
+		"tags": [
+			"navigation",
+			"arrows-down",
+			"arrow-down",
+			"down",
+			"shell"
+		]
+	},
+	"feedback": {
+		"tags": [
+			"feedback",
+			"smiley",
+			"comment",
+			"shell",
+			"callout",
+			"speech"
+		]
+	},
+	"information": {
+		"tags": [
+			"information",
+			"info",
+			"message",
+			"message-information",
+			"i",
+			"filled",
+			"notification"
+		]
+	},
+	"s4hana": {
+		"tags": [
+			"s4hana",
+			"S/4HANA",
+			"S/4",
+			"hana",
+			"product switch",
+			"product",
+			"switch"
+		]
+	},
+	"translate": {
+		"tags": [
+			"translate",
+			"text",
+			"letters",
+			"translation",
+			"A",
+			"arrows"
+		]
+	},
+	"clear-all": {
+		"tags": [
+			"clear",
+			"clear-all",
+			"square",
+			"x",
+			"delete",
+			"remove",
+			"check",
+			"uncheck"
+		]
+	},
+	"command-line-interfaces": {
+		"tags": [
+			"command",
+			"command-line",
+			"interfaces",
+			"code",
+			"develop",
+			"source",
+			"source-code",
+			"write",
+			"syntax",
+			"programming",
+			"technical"
+		]
+	},
+	"sum": {
+		"tags": [
+			"sigma",
+			"sum",
+			"summation",
+			"addition",
+			"total",
+			"aggregate",
+			"amount",
+			"covariance",
+			"covariance matrix"
 		]
 	}
 }

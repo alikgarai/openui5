@@ -14,14 +14,14 @@ sap.ui.define([
 			});
 			this.getView().setModel(oViewModel, "view");
 
-			var oRouter = sap.ui.core.UIComponent.getRouterFor(this);
+			var oRouter = this.getOwnerComponent().getRouter();
 			oRouter.getRoute("detail").attachPatternMatched(this._onObjectMatched, this);
 		},
 
 		_onObjectMatched: function (oEvent) {
 			this.byId("rating").reset();
 			this.getView().bindElement({
-				path: "/" + oEvent.getParameter("arguments").invoicePath,
+				path: "/" + window.decodeURIComponent(oEvent.getParameter("arguments").invoicePath),
 				model: "invoice"
 			});
 		},
@@ -33,7 +33,7 @@ sap.ui.define([
 			if (sPreviousHash !== undefined) {
 				window.history.go(-1);
 			} else {
-				var oRouter = sap.ui.core.UIComponent.getRouterFor(this);
+				var oRouter = this.getOwnerComponent().getRouter();
 				oRouter.navTo("overview", {}, true);
 			}
 		},

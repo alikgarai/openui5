@@ -16,10 +16,6 @@
 	cursor: pointer;
 }
 
-.sapMLnk:active {
-	background-color: transparent; /* required for IE10 */
-}
-
 .sapMLnk:active:not(.sapMLnkDsbl),
 .sapMLnk:focus:not(.sapMLnkDsbl) {
 	color: @sapUiLinkActive;
@@ -60,7 +56,7 @@
 }
 
 .sapMFT .sapMLnk {
-	vertical-align: text-top;
+	vertical-align: top;
 }
 
 /* Global focus offset */
@@ -77,26 +73,6 @@ html.sap-desktop .sapUiSizeCondensed .sapUiTableCell .sapMLnk:focus:not(.sapMLnk
 	font-weight: bold;
 }
 
-/* IE and Edge ignores outline-offset. Use an overlay: */
-html[data-sap-ui-browser^="ie"].sap-desktop,
-html[data-sap-ui-browser^="ed"].sap-desktop {
-	.sapMLnk:focus:not(.sapMLnkDsbl) {
-		outline: none;
-		position: relative;
-	}
-	.sapMLnk:focus:not(.sapMLnkDsbl):before {
-		content: " ";
-		box-sizing: border-box;
-		width: 100%;
-		height: 100%;
-		position: absolute;
-		left: 0;
-		top: 0;
-		border: 1px dashed @sapUiContentFocusColor;
-		pointer-events: none;
-	}
-}
-
 /* Hover Decoration only for desktop clients*/
 html.sap-desktop .sapMLnk:hover:not(.sapMLnkDsbl) {
 	text-decoration: underline;
@@ -106,9 +82,13 @@ html.sap-desktop .sapMLnk:focus:not(.sapMLnkDsbl) {
 	outline: 1px dotted @sapUiContentFocusColor;
 }
 
+.sapUiForm .sapMLnk {
+	min-height: 1rem; /* do give empty links a size too. Keep the Form stable */
+}
+
 .sapUiFormEdit .sapMLnk {
 	line-height: normal;
-	margin-top: 1rem;
+	margin-top: 1rem; /* don't use padding as this would stretch the focus outline */
 	margin-bottom: 0.75rem; /* for some reason browser adds 4px, display: block would lead to stretched focus outline*/
 }
 
@@ -120,6 +100,19 @@ html.sap-desktop .sapMLnk:focus:not(.sapMLnkDsbl) {
 
 .sapMLnkEmphasized {
 	font-weight: bold;
+}
+
+.sapMLnk .sapMEmptyIndicator.sapMEmptyIndicatorAuto {
+	display: none;
+}
+
+.sapMShowEmpty-CTX .sapMLnk .sapMEmptyIndicator.sapMEmptyIndicatorAuto {
+	display: inline-block;
+}
+
+.sapMShowEmpty-CTX .sapMLnk .sapMEmptyIndicator.sapMEmptyIndicatorAuto,
+.sapMLnk .sapMEmptyIndicator {
+	color: @sapUiBaseText;
 }
 
 /* Compact size */

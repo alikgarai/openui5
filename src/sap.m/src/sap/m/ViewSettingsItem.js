@@ -3,8 +3,8 @@
  */
 
 // Provides control sap.m.ViewSettingsItem.
-sap.ui.define(['./library', 'sap/ui/core/Item', 'sap/ui/base/ManagedObject'],
-	function(library, Item, ManagedObject) {
+sap.ui.define(['./library', 'sap/ui/core/Item'],
+	function(library, Item) {
 	"use strict";
 
 
@@ -18,6 +18,8 @@ sap.ui.define(['./library', 'sap/ui/core/Item', 'sap/ui/base/ManagedObject'],
 	 * @class
 	 * ViewSettingsItem is used for modelling filter behaviour in the ViewSettingsDialog.
 	 * It is derived from a core Item, but does not support the base class properties "textDirection" and "enabled", setting these properties will not have any effects.
+	 * Apps should use the core Item's property <code>key/</code> and provide a unique value for it. Not providing a key
+	 * may lead to unexpected behavior of the sap.m.ViewSettingsDialog.
 	 * @extends sap.ui.core.Item
 	 *
 	 * @author SAP SE
@@ -64,7 +66,7 @@ sap.ui.define(['./library', 'sap/ui/core/Item', 'sap/ui/base/ManagedObject'],
 	}});
 
 	ViewSettingsItem.prototype.setSelected = function(bValue) {
-		ViewSettingsItem.prototype.setProperty.call(this, "selected", bValue, true);
+		this.setProperty("selected", bValue, true);
 		return this;
 	};
 
@@ -78,7 +80,7 @@ sap.ui.define(['./library', 'sap/ui/core/Item', 'sap/ui/base/ManagedObject'],
 	 * @param {boolean} bFireEvent Whether the event must be fired
 	 */
 	ViewSettingsItem.prototype.setProperty = function (sName, vValue, bSupressInvalidation, bFireEvent) {
-		ManagedObject.prototype.setProperty.apply(this, arguments);
+		Item.prototype.setProperty.apply(this, arguments);
 
 		bFireEvent = bFireEvent === undefined ? true : bFireEvent;
 

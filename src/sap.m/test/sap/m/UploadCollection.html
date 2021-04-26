@@ -30,7 +30,7 @@
 						case "number":
 							sValue = Number(sValue);
 						case "object":
-							if (jQuery.isArray(oData[sName])) {
+							if (Array.isArray(oData[sName])) {
 								sValue = oUriParameters.get(sName, true);
 							}
 							break;
@@ -810,6 +810,12 @@
 							text: "Rerender UC",
 							press: function (oEvent) {
 								oUploadCollection.invalidate();
+							}
+						}),
+						new sap.m.Button({
+							text: "+/- Icons",
+							press: function () {
+								oUploadCollection.setShowIcons(!oUploadCollection.getShowIcons());
 							}
 						}),
 						new sap.m.Label({

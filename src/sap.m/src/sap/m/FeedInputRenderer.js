@@ -6,6 +6,8 @@ sap.ui.define([],
 	function() {
 	"use strict";
 
+	var oRb = sap.ui.getCore().getLibraryResourceBundle("sap.m");
+
 var FeedInputRenderer = {
 	};
 
@@ -20,6 +22,12 @@ var FeedInputRenderer = {
 
 		oRm.write("<div");
 		oRm.writeControlData(oControl);
+		oRm.addClass("sapMFeedInBase");
+		oRm.writeAttribute("role", "group");
+		oRm.writeAttributeEscaped("aria-label", oRb.getText("FEED_INPUT_ARIA_LABEL"));
+		oRm.writeClasses();
+		oRm.write(">");
+		oRm.write('<div id="' + sMyId + '-outerContainer"');
 		oRm.addClass("sapMFeedIn");
 		if (!oControl.getShowIcon()) {
 			oRm.addClass("sapMFeedInNoIcon");
@@ -41,6 +49,12 @@ var FeedInputRenderer = {
 		oRm.renderControl(oControl._getPostButton());
 		oRm.write("</div>");
 		oRm.write("</div>");
+		oRm.write('<div id="' + sMyId + '-counterContainer"');
+		oRm.addClass("sapMFeedInCounter");
+		oRm.writeClasses();
+		oRm.write(">");
+		oRm.write("</div>");
+		oRm.write("</div>");
 	};
 
 	FeedInputRenderer._addImage = function (oRm, oControl, sMyId) {
@@ -50,7 +64,7 @@ var FeedInputRenderer = {
 			} else {
 				oRm.write(' sapMFeedListItemIsDefaultIcon">');
 			}
-		oRm.renderControl(oControl._getImageControl());
+		oRm.renderControl(oControl._getAvatar());
 		oRm.write('</figure>');
 	};
 

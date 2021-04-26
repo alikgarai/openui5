@@ -1,11 +1,11 @@
 sap.ui.define([
-	'sap/ui/test/Opa5',
-	'sap/ui/test/matchers/PropertyStrictEquals',
-	'sap/ui/test/matchers/AggregationFilled',
-	'sap/ui/test/matchers/AggregationLengthEquals',
-	'sap/ui/test/matchers/BindingPath',
-	'sap/ui/test/matchers/Properties',
-	'sap/ui/test/actions/Press'
+	"sap/ui/test/Opa5",
+	"sap/ui/test/matchers/PropertyStrictEquals",
+	"sap/ui/test/matchers/AggregationFilled",
+	"sap/ui/test/matchers/AggregationLengthEquals",
+	"sap/ui/test/matchers/BindingPath",
+	"sap/ui/test/matchers/Properties",
+	"sap/ui/test/actions/Press"
 ], function (
 	Opa5,
 	PropertyStrictEquals,
@@ -27,15 +27,6 @@ sap.ui.define([
 						matchers: new BindingPath({path: "/Products('HT-1254')"}),
 						actions: new Press(),
 						errorMessage: "The product list does not contain required selection"
-					});
-				},
-
-				iGoToTheCartPage: function () {
-					return this.waitFor({
-						controlType: "sap.m.Button",
-						matchers: new PropertyStrictEquals({name: "icon", value: "sap-icon://cart"}),
-						actions: new Press(),
-						errorMessage: "The cart button was not found and could not be pressed"
 					});
 				},
 
@@ -149,15 +140,7 @@ sap.ui.define([
 						errorMessage: "The cancel button in the dialog was not found and could not be pressed"
 					});
 				},
-				iPressTheBackButton: function () {
-					this.waitFor({
-						controlType: "sap.m.Button",
-						matchers: new Properties({type: "Back"}),
-						actions: new Press(),
-						errorMessage: "The back button was not found and could not be pressed"
-					});
-				},
-				iPressTheBackButtonInProduct: function () {
+				iPressTheBackButtonInCategory: function () {
 					return this.waitFor({
 						id: "page",
 						actions: new Press(),
@@ -176,7 +159,7 @@ sap.ui.define([
 				iPressResetButton: function () {
 					this.waitFor({
 						controlType: "sap.m.Button",
-						matchers: new PropertyStrictEquals({name: "icon", value: "sap-icon://clear-filter"}),
+						matchers: new PropertyStrictEquals({name: "text", value: "Reset"}),
 						actions: new Press(),
 						errorMessage: "The reset button in the dialog was not found and could not be pressed"
 					});
@@ -267,6 +250,18 @@ sap.ui.define([
 					this.iPressTheFilterButton();
 					this.iDeselectTheTechnoComFilter();
 					this.iPressOkButton();
+				},
+
+				iPressOnCompareLink: function (ProductId) {
+					return this.waitFor({
+						controlType: "sap.m.ObjectAttribute",
+						matchers: [
+							new BindingPath({path: "/Products('" + ProductId + "')"}),
+							new Properties({text: "Compare"})
+						],
+						actions: new Press(),
+						errorMessage: "The product list does not contain required selection " + ProductId
+					});
 				}
 			},
 
@@ -275,6 +270,7 @@ sap.ui.define([
 				iShouldSeeTheProductList: function () {
 					return this.waitFor({
 						id: "productList",
+						timeout: 30,
 						success: function (oList) {
 							Opa5.assert.ok(
 								oList,
@@ -468,6 +464,17 @@ sap.ui.define([
 				iShouldSeeAllProductsAndNoInfoToolbar: function () {
 					this.iShouldSeeAllProductsOfTheCategory();
 					this.iShouldNotSeeAnInfoToolbar();
+				},
+
+				iShouldSeeCompareLinkOnListEntry: function () {
+					this.waitFor({
+						controlType: "sap.m.ObjectAttribute",
+						matchers: new Properties({text : "Compare"}),
+						success: function () {
+							Opa5.assert.ok(true, "List entry has an compare link");
+						},
+						errorMessage: "List entry has no compare link"
+					});
 				}
 			}
 		}

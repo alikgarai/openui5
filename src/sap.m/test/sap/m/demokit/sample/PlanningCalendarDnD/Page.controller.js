@@ -15,7 +15,7 @@ sap.ui.define([
 					startDate: new Date("2017", "10", "13", "8", "0"),
 					people: [
 						{
-							pic: "test-resources/sap/ui/demokit/explored/img/John_Miller.png",
+							pic: "test-resources/sap/ui/documentation/sdk/images/John_Miller.png",
 							name: "John Miller",
 							role: "team member",
 							appointments: [
@@ -99,7 +99,7 @@ sap.ui.define([
 							]
 						},
 						{
-							pic: "test-resources/sap/ui/demokit/explored/img/Donna_Moore.jpg",
+							pic: "test-resources/sap/ui/documentation/sdk/images/Donna_Moore.jpg",
 							name: "Donna Moore",
 							role: "team member",
 							appointments: [
@@ -195,6 +195,7 @@ sap.ui.define([
 					oEndDate = oEvent.getParameter("endDate"),
 					oCalendarRow = oEvent.getParameter("calendarRow"),
 					bCopy = oEvent.getParameter("copy"),
+					sTitle = oAppointment.getTitle(),
 					oModel = this.getView().getModel(),
 					oAppBindingContext = oAppointment.getBindingContext(),
 					oRowBindingContext = oCalendarRow.getBindingContext(),
@@ -211,7 +212,7 @@ sap.ui.define([
 					};
 
 				if (bCopy) { // "copy" appointment
-					var oProps = jQuery.extend({}, oModel.getProperty(oAppointment.getBindingContext().getPath()));
+					var oProps = Object.assign({}, oModel.getProperty(oAppointment.getBindingContext().getPath()));
 					oProps.start = oStartDate;
 					oProps.end = oEndDate;
 
@@ -227,7 +228,7 @@ sap.ui.define([
 
 				oModel.refresh(true);
 
-				MessageToast.show(oCalendarRow.getTitle() + "'s '" + "Appointment '" + oAppointment.getTitle() + "' now starts at \n" + oStartDate + "\n and end at \n" + oEndDate + ".");
+				MessageToast.show(oCalendarRow.getTitle() + "'s '" + "Appointment '" + sTitle + "' now starts at \n" + oStartDate + "\n and end at \n" + oEndDate + ".");
 			},
 
 			handleAppointmentResize: function (oEvent) {

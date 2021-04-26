@@ -3,9 +3,12 @@
  */
 
 // Provides control sap.ui.ux3.ExactAttribute.
-sap.ui.define(['jquery.sap.global', 'sap/ui/core/Element', './library'],
-	function(jQuery, Element, library) {
+sap.ui.define(['sap/ui/core/Element', './library'],
+	function(Element, library) {
 	"use strict";
+
+	// shortcut for sap.ui.ux3.ExactOrder
+	var ExactOrder = library.ExactOrder;
 
 	/**
 	 * Constructor for a new ExactAttribute.
@@ -51,7 +54,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Element', './library'],
 			 * The order how the sublists of this attribute should be displayed.
 			 * @since 1.7.1
 			 */
-			listOrder : {type : "sap.ui.ux3.ExactOrder", defaultValue : sap.ui.ux3.ExactOrder.Select},
+			listOrder : {type : "sap.ui.ux3.ExactOrder", defaultValue : ExactOrder.Select},
 
 			/**
 			 * Specifies whether the attribute shall have sub values for visual purposes.
@@ -106,7 +109,6 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Element', './library'],
 		}
 	}});
 
-	(function() {
 
 	ExactAttribute._MINWIDTH = 70;
 	ExactAttribute._MAXWIDTH = 500;
@@ -163,6 +165,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Element', './library'],
 
 	/**
 	 * @param {string|sap.ui.core.TooltipBase} oTooltip
+	 * @returns {this} Returns <code>this</code> to allow method chaining
 	 * @see sap.ui.core.Element.prototype.setTooltip
 	 * @public
 	 */
@@ -303,16 +306,16 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Element', './library'],
 
 	//*** Internal (may also used by Exact Control) functions ***
 
-	ExactAttribute.prototype._setProperty_Orig = ExactAttribute.prototype.setProperty;
 	/**
 	 * @param {string} sPropertyName
 	 * @param {object} oValue
 	 * @param {boolean} bSuppressRerendering
+	 * @returns {this} Returns <code>this</code> to allow method chaining
 	 * @see sap.ui.base.ManagedObject.prototype.setProperty
 	 * @protected
 	 */
 	ExactAttribute.prototype.setProperty = function(sPropertyName, oValue, bSuppressRerendering) {
-		this._setProperty_Orig(sPropertyName, oValue, bSuppressRerendering);
+		Element.prototype.setProperty.call(this, sPropertyName, oValue, bSuppressRerendering);
 
 		if (sPropertyName == "selected") {
 			if (oValue) {
@@ -378,8 +381,7 @@ sap.ui.define(['jquery.sap.global', 'sap/ui/core/Element', './library'],
 		return iWidth;
 	};
 
-	}());
 
 	return ExactAttribute;
 
-}, /* bExport= */ true);
+});

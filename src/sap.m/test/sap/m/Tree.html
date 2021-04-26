@@ -741,7 +741,7 @@ var oData = [
 	var oLabel3 = new sap.m.Label({text:"*********************Tree*********************"});
 	var oTree = new sap.m.Tree({
 		headerText: "Data in Tree Structure",
-		'delete': deleteItem,
+		'delete': handleControlEvent,
 		dragDropConfig: new sap.ui.core.dnd.DragDropInfo({
 			sourceAggregation: "items",
 			targetAggregation: "items",
@@ -749,24 +749,27 @@ var oData = [
 			drop:onDrop
 		})
 	});
-	oTree.setMode("MultiSelect");
 
 	//JSON
 	var oModel = new sap.ui.model.json.JSONModel();
+	var sType = "Inactive";
 	oTree.setModel(oModel);
-	oModel.setSizeLimit(20);
+	oModel.setSizeLimit(200);
 	// set the data to the model
 	oModel.setData(oData);
 	var oStandardTreeItem = new sap.m.StandardTreeItem({
 		title: "{text}",
-		highlight: "{state}"
+		highlight: "{state}",
+		type: sType,
+		press: handleControlEvent,
+		detailPress: handleControlEvent
 	});
 	oTree.bindItems("/", oStandardTreeItem);
 	var oBinding = oTree.getBinding("items");
 	//oTree.expandToLevel(3);
 
-	function deleteItem(oEvent) {
-		alert("delete event fired");
+	function handleControlEvent(oEvent) {
+		sap.m.MessageToast.show("'" + oEvent.getId() + "' event fired");
 	};
 
 	function onDragStart(oEvent) {
@@ -889,8 +892,9 @@ var oData = [
 				new sap.ui.core.Item({ key: "4", text: sap.m.ListType.DetailAndActive })
 			],
 			selectedItem: "0",
-			change: function(oControlEvent){
-				var sType = oControlEvent.getParameter("selectedItem").getText();
+			change: function(oControlEvent) {
+				sType = oControlEvent.getParameter("selectedItem").getText();
+				oStandardTreeItem.setType(sType);
 				for (var i = 0; i < oTree.getItems().length; i++) {
 					oTree.getItems()[i].setType(sType);
 
@@ -908,7 +912,7 @@ var oData = [
 			],
 			selectedItem: "0",
 			change: function(oControlEvent){
-				var sVisibility = (oControlEvent.getParameter("selectedItem").getText() === "Visible") ? true : false;
+				var sVisibility = (oControlEvent.getParameter("selectedItem").getText() === "Visible");
 				oTree.setVisible(sVisibility);
 			}
 		});
@@ -922,13 +926,12 @@ var oData = [
 				new sap.ui.core.Item({ key: "1", text: "ShowNoData" })
 			],
 			selectedItem: "0",
-			change: function(oControlEvent){
+			change: function(oControlEvent) {
 				var bShowNoData = oControlEvent.getParameter("selectedItem").getText() === "ShowNoData";
 				if (bShowNoData) {
-					oTree.bindItems("/dd", null);
+					oTree.bindItems("/dd", oStandardTreeItem);
 				} else {
 					oTree.bindItems("/", oStandardTreeItem);
-					oTree.rerender();
 				}
 			}
 		});
@@ -971,24 +974,21 @@ var oData = [
 
 	function addIcon(){
 		return new sap.m.Select({
-			tooltip: "Icon",
+			tooltip: "icon (change icon will rebind the control)",
 			items: [
 				new sap.ui.core.Item({ key: "0", text: "withoutIcon" }),
 				new sap.ui.core.Item({ key: "1", text: "withIcon" })
 			],
 			selectedItem: "0",
-			change: function(oControlEvent){
+			change: function(oControlEvent) {
 				var sItem = oControlEvent.getParameter("selectedItem").getText();
 				if (sItem === "withIcon") {
-					var oStandardTreeItem = new sap.m.StandardTreeItem({
-						title: "{text}",
-						icon: "{ref}"
+					oStandardTreeItem.bindProperty("icon", {
+						path: "ref"
 					});
 					oTree.bindItems("/", oStandardTreeItem);
 				} else {
-					var oStandardTreeItem = new sap.m.StandardTreeItem({
-						title: "{text}"
-					});
+					oStandardTreeItem.unbindProperty("icon", false);
 					oTree.bindItems("/", oStandardTreeItem);
 				}
 			}
@@ -1017,8 +1017,8 @@ var oData = [
 	var oPage = new sap.m.Page("TreeTest", {
 		title : "Test Page for sap.m.Tree - JSON",
 		content : [oTree],
-		footer : new sap.m.Bar({
-			contentMiddle : [
+		footer : new sap.m.OverflowToolbar({
+			content: [
 				expandMulti(),
 				collapseMulti(),
 				addSizeMode(),

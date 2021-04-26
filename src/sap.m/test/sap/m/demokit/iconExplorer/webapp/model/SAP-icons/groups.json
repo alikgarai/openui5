@@ -334,7 +334,9 @@
 				{ "name" : "chevron-phase-2" },
 				{ "name" : "program-triangles" },
 				{ "name" : "table-row" },
-				{ "name" : "table-column" }
+				{ "name" : "table-column" },
+				{ "name" : "clear-all" },
+				{ "name" : "sum" }
 			]
 		},
 		{
@@ -378,7 +380,8 @@
 				{ "name" : "fx" },
 				{ "name" : "text-color" },
 				{ "name" : "strikethrough" },
-				{ "name" : "text" }
+				{ "name" : "text" },
+				{ "name" : "translate" }
 			]
 		},
 		{
@@ -466,7 +469,9 @@
 				{ "name" : "system-exit" },
 				{ "name" : "resize-vertical" },
 				{ "name" : "expand-all" },
-				{ "name" : "collapse-all" }
+				{ "name" : "collapse-all" },
+				{ "name" : "combine" },
+				{ "name" : "split" }
 			]
 		},
 		{
@@ -538,7 +543,7 @@
 				{ "name" : "value-help" },
 				{ "name" : "overflow" },
 				{ "name" : "multi-select" },
-				{ "name" : "exit-full-screen"},
+				{ "name" : "exit-full-screen" },
 				{ "name" : "sys-add" },
 				{ "name" : "sys-minus" },
 				{ "name" : "dropdown" },
@@ -855,7 +860,8 @@
 				{ "name" : "away" },
 				{ "name" : "busy" },
 				{ "name" : "appear-offline" },
-				{ "name" : "validate" }
+				{ "name" : "validate" },
+				{ "name" : "information" }
 			]
 		},
 		{
@@ -906,7 +912,8 @@
 				{ "name" : "hello-world" },
 				{ "name" : "message-popup" },
 				{ "name" : "comment" },
-				{ "name" : "ui-notifications" }
+				{ "name" : "ui-notifications" },
+				{ "name" : "feedback" }
 			]
 		},
 		{
@@ -945,7 +952,7 @@
 				{ "name" : "microphone" },
 				{ "name" : "stethoscope" },
 				{ "name" : "study-leave" },
-				{ "name" : "soccor" },
+				{ "name" : "soccer" },
 				{ "name" : "pharmacy" },
 				{ "name" : "nutrition-activity" },
 				{ "name" : "machine" },
@@ -1173,7 +1180,8 @@
 				{ "name" : "table-row" },
 				{ "name" : "table-column" },
 				{ "name" : "keyboard-and-mouse" },
-				{ "name" : "touch" }
+				{ "name" : "touch" },
+				{ "name" : "s4hana" }
 			]
 		},
 		{

@@ -4,8 +4,9 @@ sap.ui.define([
 		'sap/ui/core/mvc/Controller',
 		'sap/ui/core/routing/HashChanger',
 		'sap/ui/core/routing/Router',
-		'sap/ui/model/Filter'
-	], function(Pattern, Fragment, Controller, HashChanger, Router, Filter) {
+		'sap/ui/model/Filter',
+		'sap/ui/model/FilterOperator'
+	], function(Pattern, Fragment, Controller, HashChanger, Router, Filter, FilterOperator) {
 	"use strict";
 
 	var PatternTableController = Controller.extend("patternApp.view.PatternTable", {
@@ -38,19 +39,28 @@ sap.ui.define([
 		},
 
 		handleValueHelp : function () {
+			var oView = this.getView();
+
 			// create value help dialog
-			if (!this._valueHelpDialog) {
-				this._valueHelpDialog = sap.ui.xmlfragment("patternApp.view.Dialog", this);
-				this.getView().addDependent(this._valueHelpDialog);
+			if (!this._pValueHelpDialog) {
+				this._pValueHelpDialog = Fragment.load({
+					name: "patternApp.view.Dialog",
+					controller: this
+				}).then(function (oDialog) {
+					oView.addDependent(oDialog);
+					return oDialog;
+				});
 			}
 
 			// open value help dialog
-			this._valueHelpDialog.open();
+			this._pValueHelpDialog.then(function (oDialog) {
+				oDialog.open();
+			});
 		},
 
 		handleValueHelpSearch : function (oEvent) {
 			var sValue = oEvent.getParameter("value");
-			var oFilter = new Filter("pattern", sap.ui.model.FilterOperator.Contains, sValue);
+			var oFilter = new Filter("pattern", FilterOperator.Contains, sValue);
 			oEvent.getSource().getBinding("items").filter([oFilter]);
 		},
 

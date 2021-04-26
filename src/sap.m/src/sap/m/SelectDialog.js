@@ -4,36 +4,40 @@
 
 // Provides control sap.m.SelectDialog.
 sap.ui.define([
+	"sap/ui/thirdparty/jquery",
 	'./Button',
 	'./Dialog',
 	'./List',
 	'./SearchField',
 	'./library',
 	'sap/ui/core/Control',
+	'sap/ui/core/InvisibleText',
 	'sap/ui/Device',
-	'sap/ui/base/ManagedObject',
 	'sap/m/Toolbar',
 	'sap/m/Label',
 	'sap/m/BusyIndicator',
 	'sap/m/Bar',
+	'sap/m/Title',
 	'sap/ui/core/theming/Parameters',
-	'./SelectDialogRenderer'
+	"sap/base/Log"
 ],
 function(
+	jQuery,
 	Button,
 	Dialog,
 	List,
 	SearchField,
 	library,
 	Control,
+	InvisibleText,
 	Device,
-	ManagedObject,
 	Toolbar,
 	Label,
 	BusyIndicator,
 	Bar,
+	Title,
 	Parameters,
-	SelectDialogRenderer
+	Log
 	) {
 	"use strict";
 
@@ -42,7 +46,11 @@ function(
 	// shortcut for sap.m.ListMode
 	var ListMode = library.ListMode;
 
+	// shortcut for sap.m.ButtonType
+	var ButtonType = library.ButtonType;
 
+	// shortcut for sap.m.TitleAlignment
+	var TitleAlignment = library.TitleAlignment;
 
 	/**
 	 * Constructor for a new SelectDialog.
@@ -73,33 +81,36 @@ function(
 	 * make sure the binding mode is set to <code>OneWay</code> and that you update the selection model manually with
 	 * the items passed in the <code>confirm</code> event. </li>
 	 * <li> In the multi-select mode of the select dialog, checkboxes are provided for choosing multiple entries. </li>
-	 * <li> You can set <code>rememberSelections</code> to true to store the current selection and load this state
+	 * <li> You can set <code>rememberSelections</code> to <code>true</code> to store the current selection and load this state
 	 * when the dialog is opened again. </li>
 	 * <li> When cancelling the selection, the event <code>change</code> will be fired and the selection is restored
 	 * to the state when the dialog was opened. </li>
+	 * <li>The SelectDialog is usually displayed at the center of the screen. Its size and position can be changed by the user.
+	 * To enable this you need to set the <code>resizable</code> and <code>draggable</code> properties. Both properties are available only in desktop mode.</li>
 	 * </ul>
 	 * <h3>Usage</h3>
 	 * <h4>When to use:</h4>
 	 * <ul>
-	 * <li>You  need to select one or more entries from a comprehensive list that contains multiple attributes or values. </li>
+	 * <li>You need to select one or more entries from a comprehensive list that contains multiple attributes or values. </li>
 	 * </ul>
 	 * <h4>When not to use:</h4>
 	 * <ul>
 	 * <li> You need to pick one item from a predefined set of options. Use {@link sap.m.Select select}
 	 * or {@link sap.m.ComboBox combobox} instead. </li>
-	 * <li> You need to select a range of item. Use {@link sap.ui.comp.valuehelpdialog.ValueHelpDialog value help dialog instead. </li>
+	 * <li> You need to select a range of item. Use {@link sap.ui.comp.valuehelpdialog.ValueHelpDialog value help dialog} instead. </li>
 	 * <li> You need to be able to add your own values to an existing list. Use a {@link sap.m.Dialog dialog} instead. </li>
 	 * </ul>
 	 * <h4>Note:</h4>
-	 * The property <code>growing</code> determines the progressive loading. If it's set to true (the default value), the
-	 * <code>selected count</code> in info bar and search  will work only for the currently loaded items.
-	 * To make sure that all items in the list are loaded at once and the above feature works properly,
-	 * we recommend setting the <code>growing</code> property to false.
+	 * The property <code>growing</code> determines the progressive loading. If it's set to <code>true</code> (the default value), the
+	 * selected count (if present) and search, will work for currently loaded items only.
+	 * To make sure that all items in the list are loaded at once and the above features works properly,
+	 * we recommend setting the <code>growing</code> property to <code>false</code>.
 	 * <h3>Responsive Behavior</h3>
 	 * <ul>
 	 * <li> On phones, the select dialog takes up the whole screen. </li>
 	 * <li> On desktop and tablet devices, the select dialog appears as a popover. </li>
 	 * </ul>
+	 * When using the <code>sap.m.SelectDialog</code> in SAP Quartz themes, the breakpoints and layout paddings could be determined by the dialog's width. To enable this concept and add responsive paddings to an element of the control, you have to add the following classes depending on your use case: <code>sapUiResponsivePadding--header</code>, <code>sapUiResponsivePadding--subHeader</code>, <code>sapUiResponsivePadding--content</code>, <code>sapUiResponsivePadding--footer</code>.
 	 * @extends sap.ui.core.Control
 	 *
 	 * @author SAP SE
@@ -141,6 +152,8 @@ function(
 			 * If set to <code>true</code>, enables the growing feature of the control to load more items by requesting from the bound model (progressive loading).
 			 * <b>Note:</b> This feature only works when an <code>items</code> aggregation is bound.
 			 * <b>Note:</b> Growing property, must not be used together with two-way binding.
+			 * <b>Note:</b> If the property is set to <code>true</code>, selected count (if present) and search, will work for currently loaded items only.
+				 * To make sure that all items in the table are loaded at once and the above features work properly, we recommend setting the <code>growing</code> property to false.
 			 * @since 1.56
 			 */
 			growing : {type : "boolean", group : "Behavior", defaultValue : true},
@@ -152,7 +165,7 @@ function(
 			contentWidth : {type : "sap.ui.core.CSSSize", group : "Dimension", defaultValue : null},
 
 			/**
-			 * This flag controls whether the dialog clears the selection after the confirm event has been fired. If the dialog needs to be opened multiple times in the same context to allow for corrections of previous user inputs, set this flag to "true".
+			 * This flag controls whether the dialog clears the selection after the confirm event has been fired. If the dialog needs to be opened multiple times in the same context to allow for corrections of previous user inputs, set this flag to <code>true</code>.
 			 *
 			 * <b>Note:</b> The sap.m.SelectDialog uses {@link sap.m.ListBase#rememberSelections this} property of the ListBase and therefore its limitations also apply here.
 			 * @since 1.18
@@ -162,7 +175,45 @@ function(
 			/**
 			 * Determines the content height of the inner dialog. For more information, see the dialog documentation.
 			 */
-			contentHeight : {type : "sap.ui.core.CSSSize", group : "Dimension", defaultValue : null}
+			contentHeight : {type : "sap.ui.core.CSSSize", group : "Dimension", defaultValue : null},
+
+			/**
+			 * This flag controls whether the Clear button is shown. When set to <code>true</code>, it provides a way to clear selection mode in Select Dialog.
+			 * We recommended enabling of the Clear button in the following cases, where a mechanism to clear the value is needed:
+			 * In case of single selection mode(default mode) for Select Dialog and <code>rememberSelections</code> is set to <code>true</code>. Clear button needs to be enabled in order to allow users to clear the selection.
+			 * In case of using <code>sap.m.Input</code> with <code>valueHelpOnly</code> set to <code>true</code>, the Clear button could be used for clearing selection.
+			 * In case the application stores a value and uses only Select Dialog to edit/maintain it.
+			 * <b>Note:</b>When used with oData, only the loaded selections will be cleared.
+			 * @since 1.58
+			 */
+			showClearButton : {type : "boolean", group : "Behavior", defaultValue : false},
+
+			/**
+			 * Overwrites the default text for the confirmation button.
+			 * @since 1.68
+			 */
+
+			 confirmButtonText: {type : "string", group : "Appearance"},
+			/**
+			 * When set to <code>true</code>, the SelectDialog is draggable by its header. The default value is <code>false</code>. <b>Note</b>: The SelectDialog can be draggable only in desktop mode.
+			 * @since 1.70
+			 */
+
+			 draggable: {type: "boolean", group: "Behavior", defaultValue: false},
+			/**
+			 * When set to <code>true</code>, the SelectDialog will have a resize handler in its bottom right corner. The default value is <code>false</code>. <b>Note</b>: The SelectDialog can be resizable only in desktop mode.
+			 * @since 1.70
+			 */
+			resizable: {type: "boolean", group: "Behavior", defaultValue: false},
+
+			/**
+			 * Specifies the Title alignment (theme specific).
+			 * If set to <code>TitleAlignment.Auto</code>, the Title will be aligned as it is set in the theme (if not set, the default value is <code>center</code>);
+			 * Other possible values are <code>TitleAlignment.Start</code> (left or right depending on LTR/RTL), and <code>TitleAlignment.Center</code> (centered)
+			 * @since 1.72
+			 * @public
+			 */
+			titleAlignment : {type : "sap.m.TitleAlignment", group : "Misc", defaultValue : TitleAlignment.Auto}
 		},
 		defaultAggregation : "items",
 		aggregations : {
@@ -196,11 +247,11 @@ function(
 					selectedItems : {type : "sap.m.StandardListItem[]"},
 
 					/**
-					 * Returns the binding contexts of the selected items including the non-visible items.
+					 * Returns the binding contexts of the selected items including the non-visible items, but excluding the not loaded items. See {@link sap.m.ListBase#getSelectedContexts getSelectedContexts} of <code>sap.m.ListBase</code>.
 					 * NOTE: In contrast to the parameter "selectedItems", this parameter will also include the selected but NOT visible items (e.g. due to list filtering). An empty array will be set for this parameter if no data binding is used.
 					 * NOTE: When the list binding is pre-filtered and there are items in the selection that are not visible upon opening the dialog, these contexts are not loaded. Therefore, these items will not be included in the selectedContexts array unless they are displayed at least once.
 					 */
-					selectedContexts : {type : "string"}
+					selectedContexts : {type : "object[]"}
 				}
 			},
 
@@ -218,7 +269,14 @@ function(
 					/**
 					 * The Items binding of the Select Dialog for search purposes. It will only be available if the items aggregation is bound to a model.
 					 */
-					itemsBinding : {type : "any"}
+					itemsBinding : {type : "any"},
+
+					/**
+					 * Returns if the Clear button is pressed.
+					 * @since 1.70
+					 */
+
+					clearButtonPressed: {type: "boolean"}
 				}
 			},
 
@@ -241,11 +299,16 @@ function(
 			},
 
 			/**
-			 * This event will be fired when the cancel button is clicked
+			 * This event will be fired when the cancel button is clicked or ESC key is pressed
 			 */
 			cancel : {}
 		}
-	}});
+	},
+	renderer: {
+		apiVersion: 2,
+		render: function () {}
+	}
+});
 
 
 	/* =========================================================== */
@@ -258,21 +321,12 @@ function(
 	 */
 	SelectDialog.prototype.init = function () {
 		var that = this,
-			iLiveChangeTimer = 0,
-			fnResetAfterClose = null,
-			fnDialogEscape = null;
-
-		fnResetAfterClose = function () {
-			that._oSelectedItem = that._oList.getSelectedItem();
-			that._aSelectedItems = that._oList.getSelectedItems();
-
-			that._oDialog.detachAfterClose(fnResetAfterClose);
-			that._fireConfirmAndUpdateSelection();
-		};
+			iLiveChangeTimer = 0;
 
 		this._bAppendedToUIArea = false;
 		this._bInitBusy = false;
 		this._bFirstRender = true;
+		this._bAfterCloseAttached = false;
 		this._oRb = sap.ui.getCore().getLibraryResourceBundle("sap.m");
 
 		// store a reference to the list for binding management
@@ -280,6 +334,7 @@ function(
 			growing: that.getGrowing(),
 			growingScrollToLoad: that.getGrowing(),
 			mode: ListMode.SingleSelectMaster,
+			sticky: [library.Sticky.InfoToolbar],
 			infoToolbar: new Toolbar({
 				visible: false,
 				active: false,
@@ -289,17 +344,7 @@ function(
 					})
 				]
 			}),
-			selectionChange: function (oEvent) {
-				if (that._oDialog) {
-					if (!that.getMultiSelect()) {
-						// attach the reset function to afterClose to hide the dialog changes from the end user
-						that._oDialog.attachAfterClose(fnResetAfterClose);
-						that._oDialog.close();
-					} else {
-						that._updateSelectionIndicator();
-					}
-				}
-			}
+			selectionChange: this._selectionChange.bind(this)
 		});
 
 		this._oList.getInfoToolbar().addEventDelegate({
@@ -320,23 +365,27 @@ function(
 		// store a reference to the searchField for filtering
 		this._oSearchField = new SearchField(this.getId() + "-searchField", {
 			width: "100%",
+			ariaLabelledBy: InvisibleText.getStaticId("sap.m", "SELECTDIALOG_SEARCH"),
 			liveChange: function (oEvent) {
 				var sValue = oEvent.getSource().getValue(),
-					iDelay = (sValue ? 300 : 0); // no delay if value is empty
+				iDelay = (sValue ? 300 : 0); // no delay if value is empty
 
 				// execute search after user stops typing for 300ms
 				clearTimeout(iLiveChangeTimer);
 				if (iDelay) {
 					iLiveChangeTimer = setTimeout(function () {
-						that._executeSearch(sValue, "liveChange");
+						that._executeSearch(sValue, false, "liveChange");
 					}, iDelay);
 				} else {
-					that._executeSearch(sValue, "liveChange");
+					that._executeSearch(sValue, false, "liveChange");
 				}
 			},
 			// execute the standard search
 			search: function (oEvent) {
-				that._executeSearch(oEvent.getSource().getValue(), "search");
+				var sValue = oEvent.getSource().getValue(),
+					bClearButtonPressed = oEvent.getParameters().clearButtonPressed;
+
+				that._executeSearch(sValue, bClearButtonPressed, "search");
 			}
 		});
 		this._searchField = this._oSearchField; // for downward compatibility
@@ -348,34 +397,42 @@ function(
 			]
 		});
 
+		//store a reference to the dialog header
+		var oCustomHeader = new Bar(this.getId() + "-dialog-header", {
+			titleAlignment: this.getTitleAlignment(),
+			contentMiddle: [
+				new Title(this.getId()  + "-dialog-title", {
+					level: "H2"
+				})
+			]
+		});
+
 		// store a reference to the internal dialog
 		this._oDialog = new Dialog(this.getId() + "-dialog", {
-			title: this.getTitle(),
+			customHeader: oCustomHeader,
+			titleAlignment: this.getTitleAlignment(),
 			stretch: Device.system.phone,
 			contentHeight: "2000px",
 			subHeader: this._oSubHeader,
 			content: [this._oBusyIndicator, this._oList],
 			leftButton: this._getCancelButton(),
-			initialFocus: (Device.system.desktop ? this._oSearchField : null)
-		}).addStyleClass("sapMSelectDialog", true);
+			initialFocus: (Device.system.desktop ? this._oSearchField : null),
+			draggable: this.getDraggable() && Device.system.desktop,
+			resizable: this.getResizable() && Device.system.desktop,
+			escapeHandler: function (oPromiseWrapper) {
+				//CSN# 3863876/2013: ESC key should also cancel dialog, not only close it
+				that._onCancel();
+				oPromiseWrapper.resolve();
+			}
+		}).addStyleClass("sapMSelectDialog");
+
 		// for downward compatibility reasons
 		this._dialog = this._oDialog;
 		this.setAggregation("_dialog", this._oDialog);
 
-		//CSN# 3863876/2013: ESC key should also cancel dialog, not only close it
-		fnDialogEscape = this._oDialog.onsapescape;
-		this._oDialog.onsapescape = function (oEvent) {
-			// call original escape function of the dialog
-			if (fnDialogEscape) {
-				fnDialogEscape.call(that._oDialog, oEvent);
-			}
-			// execute cancel action
-			that._onCancel();
-		};
-
 		// internally set top and bottom margin of the dialog to 4rem respectively
 		// CSN# 333642/2014: in base theme the parameter sapUiFontSize is "medium", implement a fallback
-		this._oDialog._iVMargin = 8 * (parseInt(Parameters.get("sapUiFontSize"), 10) || 16); // 128
+		this._oDialog._iVMargin = 8 * (parseInt(Parameters.get("sapUiFontSize")) || 16); // 128
 
 		// helper variables for search update behaviour
 		this._sSearchFieldValue = "";
@@ -390,7 +447,7 @@ function(
 	* Sets the growing  to the internal list
 	* @public
 	* @param {boolean} bValue Value for the list's growing.
-	* @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	* @returns {this} <code>this</code> pointer for chaining
 	*/
 	SelectDialog.prototype.setGrowing = function (bValue) {
 		this._oList.setGrowing(bValue);
@@ -398,6 +455,49 @@ function(
 		this.setProperty("growing", bValue, true);
 
 		return this;
+	};
+
+	/**
+	 * Sets the draggable property.
+	 * @public
+	 * @param {boolean} bValue Value for the draggable property
+	 * @returns {this} <code>this</code> pointer for chaining
+	 */
+	SelectDialog.prototype.setDraggable = function (bValue) {
+		this._setInteractionProperty(bValue, "draggable", this._oDialog.setDraggable);
+
+		return this;
+	};
+
+	/**
+	 * Sets the resizable property.
+	 * @public
+	 * @param {boolean} bValue Value for the resizable property
+	 * @returns {this} <code>this</code> pointer for chaining
+	 */
+	SelectDialog.prototype.setResizable = function (bValue) {
+		this._setInteractionProperty(bValue, "resizable", this._oDialog.setResizable);
+
+		return this;
+	};
+
+	/**
+	 * @private
+	 * @param {boolean} bValue Value for the property
+	 * @param {string} sPropertyType Property type
+	 * @param {function} fnCallback Callback function
+	 */
+	SelectDialog.prototype._setInteractionProperty = function(bValue, sPropertyType, fnCallback) {
+		this.setProperty(sPropertyType, bValue, true);
+
+		if (!Device.system.desktop && bValue) {
+			Log.warning(sPropertyType + " property works only on desktop devices!");
+			return;
+		}
+
+		if (Device.system.desktop && this._oDialog) {
+			fnCallback.call(this._oDialog, bValue);
+		}
 	};
 
 	SelectDialog.prototype.setBusy = function () {
@@ -414,6 +514,20 @@ function(
 	};
 
 	/**
+	 * Sets the busyIndicatorDelay value to the internal list
+	 * @public
+	 * @param {int} iValue Value for the busyIndicatorDelay.
+	 * @returns {this} this pointer for chaining
+	 */
+	SelectDialog.prototype.setBusyIndicatorDelay = function (iValue) {
+		this._oList.setBusyIndicatorDelay(iValue);
+		this._oDialog.setBusyIndicatorDelay(iValue);
+		this.setProperty("busyIndicatorDelay", iValue, true);
+
+		return this;
+	};
+
+	/**
 	 * Destroys the control
 	 * @private
 	 */
@@ -422,6 +536,7 @@ function(
 		this._oList = null;
 		this._oSearchField = null;
 		this._oSubHeader = null;
+		this._oClearButton = null;
 		this._oBusyIndicator = null;
 		this._sSearchFieldValue = null;
 		this._iListUpdateRequested = 0;
@@ -462,7 +577,7 @@ function(
 	* Is called after renderer is finished to show the busy state
 	* @override
 	* @protected
-	* @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	* @returns {this} <code>this</code> pointer for chaining
 	*/
 	SelectDialog.prototype.onAfterRendering = function () {
 		if (this._bInitBusy && this._bFirstRender) {
@@ -477,7 +592,7 @@ function(
 	* Invalidates the dialog instead of this control (we don't have a renderer)
 	* @override
 	* @protected
-	* @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	* @returns {this} <code>this</code> pointer for chaining
 	*/
 	SelectDialog.prototype.invalidate = function () {
 		// CSN #80686/2014: only invalidate inner dialog if call does not come from inside
@@ -494,7 +609,7 @@ function(
 	 * Opens the internal dialog with a searchfield and a list.
 	 *
 	 * @param {string} sSearchValue  A value for the search can be passed to match with the filter applied to the list binding.
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @returns {this} <code>this</code> pointer for chaining
 	 * @public
 	 * @ui5-metamodel This method also will be described in the UI5 (legacy) designtime metamodel
 	 */
@@ -514,6 +629,7 @@ function(
 
 		// set the search value
 		this._oSearchField.setValue(sSearchValue);
+		this._sSearchFieldValue = sSearchValue || "";
 
 		// open the dialog
 		this._oDialog.open();
@@ -537,7 +653,7 @@ function(
 	* Sets the growing threshold to the internal list
 	* @public
 	* @param {int} iValue Value for the list's growing threshold.
-	* @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	* @returns {this} <code>this</code> pointer for chaining
 	*/
 	SelectDialog.prototype.setGrowingThreshold = function (iValue) {
 		this._oList.setGrowingThreshold(iValue);
@@ -551,7 +667,7 @@ function(
 	 * @override
 	 * @public
 	 * @param {boolean} bMulti Flag for multi selection mode
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 	SelectDialog.prototype.setMultiSelect = function (bMulti) {
 		this.setProperty("multiSelect", bMulti, true);
@@ -562,7 +678,9 @@ function(
 			this._oDialog.setBeginButton(this._getOkButton());
 		} else {
 			this._oList.setMode(ListMode.SingleSelectMaster);
-			this._oDialog.setBeginButton(this._getCancelButton());
+			this._oDialog.setEndButton(this._getCancelButton());
+			this._oDialog.destroyBeginButton();
+			delete this._oOkButton;
 		}
 
 		return this;
@@ -573,11 +691,33 @@ function(
 	 * @override
 	 * @public
 	 * @param {string} sTitle The title text for the dialog
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 	SelectDialog.prototype.setTitle = function (sTitle) {
-		this._oDialog.setTitle(sTitle);
 		this.setProperty("title", sTitle, true);
+		this._oDialog.getCustomHeader().getAggregation("contentMiddle")[0].setText(sTitle);
+
+		return this;
+	};
+
+	SelectDialog.prototype.setTitleAlignment = function (sAlignment) {
+		this.setProperty("titleAlignment", sAlignment, true);
+		if (this._oDialog) {
+			this._oDialog.setTitleAlignment(sAlignment);
+		}
+		return this;
+	};
+
+	/**
+	 * Sets the text of the confirmation button.
+	 * @override
+	 * @public
+	 * @param {string} sText The text for the confirm button
+	 * @returns {this} <code>this</code> pointer for chaining
+	 */
+	SelectDialog.prototype.setConfirmButtonText = function (sText) {
+		this.setProperty("confirmButtonText", sText, true);
+		this._oOkButton && this._oOkButton.setText(sText || this._oRb.getText("SELECT_CONFIRM_BUTTON"));
 
 		return this;
 	};
@@ -587,7 +727,7 @@ function(
 	 * @override
 	 * @public
 	 * @param {string} sNoDataText The no data text for the list
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 	SelectDialog.prototype.setNoDataText = function (sNoDataText) {
 		this._oList.setNoDataText(sNoDataText);
@@ -620,7 +760,7 @@ function(
 	 * @param {sap.ui.core.CSSSize} sWidth The new content width value for the dialog
 	 * @public
 	 * @override
-	 * @returns {sap.m.SelectDialog} <code>this</code>s pointer for chaining
+	 * @returns {this} <code>this</code>s pointer for chaining
 	 */
 	SelectDialog.prototype.setContentWidth = function (sWidth) {
 		this._oDialog.setContentWidth(sWidth);
@@ -639,11 +779,30 @@ function(
 	};
 
 	/**
+	 * Sets the Clear button visible state
+	 * @public
+	 * @param {boolean} bVisible Value for the Clear button visible state.
+	 * @returns {this} <code>this</code> pointer for chaining
+	 */
+	SelectDialog.prototype.setShowClearButton = function (bVisible) {
+		this.setProperty("showClearButton", bVisible, true);
+
+		if (bVisible) {
+			var oCustomHeader = this._oDialog.getCustomHeader();
+			oCustomHeader.addContentRight(this._getClearButton());
+		}
+		if (this._oClearButton) {
+			this._oClearButton.setVisible(bVisible);
+		}
+		return this;
+	};
+
+	/**
 	 * Set the internal Dialog's contentHeight property {@link sap.m.Dialog}
 	 * @param {sap.ui.core.CSSSize} sHeight The new content width value for the dialog
 	 * @public
 	 * @override
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 	SelectDialog.prototype.setContentHeight = function (sHeight) {
 		this._oDialog.setContentHeight(sHeight);
@@ -656,7 +815,8 @@ function(
 	 * Forward method to the inner dialog: addStyleClass
 	 * @public
 	 * @override
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @param {string} sStyleClass CSS class name to add
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 	SelectDialog.prototype.addStyleClass = function () {
 		this._oDialog.addStyleClass.apply(this._oDialog, arguments);
@@ -667,7 +827,8 @@ function(
 	 * Forward method to the inner dialog: removeStyleClass
 	 * @public
 	 * @override
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @param {string} sStyleClass CSS class name to remove
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 	SelectDialog.prototype.removeStyleClass = function () {
 		this._oDialog.removeStyleClass.apply(this._oDialog, arguments);
@@ -675,10 +836,12 @@ function(
 	};
 
 	/**
-	 * Forward method to the inner dialog: toggleStyleClass
+	 * Forward method to the inner dialog: toggleStyleClass.
 	 * @public
 	 * @override
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @param {string} sStyleClass CSS class name to add or remove
+	 * @param {boolean} [bAdd] Whether style class should be added (or removed); when this parameter is not given, the given style class will be toggled (removed, if present, and added if not present)
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 	SelectDialog.prototype.toggleStyleClass = function () {
 		this._oDialog.toggleStyleClass.apply(this._oDialog, arguments);
@@ -689,7 +852,7 @@ function(
 	 * Forward method to the inner dialog: hasStyleClass
 	 * @public
 	 * @override
-	 * @returns {boolean} true if the class is set, false otherwise
+	 * @returns {boolean} <code>true</code> if the class is set, <code>false</code> otherwise
 	 */
 	SelectDialog.prototype.hasStyleClass = function () {
 		return this._oDialog.hasStyleClass.apply(this._oDialog, arguments);
@@ -709,6 +872,24 @@ function(
 		}
 	};
 
+	/**
+	 * Clears the selections in the <code>sap.m.SelectDialog</code> and its internally used <code>sap.m.List</code> control.
+	 *
+	 * Use this method whenever the application logic expects changes in the model providing data for
+	 * the SelectDialog that will modify the position of the items, or will change the set with completely new items.
+	 *
+	 * @public
+	 * @since 1.68
+	 * @returns {this} <code>this</code> to allow method chaining.
+	 */
+	SelectDialog.prototype.clearSelection = function () {
+		this._removeSelection();
+		this._updateSelectionIndicator();
+		this._oDialog.focus();
+
+		return this;
+	};
+
 	/* =========================================================== */
 	/*           begin: forward aggregation  methods to List       */
 	/* =========================================================== */
@@ -718,14 +899,11 @@ function(
 	 * both controls can be used with data binding
 	 * @override
 	 * @public
-	 * @param {sap.ui.Model} oModel the model that holds the data for the list
-	 * @param {string} sModelName the optional model name
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @param {sap.ui.model.Model} oModel the model that holds the data for the list
+	 * @param {string} [sModelName] the optional model name
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
-	SelectDialog.prototype._setModel = SelectDialog.prototype.setModel;
 	SelectDialog.prototype.setModel = function (oModel, sModelName) {
-		var aArgs = Array.prototype.slice.call(arguments);
-
 		// reset busy mode if model was changed
 		this._setBusy(false);
 		this._bInitBusy = false;
@@ -735,9 +913,9 @@ function(
 
 		// pass the model to the list and also to the local control to allow binding of own properties
 		this._oList.setModel(oModel, sModelName);
-		SelectDialog.prototype._setModel.apply(this, aArgs);
+		Control.prototype.setModel.apply(this, arguments);
 
-		// reset the selection label when setting the model
+		// clear the selection label when setting the model
 		this._updateSelectionIndicator();
 
 		return this;
@@ -750,16 +928,13 @@ function(
 	 * @public
 	 * @param {sap.ui.model.Context} oContext The new context
 	 * @param {string} sModelName The optional model name
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
 
-	SelectDialog.prototype._setBindingContext = SelectDialog.prototype.setBindingContext;
 	SelectDialog.prototype.setBindingContext = function (oContext, sModelName) {
-		var args = Array.prototype.slice.call(arguments);
-
 		// pass the model to the list and also to the local control to allow binding of own properties
 		this._oList.setBindingContext(oContext, sModelName);
-		SelectDialog.prototype._setBindingContext.apply(this, args);
+		Control.prototype.setBindingContext.apply(this, arguments);
 
 		return this;
 	};
@@ -776,10 +951,11 @@ function(
 	 * Fires the search event. This function is called whenever a search related parameter or the value in the search field is changed
 	 * @private
 	 * @param {string} sValue The new filter value or undefined if called by management functions
+	 * @param {boolean} bClearButtonPressed Indicates if the clear button is pressed
 	 * @param {string} sEventType The search field event type that has been called (liveChange / search)
-	 * @returns {sap.m.SelectDialog} <code>this</code> pointer for chaining
+	 * @returns {this} <code>this</code> pointer for chaining
 	 */
-	SelectDialog.prototype._executeSearch = function (sValue, sEventType) {
+	SelectDialog.prototype._executeSearch = function (sValue, bClearButtonPressed, sEventType) {
 
 		var oList = this._oList,
 			oBinding = (oList ? oList.getBinding("items") : undefined),
@@ -803,7 +979,7 @@ function(
 				this._iListUpdateRequested += 1;
 				if (sEventType === "search") {
 					// fire the search so the data can be updated externally
-					this.fireSearch({value: sValue, itemsBinding: oBinding});
+					this.fireSearch({value: sValue, itemsBinding: oBinding, clearButtonPressed: bClearButtonPressed});
 				} else if (sEventType === "liveChange") {
 					// fire the liveChange so the data can be updated externally
 					this.fireLiveChange({value: sValue, itemsBinding: oBinding});
@@ -812,7 +988,7 @@ function(
 				// no binding, just fire the event for manual filtering
 				if (sEventType === "search") {
 					// fire the search so the data can be updated externally
-					this.fireSearch({value: sValue});
+					this.fireSearch({value: sValue, clearButtonPressed: bClearButtonPressed});
 				} else if (sEventType === "liveChange") {
 					// fire the liveChange so the data can be updated externally
 					this.fireLiveChange({value: sValue});
@@ -865,37 +1041,42 @@ function(
 	 * @param {jQuery.Event} oEvent The event object
 	 */
 	SelectDialog.prototype._updateFinished = function (oEvent) {
-	// only reset busy mode when we have an OData model
-	this._updateSelectionIndicator();
-	if (this.getModel() && this.getModel() instanceof sap.ui.model.odata.ODataModel) {
-		this._setBusy(false);
-		this._bInitBusy = false;
-	}
-	if (Device.system.desktop) {
-
-		if (this._oList.getItems()[0]) {
-			this._oDialog.setInitialFocus(this._oList.getItems()[0]);
-		} else {
-			this._oDialog.setInitialFocus(this._oSearchField);
+		// only reset busy mode when we have an OData model
+		this._updateSelectionIndicator();
+		if (this.getModel() && this.getModel() instanceof sap.ui.model.odata.ODataModel) {
+			this._setBusy(false);
+			this._bInitBusy = false;
 		}
+		if (Device.system.desktop) {
 
-		// set initial focus manually after all items are visible
-		if (this._bFirstRequest && !this._bLiveChange) {
-			var oFocusControl = this._oList.getItems()[0];
-			if (!oFocusControl) {
-				oFocusControl = this._oSearchField;
+			if (this._oList.getItems()[0]) {
+				this._oDialog.setInitialFocus(this._oList.getItems()[0]);
+			} else {
+				this._oDialog.setInitialFocus(this._oSearchField);
 			}
 
-			if (oFocusControl.getFocusDomRef()) {
-				oFocusControl.getFocusDomRef().focus();
+			// set initial focus manually after all items are visible
+			if (this._bFirstRequest && !this._bLiveChange) {
+				var oFocusControl = this._oList.getItems()[0];
+				if (!oFocusControl) {
+					oFocusControl = this._oSearchField;
+				}
+
+				if (oFocusControl.getFocusDomRef()) {
+					oFocusControl.getFocusDomRef().focus();
+				}
 			}
 		}
-	}
 
-	this._bFirstRequest = false;
+		this._bFirstRequest = false;
 
-	// we received a request (from this or from another control) so set the counter to 0
-	this._iListUpdateRequested = 0;
+		// we received a request (from this or from another control) so set the counter to 0
+		this._iListUpdateRequested = 0;
+
+		// List items' delegates to handle mouse clicks/taps & keyboard when an item is already selected
+		this._oList.getItems().forEach(function (oItem) {
+			oItem.addEventDelegate(this._getListItemsEventDelegates());
+		}, this);
 	};
 
 	/**
@@ -908,6 +1089,20 @@ function(
 			fnOKAfterClose = null;
 
 		fnOKAfterClose = function () {
+			// reset internal selection value
+			that._sSearchFieldValue = null;
+
+			//after searching we need all the items
+			var oBindings = that._oList.getBinding("items");
+			if (oBindings && oBindings.aFilters && oBindings.aFilters.length) {
+
+				// When reset the filter, the selected items might go outside
+				// the currently visible items (outside the current growing number).
+				// Set the growing to false to prevent this.
+				that._oList.setGrowing(false);
+				oBindings.filter([]);
+				that._oList.setGrowing(that.getGrowing());
+			}
 			that._oSelectedItem = that._oList.getSelectedItem();
 			that._aSelectedItems = that._oList.getSelectedItems();
 
@@ -917,7 +1112,8 @@ function(
 
 		if (!this._oOkButton) {
 			this._oOkButton = new Button(this.getId() + "-ok", {
-				text: this._oRb.getText("MSGBOX_OK"),
+				type: ButtonType.Emphasized,
+				text: this.getConfirmButtonText() || this._oRb.getText("SELECT_CONFIRM_BUTTON"),
 				press: function () {
 					// attach the reset function to afterClose to hide the dialog changes from the end user
 					that._oDialog.attachAfterClose(fnOKAfterClose);
@@ -945,6 +1141,22 @@ function(
 			});
 		}
 		return this._oCancelButton;
+	};
+
+	/**
+	 * Lazy load the clear button
+	 * @private
+	 * @returns {sap.m.Button} the button
+	 */
+	SelectDialog.prototype._getClearButton = function() {
+
+		if (!this._oClearButton) {
+			this._oClearButton = new Button(this.getId() + "-clear", {
+				text: this._oRb.getText("SELECTDIALOG_CLEARBUTTON"),
+				press: this.clearSelection.bind(this)
+			});
+		}
+		return this._oClearButton;
 	};
 
 	/**
@@ -984,10 +1196,27 @@ function(
 	 */
 	SelectDialog.prototype._updateSelectionIndicator = function () {
 		var iSelectedContexts = this._oList.getSelectedContextPaths(true).length,
-			oInfoBar = this._oList.getInfoToolbar();
+			oInfoBar = this._oList.getInfoToolbar(),
+			bVisible = !!iSelectedContexts && this.getMultiSelect();
 
+		if (this.getShowClearButton() && this._oClearButton) {
+			this._oClearButton.setEnabled(iSelectedContexts > 0);
+		}
 		// update the selection label
-		oInfoBar.setVisible(!!iSelectedContexts && this.getMultiSelect());
+		if (oInfoBar.getVisible() !== bVisible) {
+			oInfoBar.setVisible(bVisible);
+
+			if (bVisible) {
+				this._oDialog.addAriaLabelledBy(oInfoBar);
+
+				// force immediate rerendering, so JAWS can read the text inside,
+				// when it become visible
+				oInfoBar.rerender();
+			} else {
+				this._oDialog.removeAriaLabelledBy(oInfoBar);
+			}
+		}
+
 		oInfoBar.getContent()[0].setText(this._oRb.getText("TABLESELECTDIALOG_SELECTEDITEMS", [iSelectedContexts]));
 	};
 
@@ -1012,6 +1241,46 @@ function(
 	};
 
 	/**
+	 * Handles user interaction on pressing OK, Space or clicking on item in the list.
+	 *
+	 * @private
+	 */
+	SelectDialog.prototype._selectionChange = function () {
+		if (!this._oDialog) {
+			return;
+		}
+
+		// The following logic handles the item tap / select when:
+		// -- the selectDialog is in multi select mode - only update the indicator
+		if (this.getMultiSelect()) {
+			this._updateSelectionIndicator();
+			return; // the SelectDialog should remain open
+		}
+		// -- the selectDialog in single select mode - close and update the selection of the dialog
+		if (!this._bAfterCloseAttached) {
+			// if the resetAfterclose function is not attached already
+			// attach it to afterClose to hide the dialog changes from the end user
+			this._oDialog.attachEventOnce("afterClose", this._resetAfterClose, this);
+			this._bAfterCloseAttached = true;
+		}
+		this._oDialog.close();
+	};
+
+	/**
+	 * Handles the firing of the confirm event with the correct parameters after the dialog is closed.
+	 * The method is called after the dialog is closed via user interaction - pressing enter, ok or clicking on an item in the list.
+	 *
+	 * @private
+	 */
+	SelectDialog.prototype._resetAfterClose = function() {
+		this._oSelectedItem = this._oList.getSelectedItem();
+		this._aSelectedItems = this._oList.getSelectedItems();
+		this._bAfterCloseAttached = false;
+
+		this._fireConfirmAndUpdateSelection();
+	};
+
+	/**
 	 * Internal function to remove/keep the list selection based on property "rememberSelection"
 	 * @private
 	 */
@@ -1019,10 +1288,18 @@ function(
 		// cleanup old selection on close to allow reuse of dialog
 		// due to the delayed call (dialog onAfterClose) the control could be already destroyed
 		if (!this.getRememberSelections() && !this.bIsDestroyed) {
+			this._removeSelection();
+		}
+	};
+
+	/**
+	 * Removes selection from <code> sap.m.SelectDialog</code>
+	 * @private
+	 */
+	SelectDialog.prototype._removeSelection = function () {
 			this._oList.removeSelections(true);
 			delete this._oSelectedItem;
 			delete this._aSelectedItems;
-		}
 	};
 
 	/**
@@ -1046,6 +1323,43 @@ function(
 		}
 	};
 
+	/**
+	 * Returns object with the event delegates that will be attached to the list items.
+	 *
+	 * <b>Note</b>: These events could be prevented by calling <code>event.preventDefault()</code> or
+	 * <code>event.setMarked("preventSelectionChange")</code> in the source ListItem.
+	 *
+	 * That way the former behaviour would be kept- close the Dialog only on List item change.
+	 *
+	 * @returns {object} The object containing the delegates
+	 * @private
+	 */
+	SelectDialog.prototype._getListItemsEventDelegates = function () {
+		var fnEventDelegate = function (oEvent) {
+
+			var oListItem = jQuery(oEvent.target).closest(".sapMLIB").control()[0];
+
+			if (oListItem._eventHandledByControl) {
+				return;
+			}
+
+			if (oEvent && oEvent.isDefaultPrevented && oEvent.isMarked &&
+				(oEvent.isDefaultPrevented() || oEvent.isMarked("preventSelectionChange"))) {
+				return;
+			}
+
+			if (oEvent && oEvent.srcControl.isA("sap.m.GroupHeaderListItem")){
+				return;
+			}
+
+			this._selectionChange(oEvent); // Mouse and Touch events
+		}.bind(this);
+
+		return {
+			ontap: fnEventDelegate,
+			onsapselect: fnEventDelegate
+		};
+	};
 
 	/* =========================================================== */
 	/*           end: internal methods                             */
